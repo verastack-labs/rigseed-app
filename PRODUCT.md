@@ -39,7 +39,7 @@ Sessions are long-lived and mostly ambient - the window sits open showing live s
 - Live data comes from incremental `sync/maindata` polling keyed by `rid`, merged into a normalised store; never a full replace per tick
 - Local credentials are generated on first launch, written into `qBittorrent.conf`, and stored in the OS keychain - the user never sees a login for the bundled instance
 - Nine screens designed: Transfers, Torrent Detail, Add Torrent, Search, RSS, Categories & Tags, Logs, Settings, Connections
-- Both light and dark ship, seven accents each; theme is app-local and persisted outside qBittorrent's own preferences
+- Both light and dark ship, eight accents each; theme is app-local and persisted outside qBittorrent's own preferences
 - Two fields the API has no home for - category icon and category/tag colour - live in the app's settings file, keyed by name, with a neutral fallback
 - Design canvas is 1440×900; minimum supported window 1100×700, below which the Transfers sidebar collapses behind a toggle
 
