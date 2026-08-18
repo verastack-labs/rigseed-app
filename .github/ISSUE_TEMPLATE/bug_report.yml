@@ -1,0 +1,73 @@
+name: Bug report
+description: Something in rigseed behaves differently from how it is documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        rigseed drives `qbittorrent-nox` over its Web API. If the problem is with
+        torrenting itself rather than the interface, it likely belongs upstream with
+        qBittorrent.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, and what the app did instead of what you expected.
+      placeholder: |
+        1. Opened Transfers with the List layout
+        2. Selected three torrents and pressed Pause
+        3. Two paused, the third stayed downloading
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: input
+    id: rigseed-version
+    attributes:
+      label: rigseed version
+      description: Shown in Settings.
+    validations:
+      required: true
+
+  - type: input
+    id: daemon-version
+    attributes:
+      label: qbittorrent-nox and API version
+      description: Both are printed in the footer, for example "qbittorrent-nox 5.0.3 · api 2.11.2".
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: true
+
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Which instance
+      options:
+        - The bundled instance on this computer
+        - A saved remote connection (NAS, seedbox, other)
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log lines
+      description: From the Logs screen. Redact anything you would rather not publish.
+      render: text

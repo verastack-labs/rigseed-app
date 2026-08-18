@@ -1,0 +1,34 @@
+name: Feature request
+description: Suggest something rigseed should do.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What is awkward today? Describe the situation, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+    validations:
+      required: true
+
+  - type: textarea
+    id: api
+    attributes:
+      label: Does the qBittorrent Web API support this?
+      description: >
+        rigseed is a frontend over the Web API v2.x and cannot add capability the daemon
+        does not have. If you know the endpoint, name it.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: This is about the interface, not the torrent engine underneath.
+          required: true
