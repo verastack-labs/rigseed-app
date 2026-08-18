@@ -187,3 +187,23 @@ No emoji, no unicode symbols as icons, no PNG icons anywhere.
   to re-inline.
 - **DataValue** — a mono `<span>` with the right size and weight. Trivial, but it is
   what enforces the Inter/Mono split, which is the rule most likely to be broken.
+
+---
+
+## Licence
+
+Apache License 2.0 — see `LICENSE`.
+
+rigseed ships `qbittorrent-nox` as a sidecar. That binary is GPL-2.0-or-later and
+carries its own redistribution obligations, which are separate from rigseed's own
+licence. See `NOTICE` for the detail and for font and icon attribution.
+
+## Contact
+
+| Reason | Address |
+|---|---|
+| Project, security, code of conduct | verastack.labs@gmail.com |
+| Maintainer, direct | therealriganb@gmail.com |
+
+Bugs and feature requests go through GitHub issues rather than email — the templates ask
+for the version detail that resolves most reports.

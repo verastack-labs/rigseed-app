@@ -85,3 +85,12 @@ These get enforced, because they are the rules most often broken:
 Use the issue templates. The footer prints the daemon and API versions
 (`qbittorrent-nox 5.0.3 · api 2.11.2`) — include both, since a difference there explains
 a large share of reports.
+
+## Contact
+
+Anything that does not belong in a public issue — security reports, conduct concerns,
+licensing questions — goes to **verastack.labs@gmail.com**, or
+**therealriganb@gmail.com** to reach the maintainer directly.
+
+Please do not open a public issue for a security vulnerability. Mail it, and give us a
+chance to ship a fix first.
