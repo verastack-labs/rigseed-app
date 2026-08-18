@@ -1,0 +1,56 @@
+name: CI
+
+# Runs on every pull request so a component branch is verified before it merges,
+# not after. Kept deliberately fast: this gates the component and screen PRs.
+
+on:
+  pull_request:
+    paths-ignore:
+      - 'licenses/**'
+      - 'docs/**'
+      - '**/*.md'
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'licenses/**'
+      - '**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Format check
+        run: pnpm run format:check
+
+      - name: Test
+        run: pnpm run test
+
+      - name: Build
+        run: pnpm run build
