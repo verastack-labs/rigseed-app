@@ -91,7 +91,7 @@ components:
 
 ## How this document is structured
 
-rigseed has one surface today — the app — so unlike riggit there is no Persuade/Operate split to manage. The convention still holds:
+rigseed has one surface today - the app - so unlike riggit there is no Persuade/Operate split to manage. The convention still holds:
 
 - **Foundations** (colour, shape, elevation, motion principles, the brand mark) are canonical in `docs/design-foundations.md`, destined for `rigseed-internal/docs/`. They are mirrored below so the machine-readable block sits next to the code that gets checked. **Change them at the source first**, then propagate here and into the theme layer.
 - **Everything else in this file is app-specific** and owned here.
@@ -113,7 +113,7 @@ The register is a well-kept terminal rather than a media centre: no pure black, 
 - Warm neutrals in four steps (page, sidebar, surface, raised surface), each tinted with a percentage of the live accent
 - Seven user-chosen accents, each with a paired secondary used for upload and seeding
 - Monospace strictly for data; uppercase 10px tracked micro-labels do the section labelling
-- Tight radii — 8px controls, 12px cards, 14px modals, full pills only for chips
+- Tight radii - 8px controls, 12px cards, 14px modals, full pills only for chips
 - Spring overshoot on expand/collapse, never linear
 - Light and dark both ship; dark is the default
 
@@ -121,7 +121,7 @@ The register is a well-kept terminal rather than a media centre: no pure black, 
 
 Colour is computed in two stages: a mode-dependent base palette with per-mode tint strengths, then the chosen accent mixed into each base tone.
 
-### Stage 1 — base neutrals and tint strengths
+### Stage 1 - base neutrals and tint strengths
 
 Dark mode:
 
@@ -143,7 +143,7 @@ Light mode:
 tint: bg 9% · sidebar 12% · surface 4% · surface2 8% · border 22%
 ```
 
-### Stage 2 — derived tokens
+### Stage 2 - derived tokens
 
 ```css
 --bg:          color-mix(in srgb, var(--accent) var(--tint-bg),       var(--base-bg));
@@ -177,7 +177,7 @@ Seven options, each with a dark value, a light value and a paired secondary. **D
 
 **The Tinted Neutral Rule.** No neutral in the app is a raw hex. Every surface is a mix of the base tone and the live accent at the tint strength for that mode, so the whole window shifts when the accent changes.
 
-**The Semantic Colour Rule.** `--accent` carries download speed, progress fill, primary buttons, active nav, focus ring and links. `--accent2` carries upload speed, seeding state and peer progress. Status colours are fixed and independent of the accent: `--ok` for reachable/online, `--warn` for degraded, `--danger` for failed and destructive. A status must never borrow the accent — on a terracotta accent, an accent-coloured "online" is indistinguishable from a red "refused".
+**The Semantic Colour Rule.** `--accent` carries download speed, progress fill, primary buttons, active nav, focus ring and links. `--accent2` carries upload speed, seeding state and peer progress. Status colours are fixed and independent of the accent: `--ok` for reachable/online, `--warn` for degraded, `--danger` for failed and destructive. A status must never borrow the accent - on a terracotta accent, an accent-coloured "online" is indistinguishable from a red "refused".
 
 **Paused is never accent.** Paused, stalled and queued states use `--surface2` and `--text-dimmer`.
 
@@ -228,29 +228,29 @@ In-flow cards, inputs and table rows never cast a shadow.
 
 ## Controls [app]
 
-**Toggle switch** — track 36×20px, radius 10px, 1px border; knob 12×12px, 3px inset, `translateX(16px)` when on, transition `0.28s cubic-bezier(0.34,1.56,0.64,1)`. On: track `--accent-soft`, border `--accent`, knob `--accent`. Off: track `--surface2`, border `--line`, knob `--text-dimmer`.
+**Toggle switch** - track 36×20px, radius 10px, 1px border; knob 12×12px, 3px inset, `translateX(16px)` when on, transition `0.28s cubic-bezier(0.34,1.56,0.64,1)`. On: track `--accent-soft`, border `--accent`, knob `--accent`. Off: track `--surface2`, border `--line`, knob `--text-dimmer`.
 
-**Segmented group** — wrapper `--surface2` + `--line`, radius 9px, 3px padding, 2–4px gap. Selected: `--accent-soft` background, `--accent` text. Unselected: transparent, `--text-dim`.
+**Segmented group** - wrapper `--surface2` + `--line`, radius 9px, 3px padding, 2–4px gap. Selected: `--accent-soft` background, `--accent` text. Unselected: transparent, `--text-dim`.
 
-**Primary button** — `--accent` background, `--accent-on` text, radius 8px, padding 9px 17px, 12.5px/600. Hover `filter: brightness(1.07)`.
+**Primary button** - `--accent` background, `--accent-on` text, radius 8px, padding 9px 17px, 12.5px/600. Hover `filter: brightness(1.07)`.
 
-**Secondary button** — `--surface2` background, `--line` border, `--text` text. Hover `--accent-soft` background, `--accent` text.
+**Secondary button** - `--surface2` background, `--line` border, `--text` text. Hover `--accent-soft` background, `--accent` text.
 
-**Destructive button** — `--surface2` background with `--danger` text at rest; on hover, `--danger-soft` background and `--danger` border. The filled `--danger` treatment is reserved for the confirm action inside a dialog.
+**Destructive button** - `--surface2` background with `--danger` text at rest; on hover, `--danger-soft` background and `--danger` border. The filled `--danger` treatment is reserved for the confirm action inside a dialog.
 
-**Icon button** — 30–34px square, radius 8px, `--surface2` + `--line`, `--text-dim` icon, `--accent` on hover.
+**Icon button** - 30–34px square, radius 8px, `--surface2` + `--line`, `--text-dim` icon, `--accent` on hover.
 
-**Input** — height 34–36px, radius 8px, `--surface2` background, `--line` border, 12px text; mono for paths, numbers and magnets, Inter for names. Focus: border `--accent`.
+**Input** - height 34–36px, radius 8px, `--surface2` background, `--line` border, 12px text; mono for paths, numbers and magnets, Inter for names. Focus: border `--accent`.
 
-**Checkbox** — 16–17px square, radius 4–5px, 1.5px border. Checked: filled + `--accent-on` tick at 3.2–3.4 stroke width.
+**Checkbox** - 16–17px square, radius 4–5px, 1.5px border. Checked: filled + `--accent-on` tick at 3.2–3.4 stroke width.
 
-**Chip / tag** — radius 20px, padding 6px 11px, 12px/600, 7px colour dot, 1px border. Selected chips use the item's own colour at low alpha.
+**Chip / tag** - radius 20px, padding 6px 11px, 12px/600, 7px colour dot, 1px border. Selected chips use the item's own colour at low alpha.
 
 ## Icons [shared]
 
-Feather-style line icons: `viewBox 0 0 24 24`, `fill: none`, `stroke: currentColor`, stroke width 2 (2.2–2.6 for small or emphatic glyphs), round caps and joins. Sizes: 11–13px inline with text, 14–17px in buttons and rows, 20–24px for feature icons. Use one library in the real app — Lucide matches the drawing style — rather than re-inlining the prototype paths.
+Feather-style line icons: `viewBox 0 0 24 24`, `fill: none`, `stroke: currentColor`, stroke width 2 (2.2–2.6 for small or emphatic glyphs), round caps and joins. Sizes: 11–13px inline with text, 14–17px in buttons and rows, 20–24px for feature icons. Use one library in the real app - Lucide matches the drawing style - rather than re-inlining the prototype paths.
 
-**Brand mark** — cleat glyph, accent-coloured:
+**Brand mark** - cleat glyph, accent-coloured:
 
 ```svg
 <path d="M6.5 12h11M6.5 12 4 9.3M6.5 12 4 14.7M17.5 12 20 9.3M17.5 12 20 14.7"/>
@@ -269,7 +269,7 @@ A fixed swatch set for category icons and tag dots, independent of the theme acc
 - **Do** keep status colours fixed and separate from the accent, per the Semantic Colour Rule.
 - **Do** give every interactive element a visible focus ring (`:focus-visible`, 2px `--accent`, 2px offset) and make it reachable by Tab.
 - **Do** state each screen's API endpoints in the small mono line, and keep them accurate as the implementation lands.
-- **Do** respect `prefers-reduced-motion` — springs become instant state changes, not slower springs.
+- **Do** respect `prefers-reduced-motion` - springs become instant state changes, not slower springs.
 
 ### Don't:
 
@@ -277,5 +277,5 @@ A fixed swatch set for category icons and tag dots, independent of the theme acc
 - **Don't** put pure black, pure white or a cool grey anywhere.
 - **Don't** colour a paused, stalled or queued state with the accent.
 - **Don't** use monospace for texture. It means data.
-- **Don't** mix the verb pairs — Pause/Resume for a running or paused torrent, Start/Stop only at 0% and 100%.
+- **Don't** mix the verb pairs - Pause/Resume for a running or paused torrent, Start/Stop only at 0% and 100%.
 - **Don't** shadow an in-flow surface. Depth is the four-step background ramp and 1px borders.
