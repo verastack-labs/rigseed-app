@@ -1,0 +1,109 @@
+name: Licence compliance
+
+# The sidecar is GPLv3+ and rigseed redistributes its binary. Every release has to
+# carry the matching source. This job catches the two ways that quietly breaks:
+# a version bump that leaves the licence bundle behind, and an upstream tag that moves.
+#
+# See licenses/README.md for the reasoning.
+
+on:
+  pull_request:
+    paths:
+      - 'sidecar.json'
+      - 'licenses/**'
+      - 'NOTICE'
+      - 'scripts/fetch-sidecar-source.sh'
+      - '.github/workflows/compliance.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'sidecar.json'
+      - 'licenses/**'
+      - 'NOTICE'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  licence-bundle:
+    name: Licence bundle is complete and current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: sidecar.json is valid and complete
+        run: |
+          set -euo pipefail
+          for key in name upstream version tag commit sourceArchive; do
+            value=$(jq -r --arg k "$key" '.[$k] // empty' sidecar.json)
+            if [ -z "$value" ]; then
+              echo "::error file=sidecar.json::missing required field: $key"
+              exit 1
+            fi
+            echo "  $key = $value"
+          done
+
+      - name: Required licence texts are present
+        run: |
+          set -euo pipefail
+          missing=0
+          for f in \
+            licenses/README.md \
+            licenses/qbittorrent/COPYING.txt \
+            licenses/qbittorrent/COPYING.GPLv2.txt \
+            licenses/qbittorrent/COPYING.GPLv3.txt \
+            licenses/fonts/Inter-OFL.txt \
+            licenses/fonts/JetBrainsMono-OFL.txt \
+            licenses/lucide/ISC.txt \
+            LICENSE \
+            NOTICE
+          do
+            if [ ! -s "$f" ]; then
+              echo "::error::missing or empty licence file: $f"
+              missing=1
+            fi
+          done
+          exit $missing
+
+      - name: NOTICE matches the pinned sidecar version
+        run: |
+          set -euo pipefail
+          version=$(jq -r .version sidecar.json)
+          if ! grep -q "$version" NOTICE; then
+            echo "::error file=NOTICE::NOTICE does not mention the pinned sidecar version $version"
+            echo "Bumping sidecar.json means NOTICE has to be updated in the same change."
+            exit 1
+          fi
+          echo "NOTICE references $version"
+
+      - name: Pinned upstream tag still resolves to the pinned commit
+        run: |
+          set -euo pipefail
+          upstream=$(jq -r .upstream sidecar.json)
+          tag=$(jq -r .tag sidecar.json)
+          pinned=$(jq -r .commit sidecar.json)
+
+          actual=$(git ls-remote "https://github.com/$upstream.git" "refs/tags/$tag^{}" | cut -f1)
+          if [ -z "$actual" ]; then
+            actual=$(git ls-remote "https://github.com/$upstream.git" "refs/tags/$tag" | cut -f1)
+          fi
+
+          if [ -z "$actual" ]; then
+            echo "::error::tag $tag not found in $upstream"
+            exit 1
+          fi
+
+          if [ "$actual" != "$pinned" ]; then
+            echo "::error file=sidecar.json::tag $tag now points at $actual but sidecar.json pins $pinned"
+            echo "An upstream tag was moved. Do not ship until this is understood."
+            exit 1
+          fi
+          echo "$tag resolves to $pinned as pinned"
+
+      - name: Fetch script is executable and parses
+        run: |
+          set -euo pipefail
+          test -x scripts/fetch-sidecar-source.sh || { echo "::error::fetch-sidecar-source.sh is not executable"; exit 1; }
+          bash -n scripts/fetch-sidecar-source.sh
+          echo "fetch script is fine"
