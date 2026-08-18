@@ -1,0 +1,120 @@
+/*
+ * rigseed global stylesheet.
+ *
+ * The token layer at ../../tokens/ is canonical and is shared with the design
+ * system package. This file does one job on top of it: expose those tokens to
+ * Tailwind as utilities, without freezing their values.
+ *
+ * See licenses/../DESIGN.md and rigseed-internal/docs/design-foundations.md.
+ */
+
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@import '../../tokens/fonts.css';
+@import '../../tokens/colors.css';
+@import '../../tokens/typography.css';
+@import '../../tokens/spacing.css';
+@import '../../tokens/shape.css';
+@import '../../tokens/motion.css';
+@import '../../tokens/base.css';
+
+/*
+ * @theme inline, not plain @theme.
+ *
+ * A plain @theme block copies values in at build time. That would bake one of
+ * the fourteen palettes into the stylesheet and break accent switching.
+ *
+ * `inline` emits var() references instead, so `bg-surface` compiles to
+ * `background-color: var(--surface)` and resolves live against the
+ * [data-mode][data-accent] cascade in tokens/colors.css. Changing either
+ * attribute on <html> reskins the whole app with no re-render.
+ */
+@theme inline {
+  /* Surfaces. Every one of these is the accent mixed into a neutral base. */
+  --color-bg: var(--bg);
+  --color-sidebar: var(--sidebar-bg);
+  --color-surface: var(--surface);
+  --color-surface2: var(--surface2);
+  --color-line: var(--line);
+
+  /* Text */
+  --color-text: var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-text-dimmer: var(--text-dimmer);
+
+  /* Accent drives download, progress, primary actions, active nav, focus.
+     Accent2 drives upload, seeding, peer progress, the connected tick. */
+  --color-accent: var(--accent);
+  --color-accent2: var(--accent2);
+  --color-accent-on: var(--accent-on);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent2-soft: var(--accent2-soft);
+  --color-accent-hover: var(--accent-hover-surface);
+
+  /* Status. Never the accent. */
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+
+  /* Category and tag swatches, independent of the theme accent. */
+  --color-swatch-blue: var(--swatch-blue);
+  --color-swatch-terracota: var(--swatch-terracota);
+  --color-swatch-sage: var(--swatch-sage);
+  --color-swatch-mustard: var(--swatch-mustard);
+  --color-swatch-lavender: var(--swatch-lavender);
+  --color-swatch-teal: var(--swatch-teal);
+  --color-swatch-clay: var(--swatch-clay);
+  --color-swatch-rose: var(--swatch-rose);
+
+  /* Type. Inter carries language, JetBrains Mono carries data. */
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-mono);
+
+  /* Radii */
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+  --radius-3xl: var(--radius-3xl);
+  --radius-4xl: var(--radius-4xl);
+
+  /* Motion */
+  --ease-overshoot: var(--ease-overshoot);
+  --ease-rail: var(--ease-rail);
+  --ease-panel: var(--ease-panel);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    /* Desktop chrome, not a document. Selection is opt-in per element. */
+    user-select: none;
+    overflow: hidden;
+  }
+
+  input,
+  textarea,
+  [contenteditable] {
+    user-select: text;
+  }
+
+  /*
+   * Tailwind v4's preflight dropped the cursor: pointer that v3 gave buttons.
+   * Without this a control and its label disagree about whether the thing is
+   * clickable, which reads as broken.
+   */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  summary {
+    cursor: pointer;
+  }
+}
