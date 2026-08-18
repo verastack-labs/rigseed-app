@@ -1,0 +1,111 @@
+<!-- @dsCard group="Components" viewport="700x420" subtitle="Buttons, inputs, toggles, chips and containers" name="Core" -->
+<!doctype html>
+<html data-mode="dark" data-accent="dustblue">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>
+  body { margin:0; padding:18px; background:var(--bg); font-family:var(--font-ui); color:var(--text); }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .stack { display:flex; flex-direction:column; gap:14px; }
+  .lbl { font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dimmer); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const NS = (() => {
+  const want = ['Button','Switch','Chip','Card'];
+  for (const k of Object.keys(window)) {
+    const v = window[k];
+    if (v && typeof v === 'object' && want.every(n => typeof v[n] === 'function')) return v;
+  }
+  return {};
+})();
+const { Button, IconButton, Input, Switch, Checkbox, SegmentedControl, Chip, Card, SectionHeader, StatusDot, IconTile, Badge } = NS;
+
+const I = ({ d, s = 14 }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>
+);
+const PLUS = "M12 5v14M5 12h14";
+const PLAY = "M8 5.5v13l10-6.5z";
+const SEARCH = "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3";
+
+function Demo() {
+  const [layout, setLayout] = React.useState('grid');
+  const [on, setOn] = React.useState(true);
+  const [checked, setChecked] = React.useState(true);
+  const [tag, setTag] = React.useState('sage');
+
+  return (
+    <div className="stack">
+      <div className="row">
+        <Button variant="primary" icon={<I d={PLUS} />}>Add and start</Button>
+        <Button icon={<I d={PLAY} />}>Resume</Button>
+        <Button variant="ghost">Skip</Button>
+        <Button variant="danger">Remove</Button>
+        <Button variant="primary" size="sm">Apply</Button>
+        <Button disabled>Disabled</Button>
+        <IconButton title="Settings"><I d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" /></IconButton>
+        <IconButton title="Appearance" active><I d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.1 0-.9.8-1.7 1.7-1.7H16a5 5 0 0 0 5-5c0-4-4-7.3-9-7.3z" /></IconButton>
+      </div>
+
+      <div className="row">
+        <Input size="sm" width={230} icon={<I d={SEARCH} s={13} />} placeholder="Search torrents…" />
+        <Input mono width={150} defaultValue="/mnt/media" />
+        <Input mono width={92} unit="KiB/s" defaultValue="2048" />
+      </div>
+
+      <div className="row" style={{ gap: '18px' }}>
+        <SegmentedControl
+          options={[{value:'easy',label:'Easy'},{value:'grid',label:'Grid'},{value:'list',label:'List'}]}
+          value={layout} onChange={setLayout} />
+        <div className="row" style={{ gap: '8px' }}>
+          <Switch checked={on} onChange={setOn} label="Alt limits" />
+          <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Alternative limits</span>
+        </div>
+        <div className="row" style={{ gap: '8px' }}>
+          <Checkbox checked={checked} onChange={setChecked} />
+          <Checkbox indeterminate />
+          <Checkbox />
+        </div>
+      </div>
+
+      <div className="row">
+        <Chip label="1337x" dot count={18} selected color="var(--swatch-sage)"
+              onClick={() => setTag('sage')} />
+        <Chip label="rarbg" dot count={7} color="var(--swatch-mustard)" />
+        <Chip label="Movies" icon={<I d="M4 5h16v14H4z" s={12} />} selected />
+        <Chip label="New tag" dashed />
+        <Badge>7</Badge>
+        <Badge tone="accent" mono={false}>Update</Badge>
+        <StatusDot tone="accent2" label="working" />
+        <StatusDot tone="warn" label="stalled" />
+        <IconTile size={30} color="var(--swatch-terracota)"><I d="M4 5h16v14H4z" /></IconTile>
+      </div>
+
+      <div className="row" style={{ alignItems: 'stretch', gap: '12px' }}>
+        <Card title="Behaviour" api="torrents/setAutoManagement" action={<Switch checked />} style={{ flex: 1 }}>
+          <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
+            Torrents move when the category changes.
+          </span>
+        </Card>
+        <Card hoverable style={{ width: 220 }}>
+          <SectionHeader>Download</SectionHeader>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '20px', fontWeight: 600, color: 'var(--accent)', marginTop: 6 }}>
+            4.2 MiB/s
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo />);
+</script>
+</body>
+</html>

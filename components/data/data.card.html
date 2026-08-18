@@ -1,0 +1,73 @@
+<!-- @dsCard group="Components" viewport="700x300" subtitle="Progress, mono values, sparklines and stat cards" name="Data" -->
+<!doctype html>
+<html data-mode="dark" data-accent="dustblue">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>
+  body { margin:0; padding:18px; background:var(--bg); font-family:var(--font-ui); color:var(--text); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const NS = (() => {
+  const want = ['ProgressBar','DataValue','Sparkline','StatCard'];
+  for (const k of Object.keys(window)) {
+    const v = window[k];
+    if (v && typeof v === 'object' && want.every(n => typeof v[n] === 'function')) return v;
+  }
+  return {};
+})();
+const { ProgressBar, DataValue, Sparkline, StatCard } = NS;
+
+const wave = (n, seed) => Array.from({ length: n }, (_, i) =>
+  40 + 34 * Math.sin(i / 5 + seed) + 16 * Math.sin(i / 2.2 + seed * 2));
+
+const I = ({ d }) => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>
+);
+
+function Demo() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <ProgressBar value={64} showValue />
+          <ProgressBar value={100} tone="accent2" height={4} showValue />
+          <ProgressBar value={38} paused showValue />
+          <ProgressBar value={72} split height={8} />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          <DataValue size="xl" tone="accent">4.2 MiB/s</DataValue>
+          <DataValue size="md">3.65 GB of 5.7 GB</DataValue>
+          <DataValue size="sm" tone="dim">192.168.1.24:8080 · ratio 1.42</DataValue>
+          <DataValue size="xs" tone="dimmer">sync/maindata · torrents/info</DataValue>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+        <StatCard icon={<I d="M12 4v12M7 12l5 5 5-5M5 20h14" />} label="Down speed"
+                  value="4.2 MiB/s" sub="from 24 seeds" tone="accent" />
+        <StatCard icon={<I d="M12 20V8M7 12l5-5 5 5M5 4h14" />} label="Up speed"
+                  value="812 KiB/s" sub="to 9 peers" tone="accent2" />
+        <StatCard icon={<I d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2" />} label="ETA"
+                  value="4m 12s" sub="at current speed" />
+      </div>
+
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--line)',
+                    borderRadius: 'var(--radius-2xl)', padding: 12 }}>
+        <Sparkline data={wave(60, 0)} upload={wave(60, 2).map(v => v * 0.4)} height={54} gridlines />
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo />);
+</script>
+</body>
+</html>
