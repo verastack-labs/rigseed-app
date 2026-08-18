@@ -1,0 +1,121 @@
+/* ============================================================
+   rigseed colour system
+
+   Two stages:
+   1. A mode-dependent neutral base + per-mode tint strengths.
+   2. The chosen accent mixed into every neutral by those strengths.
+
+   Set both attributes on a wrapper (usually <html> or the app root):
+     <div data-mode="dark" data-accent="dustblue">
+   Switching either one reskins the whole app with no re-render.
+   ============================================================ */
+
+:root {
+  --mode-default: dark;
+  --accent-default: dustblue;
+}
+
+/* ---------- Stage 1: neutral bases and tint strengths ---------- */
+
+[data-mode="dark"] {
+  --base-bg: #191A1C;
+  --base-sidebar: #141517;
+  --base-surface: #212327;
+  --base-surface2: #2A2C31;
+  --border: #34373C;
+
+  --text: #E9E8E6;
+  --text-dim: #979A9F;
+  --text-dimmer: #6A6D73;
+  --accent-on: #14181C;
+
+  --danger: #C86B60;
+  --warn: #C79A3E;
+  --shadow-color: rgba(0, 0, 0, 0.5);
+
+  --tint-bg: 7%;
+  --tint-sidebar: 9%;
+  --tint-surface: 8%;
+  --tint-surface2: 10%;
+  --tint-border: 14%;
+}
+
+[data-mode="light"] {
+  --base-bg: #F6F6F5;
+  --base-sidebar: #EFEFEE;
+  --base-surface: #FFFFFF;
+  --base-surface2: #F9F9F8;
+  --border: #E0E0DE;
+
+  --text: #232527;
+  --text-dim: #7E8288;
+  --text-dimmer: #A9ADB2;
+  --accent-on: #FFFFFF;
+
+  --danger: #B4503F;
+  --warn: #9A7420;
+  --shadow-color: rgba(40, 50, 60, 0.14);
+
+  --tint-bg: 9%;
+  --tint-sidebar: 12%;
+  --tint-surface: 4%;
+  --tint-surface2: 8%;
+  --tint-border: 22%;
+}
+
+/* ---------- Accents ----------
+   --accent  drives download, progress, primary actions, active nav, focus.
+   --accent2 drives upload, seeding, peer progress, the connected tick.     */
+
+[data-mode="dark"][data-accent="dustblue"]   { --accent: #7FA2BC; --accent2: #C97B63; }
+[data-mode="light"][data-accent="dustblue"]  { --accent: #43718F; --accent2: #A85A42; }
+
+[data-mode="dark"][data-accent="amber"]      { --accent: #E2AC66; --accent2: #93B393; }
+[data-mode="light"][data-accent="amber"]     { --accent: #B0731F; --accent2: #4C7A4C; }
+
+[data-mode="dark"][data-accent="sage"]       { --accent: #8FB08F; --accent2: #E0A458; }
+[data-mode="light"][data-accent="sage"]      { --accent: #4C7A4C; --accent2: #B8752E; }
+
+[data-mode="dark"][data-accent="terracotta"] { --accent: #C97B63; --accent2: #7C9CB4; }
+[data-mode="light"][data-accent="terracotta"]{ --accent: #A85A42; --accent2: #4E7590; }
+
+[data-mode="dark"][data-accent="mustard"]    { --accent: #D4B15E; --accent2: #6FA3A0; }
+[data-mode="light"][data-accent="mustard"]   { --accent: #93761F; --accent2: #3E7A76; }
+
+[data-mode="dark"][data-accent="slateteal"]  { --accent: #6FA3A0; --accent2: #D4B15E; }
+[data-mode="light"][data-accent="slateteal"] { --accent: #35726E; --accent2: #9C7E2E; }
+
+[data-mode="dark"][data-accent="lavender"]   { --accent: #A69BC9; --accent2: #B08F6A; }
+[data-mode="light"][data-accent="lavender"]  { --accent: #7367A5; --accent2: #8A6A42; }
+
+/* ---------- Stage 2: derived semantic surfaces ---------- */
+
+[data-mode] {
+  --bg:         color-mix(in srgb, var(--accent) var(--tint-bg),       var(--base-bg));
+  --sidebar-bg: color-mix(in srgb, var(--accent) var(--tint-sidebar),  var(--base-sidebar));
+  --surface:    color-mix(in srgb, var(--accent) var(--tint-surface),  var(--base-surface));
+  --surface2:   color-mix(in srgb, var(--accent) var(--tint-surface2), var(--base-surface2));
+  --line:       color-mix(in srgb, var(--accent) var(--tint-border),   var(--border));
+
+  --accent-soft:  color-mix(in srgb, var(--accent)  18%, transparent);
+  --accent2-soft: color-mix(in srgb, var(--accent2) 18%, transparent);
+  --danger-soft:  color-mix(in srgb, var(--danger)  16%, transparent);
+  --warn-soft:    color-mix(in srgb, var(--warn)    14%, transparent);
+
+  /* Hover on a floating element must stay opaque, or the page shows through. */
+  --accent-hover-surface: color-mix(in srgb, var(--accent) 18%, var(--surface));
+}
+
+/* ---------- Category and tag swatches ----------
+   Independent of the theme accent. Store the key, never the hex.          */
+
+[data-mode] {
+  --swatch-blue:      #7FA2BC;
+  --swatch-terracota: #C97B63;
+  --swatch-sage:      #8FB08F;
+  --swatch-mustard:   #D4B15E;
+  --swatch-lavender:  #A69BC9;
+  --swatch-teal:      #6FA3A0;
+  --swatch-clay:      #B08F6A;
+  --swatch-rose:      #C08494;
+}

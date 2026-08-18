@@ -1,0 +1,37 @@
+/* rigseed typography.
+   Inter carries every sentence and label. JetBrains Mono carries every
+   number: sizes, speeds, ratios, percentages, hashes, IPs, API endpoints.
+   The split is semantic, not decorative — it is how a value is recognised
+   as machine data at a glance. */
+
+:root {
+  --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+
+  --text-h1: 30px;          /* screen title */
+  --text-h1-detail: 34px;   /* torrent name on the detail screen */
+  --text-h1-settings: 26px; /* settings section title */
+  --text-metric: 40px;      /* the one big percentage */
+  --text-readout: 20px;     /* mono speed readouts */
+  --text-stat: 17px;        /* mono stat card value */
+  --text-title: 15px;       /* modal / editor titles */
+  --text-body: 12.5px;      /* rows, cards, buttons, labels */
+  --text-sub: 11.5px;       /* hints and secondary lines */
+  --text-data: 11px;        /* mono inline data */
+  --text-eyebrow: 10px;     /* uppercase section headers */
+  --text-micro: 9.5px;      /* table headers, footer */
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.45;
+  --leading-relaxed: 1.6;
+
+  --tracking-title: -0.02em;   /* h1 */
+  --tracking-tight: -0.01em;   /* wordmark */
+  --tracking-eyebrow: 0.08em;  /* uppercase section headers */
+  --tracking-table: 0.07em;    /* uppercase table headers */
+}

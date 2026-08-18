@@ -1,0 +1,32 @@
+/* rigseed motion.
+   Overshoot for anything that expands. Plain ease for colour. Never linear. */
+
+:root {
+  --ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1); /* FAB, toggles, chevrons */
+  --ease-rail: cubic-bezier(0.34, 1.2, 0.64, 1);       /* rail width */
+  --ease-panel: cubic-bezier(0.32, 0.72, 0, 1);        /* appearance panel */
+  --ease-plain: ease;                                   /* colour, opacity */
+
+  --dur-fast: 0.15s;
+  --dur-quick: 0.2s;
+  --dur-base: 0.25s;
+  --dur-spring: 0.28s;
+  --dur-rail: 0.24s;
+  --dur-panel: 0.34s;
+  --dur-slow: 0.42s;
+
+  --stagger-fab: 30ms;      /* between FAB options */
+  --delay-autoclose: 2400ms;/* appearance panel idle timeout */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ease-overshoot: ease;
+    --ease-rail: ease;
+    --ease-panel: ease;
+    --dur-spring: 0.01s;
+    --dur-rail: 0.01s;
+    --dur-panel: 0.01s;
+    --dur-slow: 0.01s;
+  }
+}

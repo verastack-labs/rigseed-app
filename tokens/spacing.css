@@ -1,0 +1,40 @@
+/* rigseed spacing.
+   Not a strict 4px grid — the prototypes use half-steps (9px, 13px, 11.5px)
+   where a control needed to sit right. Use the tokens; do not round them. */
+
+:root {
+  --space-1: 3px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 14px;
+  --space-8: 16px;
+  --space-9: 18px;
+  --space-10: 22px;
+  --space-11: 24px;
+  --space-12: 30px;
+
+  /* Fixed frame widths */
+  --rail-collapsed: 60px;
+  --rail-expanded: 212px;
+  --sidebar-width: 236px;
+  --settings-nav-width: 232px;
+  --list-pane-width: 440px;
+
+  /* Fixed frame heights */
+  --topbar-height: 56px;
+  --toolbar-height: 52px;
+  --footer-height: 34px;
+  --row-height: 40px;
+  --control-height: 34px;
+  --input-height: 34px;
+
+  /* Container padding */
+  --pad-screen-x: 24px;
+  --pad-card: 14px;
+  --pad-card-lg: 18px;
+  --pad-row-y: 9px;
+  --pad-row-x: 16px;
+}

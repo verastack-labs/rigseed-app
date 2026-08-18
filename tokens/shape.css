@@ -1,0 +1,27 @@
+/* rigseed shape and depth. Borders are always 1px solid var(--line). */
+
+:root {
+  --radius-sm: 4px;    /* checkboxes, badges, schedule cells */
+  --radius-md: 7px;    /* rows, small buttons */
+  --radius-lg: 8px;    /* buttons, inputs, icon buttons */
+  --radius-xl: 9px;    /* segmented groups, nav and rail items */
+  --radius-2xl: 11px;  /* cards */
+  --radius-3xl: 12px;  /* tables, panels */
+  --radius-4xl: 14px;  /* modals */
+  --radius-pill: 20px; /* chips and tags */
+  --radius-full: 50%;  /* swatches, dots, FAB */
+
+  --border-width: 1px;
+  --border-emphasis: 1.5px;  /* selected cards in the setup modal */
+
+  --shadow-card: 0 8px 24px var(--shadow-color);
+  --shadow-float: 0 4px 14px var(--shadow-color);
+  --shadow-fab: 0 6px 20px var(--shadow-color);
+  --shadow-modal: 0 30px 80px var(--shadow-color);
+  --shadow-rail: 10px 0 30px var(--shadow-color);
+
+  --scrim: color-mix(in srgb, var(--bg) 80%, transparent);
+  --scrim-modal: color-mix(in srgb, var(--base-bg) 72%, transparent);
+  --scrim-blur: 3px;
+  --scrim-blur-modal: 6px;
+}
