@@ -7,13 +7,13 @@
  */
 export function App() {
   return (
-    <div className="bg-bg text-text flex h-full items-center justify-center">
-      <div className="border-line bg-surface rounded-2xl border p-8 text-center">
-        <h1 className="text-text text-[30px] font-semibold tracking-[-0.02em]">rigseed</h1>
-        <p className="text-text-dim mt-2 text-[12.5px]">
+    <div className="flex h-full items-center justify-center bg-bg text-text">
+      <div className="rounded-2xl border border-line bg-surface p-8 text-center">
+        <h1 className="text-[30px] font-semibold tracking-[-0.02em] text-text">rigseed</h1>
+        <p className="mt-2 text-[12.5px] text-text-dim">
           Toolchain scaffold. Components land next.
         </p>
-        <p className="text-text-dimmer mt-4 font-mono text-[11px]">
+        <p className="mt-4 font-mono text-[11px] text-text-dimmer">
           data-mode and data-accent are set on &lt;html&gt;
         </p>
       </div>
