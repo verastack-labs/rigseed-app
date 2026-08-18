@@ -88,6 +88,12 @@
 [data-mode="dark"][data-accent="lavender"]   { --accent: #A69BC9; --accent2: #B08F6A; }
 [data-mode="light"][data-accent="lavender"]  { --accent: #7367A5; --accent2: #8A6A42; }
 
+/* The quiet option. Low enough chroma that the tint reads as a faint cool cast
+   on the neutrals rather than a colour wash, which is the point: it makes "no
+   visible theme" a deliberate choice rather than an absent one. */
+[data-mode="dark"][data-accent="slate"]      { --accent: #98A0AC; --accent2: #C0A176; }
+[data-mode="light"][data-accent="slate"]     { --accent: #5A626E; --accent2: #856239; }
+
 /* ---------- Stage 2: derived semantic surfaces ---------- */
 
 [data-mode] {

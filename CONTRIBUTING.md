@@ -60,7 +60,7 @@ For example: `feat: add alternative speed limit toggle to the toolbar`.
 
 Anything with a visual surface is checked against the design docs:
 
-- Dark and light both correct, all seven accents
+- Dark and light both correct, all eight accents
 - Rail collapsed and expanded, with no reflow
 - Empty, loading and error states present
 - Every number in mono, every label in Inter

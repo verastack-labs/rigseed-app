@@ -1,6 +1,6 @@
 ---
 name: rigseed
-description: A desktop client for qBittorrent. Warm surfaces, live numbers, seven accents.
+description: A desktop client for qBittorrent. Warm surfaces, live numbers, eight accents.
 colors:
   page-bg: "#191A1C"
   sidebar-bg: "#141517"
@@ -172,6 +172,7 @@ Seven options, each with a dark value, a light value and a paired secondary. **D
 | `mustard` | Mustard | `#D4B15E` | `#93761F` | `#6FA3A0` | `#3E7A76` |
 | `slateteal` | Slate Teal | `#6FA3A0` | `#35726E` | `#D4B15E` | `#9C7E2E` |
 | `lavender` | Lavender | `#A69BC9` | `#7367A5` | `#B08F6A` | `#8A6A42` |
+| `slate` | Slate | `#98A0AC` | `#5A626E` | `#C0A176` | `#856239` |
 
 ### Named Rules
 

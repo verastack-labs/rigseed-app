@@ -89,7 +89,7 @@ Material grey. Dark mode is warm charcoal (`#191A1C` base); light is paper
 **The accent tints everything.** Picking an accent does not just recolour buttons: a
 percentage of it is mixed into every neutral surface via `color-mix`, so bg, sidebar,
 surface, surface2 and line all shift. Switching accent reads as a reskin, not a
-highlight swap. Seven accents, each with a paired secondary: download/progress use
+highlight swap. Eight accents, each with a paired secondary: download/progress use
 `--accent`, upload/seeding use `--accent2`. Paused and stalled states are never
 accent-coloured - they drop to `--surface2` / `--text-dimmer`.
 
