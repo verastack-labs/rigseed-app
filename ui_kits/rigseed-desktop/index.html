@@ -1,0 +1,77 @@
+<!-- @dsCard group="rigseed desktop" viewport="1440x900" subtitle="Click-through recreation: shell, transfers, detail, settings, logs" name="App" -->
+<!-- @startingPoint section="Screens" subtitle="Full app shell with the Transfers screen" viewport="1440x900" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>rigseed — UI kit</title>
+<link rel="stylesheet" href="../../styles.css">
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; }
+  #root { width: 100%; height: 100vh; }
+</style>
+</head>
+<body>
+<div id="root"><div style="width:100%;height:100vh;display:flex;align-items:center;justify-content:center;gap:10px;background:#191A1C;color:#6A6D73;font:600 12.5px 'Inter',system-ui,sans-serif;letter-spacing:.02em">Loading the rigseed kit…</div></div>
+
+<script>
+/* Tiny in-browser module runner: fetch each .jsx/.js, transform JSX + ES modules
+   to CommonJS, then evaluate with a require shim. A production build would use a
+   real bundler — this exists so the kit opens straight from the filesystem.
+   'react' resolves to the UMD global loaded above. */
+(function () {
+  var cache = {};
+
+  function resolve(base, spec) { return new URL(spec, base).href; }
+
+  async function load(url) {
+    if (cache[url]) return cache[url];
+
+    var src = await (await fetch(url)).text();
+    var out = Babel.transform(src, {
+      presets: [['react', { runtime: 'classic' }]],
+      plugins: ['transform-modules-commonjs'],
+      sourceType: 'module',
+      filename: url
+    }).code;
+
+    var deps = {};
+    var specs = out.match(/require\(["'][^"']+["']\)/g) || [];
+    for (var i = 0; i < specs.length; i++) {
+      var spec = specs[i].slice(9, -2);
+      if (spec === 'react' || deps[spec]) continue;
+      deps[spec] = await load(resolve(url, spec));
+    }
+
+    var module = { exports: {} };
+    var require = function (spec) {
+      if (spec === 'react') return window.React;
+      return deps[spec];
+    };
+
+    new Function('module', 'exports', 'require', 'React', out)(
+      module, module.exports, require, window.React
+    );
+
+    cache[url] = module.exports;
+    return module.exports;
+  }
+
+  (async function () {
+    try {
+      var mod = await load(new URL('./App.jsx', location.href).href);
+      ReactDOM.createRoot(document.getElementById('root'))
+        .render(React.createElement(mod.App));
+    } catch (e) {
+      document.getElementById('root').textContent =
+        'Failed to load kit: ' + ((e && e.stack) || e.message);
+      throw e;
+    }
+  })();
+})();
+</script>
+</body>
+</html>
