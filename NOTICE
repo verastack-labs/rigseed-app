@@ -2,35 +2,53 @@ rigseed
 Copyright 2026 Verastack Labs
 
 This product includes software developed by Verastack Labs, licensed under the
-Apache License, Version 2.0.
+Apache License, Version 2.0. See LICENSE.
 
---------------------------------------------------------------------------------
+================================================================================
 Bundled third-party software
---------------------------------------------------------------------------------
+================================================================================
 
-rigseed distributes qbittorrent-nox as a sidecar process. qbittorrent-nox is part
-of the qBittorrent project and is licensed under the GNU General Public License,
-version 2 or later, with an OpenSSL linking exception.
+qbittorrent-nox 5.2.3
+---------------------
 
-  https://github.com/qbittorrent/qBittorrent
+rigseed distributes qbittorrent-nox as a sidecar process. The exact build is pinned
+in sidecar.json.
 
-rigseed communicates with it only over its HTTP Web API v2.x as a separate process.
-No qBittorrent source is compiled into rigseed and rigseed is not a derivative work
-of it. The GPL obligations that apply are those of redistributing the qbittorrent-nox
-binary itself: its licence text must accompany any build that ships it, and a
-corresponding source offer must be made available to recipients.
+  Upstream: https://github.com/qbittorrent/qBittorrent
+  Tag:      release-5.2.3
+  Licence:  GPL-3.0-or-later (binary distribution)
 
-Any release pipeline that packages the sidecar must satisfy those two obligations.
+Upstream draws a distinction worth stating precisely. The qBittorrent source code is
+GPL-2.0-or-later, but the binary distribution is GPL-3.0-or-later, because it bundles
+GPLv3+ assets such as images. rigseed ships the binary, so GPL-3.0-or-later is the
+licence that governs redistribution.
 
---------------------------------------------------------------------------------
+Both licence texts are included, along with the OpenSSL linking exception that upstream
+adds in either case:
+
+  licenses/qbittorrent/COPYING.txt          the exception and upstream's own summary
+  licenses/qbittorrent/COPYING.GPLv2.txt
+  licenses/qbittorrent/COPYING.GPLv3.txt
+
+rigseed communicates with qbittorrent-nox only over its HTTP Web API v2.x, as a separate
+process. No qBittorrent source is compiled into rigseed, and rigseed is not a derivative
+work of it. rigseed's own licence is unaffected.
+
+What the GPL does require is that anyone receiving the binary can obtain the matching
+source. rigseed satisfies GPLv3 section 6(d) by attaching the corresponding source
+archive to the same GitHub release that carries the binary. See licenses/README.md.
+
 Fonts
---------------------------------------------------------------------------------
+-----
 
 Inter and JetBrains Mono are both licensed under the SIL Open Font License 1.1.
 
-  https://github.com/rsms/inter
-  https://github.com/JetBrains/JetBrainsMono
+  https://github.com/rsms/inter                  licenses/fonts/Inter-OFL.txt
+  https://github.com/JetBrains/JetBrainsMono     licenses/fonts/JetBrainsMono-OFL.txt
 
-Icons follow the Lucide drawing convention; Lucide is ISC licensed.
+Icons
+-----
 
-  https://github.com/lucide-icons/lucide
+Icons follow the Lucide drawing convention. Lucide is ISC licensed.
+
+  https://github.com/lucide-icons/lucide         licenses/lucide/ISC.txt
