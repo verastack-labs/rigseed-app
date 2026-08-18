@@ -1,0 +1,5 @@
+packages:
+  - '.'
+
+# Tauri's CLI and the Rust toolchain pull large binaries. Keeping the store
+# shared and the lockfile strict is deliberate.

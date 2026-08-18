@@ -1,0 +1,22 @@
+pnpm-lock.yaml
+dist/
+coverage/
+licenses/
+src-tauri/target/
+
+# Prototype output and the design system package are not ours to reformat.
+ui_kits/
+guidelines/
+components/
+*.dc.html
+
+# Design system source. The canonical upstream is the Claude Design project and it
+# syncs back into this repo. Reformatting it here would produce a spurious diff on
+# every sync, so it keeps its own formatting.
+tokens/
+styles.css
+DESIGN.md
+COMPONENTS.md
+README.md
+SKILL.md
+PRODUCT.md

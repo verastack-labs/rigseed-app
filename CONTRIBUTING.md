@@ -25,13 +25,13 @@ One branch per unit of work, off the latest `main`:
 
 Lowercase and hyphenated. `type` is one of:
 
-| Prefix | For |
-|---|---|
-| `docs/` | Planning docs, specs, README updates |
-| `design/` | `DESIGN.md` or design-token changes |
-| `feat/` | New functionality |
-| `fix/` | Bug fixes |
-| `chore/` | Tooling, config, dependency bumps |
+| Prefix    | For                                  |
+| --------- | ------------------------------------ |
+| `docs/`   | Planning docs, specs, README updates |
+| `design/` | `DESIGN.md` or design-token changes  |
+| `feat/`   | New functionality                    |
+| `fix/`    | Bug fixes                            |
+| `chore/`  | Tooling, config, dependency bumps    |
 
 Do not pile unrelated changes onto one branch.
 

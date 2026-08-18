@@ -9,6 +9,8 @@ build/
 out/
 target/
 .next/
+coverage/
+*.tsbuildinfo
 
 # environment
 .env
