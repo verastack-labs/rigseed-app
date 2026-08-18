@@ -10,11 +10,11 @@
 
 <!-- Match the branch prefix: docs / design / feat / fix / chore -->
 
-- [ ] `docs` — planning docs, specs, README
-- [ ] `design` — DESIGN.md or design tokens
-- [ ] `feat` — new functionality
-- [ ] `fix` — bug fix
-- [ ] `chore` — tooling, config, dependencies
+- [ ] `docs` - planning docs, specs, README
+- [ ] `design` - DESIGN.md or design tokens
+- [ ] `feat` - new functionality
+- [ ] `fix` - bug fix
+- [ ] `chore` - tooling, config, dependencies
 
 ## Design checks
 
@@ -26,7 +26,7 @@ Tick what applies. Delete the section for changes with no visual surface.
 - [ ] Every number in mono, every label in Inter
 - [ ] Keyboard reachable, visible focus ring
 - [ ] Motion respects `prefers-reduced-motion`
-- [ ] Copy matches the docs — Pause/Resume, not Start/Stop
+- [ ] Copy matches the docs - Pause/Resume, not Start/Stop
 
 ## Notes for the reviewer
 
