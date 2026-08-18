@@ -1,0 +1,36 @@
+rigseed
+Copyright 2026 Verastack Labs
+
+This product includes software developed by Verastack Labs, licensed under the
+Apache License, Version 2.0.
+
+--------------------------------------------------------------------------------
+Bundled third-party software
+--------------------------------------------------------------------------------
+
+rigseed distributes qbittorrent-nox as a sidecar process. qbittorrent-nox is part
+of the qBittorrent project and is licensed under the GNU General Public License,
+version 2 or later, with an OpenSSL linking exception.
+
+  https://github.com/qbittorrent/qBittorrent
+
+rigseed communicates with it only over its HTTP Web API v2.x as a separate process.
+No qBittorrent source is compiled into rigseed and rigseed is not a derivative work
+of it. The GPL obligations that apply are those of redistributing the qbittorrent-nox
+binary itself: its licence text must accompany any build that ships it, and a
+corresponding source offer must be made available to recipients.
+
+Any release pipeline that packages the sidecar must satisfy those two obligations.
+
+--------------------------------------------------------------------------------
+Fonts
+--------------------------------------------------------------------------------
+
+Inter and JetBrains Mono are both licensed under the SIL Open Font License 1.1.
+
+  https://github.com/rsms/inter
+  https://github.com/JetBrains/JetBrainsMono
+
+Icons follow the Lucide drawing convention; Lucide is ISC licensed.
+
+  https://github.com/lucide-icons/lucide
