@@ -1,12 +1,12 @@
 # Contributing to rigseed
 
-Thanks for looking. rigseed is a desktop client for qBittorrent — a frontend over the
+Thanks for looking. rigseed is a desktop client for qBittorrent - a frontend over the
 daemon's Web API v2.x, not a torrent engine. Changes to torrenting behaviour belong
 upstream with qBittorrent; changes to the interface belong here.
 
 ## Before you start
 
-Read `PRODUCT.md` and `DESIGN.md` at the repo root. They are not decoration — the design
+Read `PRODUCT.md` and `DESIGN.md` at the repo root. They are not decoration - the design
 is resolved to a high fidelity, and a change that contradicts them will be sent back even
 if the code is good.
 
@@ -53,7 +53,7 @@ For example: `feat: add alternative speed limit toggle to the toolbar`.
 3. Push and open a PR against `main`.
 4. Merge with a **merge commit, not a squash.** Squashing collapses the logical units the
    commit rule exists to create, which defeats the point of separating them.
-5. Delete the branch locally with `git branch -d <branch>`. Leave the remote branch alone —
+5. Delete the branch locally with `git branch -d <branch>`. Leave the remote branch alone -
    remote branches stay as a permanent trail, including after merge.
 
 ## What gets reviewed
@@ -83,13 +83,13 @@ These get enforced, because they are the rules most often broken:
 ## Reporting bugs
 
 Use the issue templates. The footer prints the daemon and API versions
-(`qbittorrent-nox 5.0.3 · api 2.11.2`) — include both, since a difference there explains
+(`qbittorrent-nox 5.0.3 · api 2.11.2`) - include both, since a difference there explains
 a large share of reports.
 
 ## Contact
 
-Anything that does not belong in a public issue — security reports, conduct concerns,
-licensing questions — goes to **verastack.labs@gmail.com**, or
+Anything that does not belong in a public issue - security reports, conduct concerns,
+licensing questions - goes to **verastack.labs@gmail.com**, or
 **therealriganb@gmail.com** to reach the maintainer directly.
 
 Please do not open a public issue for a security vulnerability. Mail it, and give us a
