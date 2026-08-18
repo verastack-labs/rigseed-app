@@ -1,8 +1,8 @@
-# rigseed — Cozy Terminal design system
+# rigseed - Cozy Terminal design system
 
 rigseed is a desktop client for **qBittorrent**. It is a Tauri shell that launches
 `qbittorrent-nox` as a sidecar and drives it entirely over the existing Web API v2.x.
-No C++/Qt is touched — the product is a frontend replacement for a dated GUI, plus a
+No C++/Qt is touched - the product is a frontend replacement for a dated GUI, plus a
 first-run experience and a theming layer the stock client does not have.
 
 The design system is called **Cozy Terminal**. It is deliberately not Material: the
@@ -11,7 +11,7 @@ read as the desktop port of that app.
 
 ## Sources
 
-Everything here is derived from the hi-fi prototypes built in this project — the same
+Everything here is derived from the hi-fi prototypes built in this project - the same
 files that ship in `docs/design-references/`:
 
 | Prototype | Screen |
@@ -50,14 +50,14 @@ but does not assume they know BitTorrent vocabulary. Sentences are complete and
 lowercase-after-the-first-word; no exclamation marks, no encouragement, no jokes.
 
 **Person.** Second person, sparingly. "You can change all of this later in Settings."
-Never first person — the app does not have a personality that says "I".
+Never first person - the app does not have a personality that says "I".
 
 **Casing.** Sentence case for every title, label, button and menu item. The only
 uppercase is the 10px section header (`ENGINES`, `CATEGORY`, `VIEW`) and table headers.
 The product name **rigseed** is lowercase always, including sentence-initial.
 
 **Verbs.** Pause and Resume are the verbs for a running or paused torrent. Start and
-Stop are reserved for 0% and 100%. The two pairs are never mixed — that rule is worth
+Stop are reserved for 0% and 100%. The two pairs are never mixed - that rule is worth
 more than it looks, because the stock client mixes them and users misread it.
 
 **Explanations sit next to controls, not in help.** Every switch has a one-line hint
@@ -82,7 +82,7 @@ Easy layout only, plain language replaces them: "4 minutes left".
 
 ## Visual foundations
 
-**Palette.** Warm, low-contrast neutrals — no pure black, no pure white, no cool
+**Palette.** Warm, low-contrast neutrals - no pure black, no pure white, no cool
 Material grey. Dark mode is warm charcoal (`#191A1C` base); light is paper
 (`#F6F6F5`). Dark is the default.
 
@@ -91,7 +91,7 @@ percentage of it is mixed into every neutral surface via `color-mix`, so bg, sid
 surface, surface2 and line all shift. Switching accent reads as a reskin, not a
 highlight swap. Seven accents, each with a paired secondary: download/progress use
 `--accent`, upload/seeding use `--accent2`. Paused and stalled states are never
-accent-coloured — they drop to `--surface2` / `--text-dimmer`.
+accent-coloured - they drop to `--surface2` / `--text-dimmer`.
 
 **Type.** Inter for language, JetBrains Mono for data. Two families, no third. Body
 text is 12.5px, which is small by web standards and correct for a desktop client
@@ -111,7 +111,7 @@ and modals), with 20px pills for chips and full circles for swatches and the FAB
 **Transparency and blur** are rationed. Scrims (rail 80% + 3px blur, modal 72% + 6px
 blur) and the FAB option circles (8px backdrop blur) are the only uses. Hover on a
 floating element mixes the accent *into* the surface rather than using a translucent
-tint — a translucent hover let the page show through and looked broken.
+tint - a translucent hover let the page show through and looked broken.
 
 **Motion.** Overshoot for anything that expands (`cubic-bezier(0.34,1.56,0.64,1)`),
 a gentler curve for the rail, a long ease-out for the appearance panel, plain ease for
@@ -132,8 +132,8 @@ fixed sidebar and pane widths, everything else flexes. Designed at 1440×900; mi
 supported 1100×700.
 
 **Density.** High but not cramped: 40px rows, 9px vertical padding, 12–18px gaps
-between cards. The Easy layout deliberately breaks this — bigger tiles, 44px targets,
-fewer numbers — and is the one recommended to newcomers.
+between cards. The Easy layout deliberately breaks this - bigger tiles, 44px targets,
+fewer numbers - and is the one recommended to newcomers.
 
 ---
 
@@ -144,7 +144,7 @@ fewer numbers — and is the one recommended to newcomers.
 glyphs), round caps and joins. Sizes: 11–13px inline with text, 14–17px in buttons and
 rows, 20–24px for feature tiles.
 
-No icon font, no sprite sheet and no icon package existed in the sources — the
+No icon font, no sprite sheet and no icon package existed in the sources - the
 prototypes hand-inline each path. For the real app, use **Lucide**, which is the same
 drawing convention at the same stroke weight. This system links it from CDN in the
 component cards and UI kit. *Flagged substitution: Lucide stands in for the
@@ -152,7 +152,7 @@ hand-drawn paths; they match visually, but if you want the prototype paths exact
 they are in the `.dc.html` files.*
 
 The one glyph that is **not** Lucide is the brand mark, in `assets/mark.svg`: a cleat
-— a horizontal bar with flared horns at both ends and a rope loop rotated −38° across
+- a horizontal bar with flared horns at both ends and a rope loop rotated −38° across
 it. Always `--accent`, 19–20px, 1.7–2px stroke.
 
 Icons never carry meaning alone. Every status dot has a word beside it; every icon
@@ -175,24 +175,24 @@ No emoji, no unicode symbols as icons, no PNG icons anywhere.
 | `ui_kits/rigseed-desktop/` | Click-through recreation of the app |
 | `assets/` | `mark.svg` (cleat brand mark) |
 | `SKILL.md` | Agent Skills entry point |
-| `PRODUCT.md` | Product schema — platform, users, purpose, constraints, principles |
+| `PRODUCT.md` | Product schema - platform, users, purpose, constraints, principles |
 | `DESIGN.md` | Design system with machine-readable frontmatter, `[shared]`/`[app]` tagged |
 | `docs/` | Architecture, foundations, app shell, motion and states, build plan, screens |
 | `COMPONENTS.md` | Which file owns which kind of change in the prototypes |
 
 ### Intentional additions
 
-- **IconTile** — the rounded accent-tinted square that fronts modal headers, category
+- **IconTile** - the rounded accent-tinted square that fronts modal headers, category
   rows and empty states. It recurs on every screen; it is one component, not a pattern
   to re-inline.
-- **DataValue** — a mono `<span>` with the right size and weight. Trivial, but it is
+- **DataValue** - a mono `<span>` with the right size and weight. Trivial, but it is
   what enforces the Inter/Mono split, which is the rule most likely to be broken.
 
 ---
 
 ## Licence
 
-Apache License 2.0 — see `LICENSE`.
+Apache License 2.0 - see `LICENSE`.
 
 rigseed ships `qbittorrent-nox` as a sidecar. That binary is GPL-2.0-or-later and
 carries its own redistribution obligations, which are separate from rigseed's own
@@ -205,5 +205,5 @@ licence. See `NOTICE` for the detail and for font and icon attribution.
 | Project, security, code of conduct | verastack.labs@gmail.com |
 | Maintainer, direct | therealriganb@gmail.com |
 
-Bugs and feature requests go through GitHub issues rather than email — the templates ask
+Bugs and feature requests go through GitHub issues rather than email - the templates ask
 for the version detail that resolves most reports.
