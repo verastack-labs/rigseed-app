@@ -71,21 +71,21 @@
 
   /* Type. Inter carries language, JetBrains Mono carries data. */
   --font-sans: var(--font-ui);
-  --font-mono: var(--font-mono);
+
+  /* Distinct names: a theme key identical to its source token would be a
+     self-referential cycle and resolve to nothing. */
+  /* Tailwind has no default for these two, so they need a mapping to exist at
+     all. Distinct names again, for the same reason. */
+  --radius-chip: var(--radius-pill);
+  --radius-round: var(--radius-full);
+
+  --ease-spring: var(--ease-overshoot);
+  --ease-rail-slide: var(--ease-rail);
+  --ease-panel-reveal: var(--ease-panel);
 
   /* Radii */
-  --radius-sm: var(--radius-sm);
-  --radius-md: var(--radius-md);
-  --radius-lg: var(--radius-lg);
-  --radius-xl: var(--radius-xl);
-  --radius-2xl: var(--radius-2xl);
-  --radius-3xl: var(--radius-3xl);
-  --radius-4xl: var(--radius-4xl);
 
   /* Motion */
-  --ease-overshoot: var(--ease-overshoot);
-  --ease-rail: var(--ease-rail);
-  --ease-panel: var(--ease-panel);
 }
 
 @layer base {
