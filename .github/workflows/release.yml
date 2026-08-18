@@ -1,0 +1,100 @@
+name: Release
+
+# Attaches the qbittorrent-nox source archive to the same release that ships the
+# binary. This is what satisfies GPLv3 section 6(d): equivalent access to the
+# Corresponding Source from the same place the object code is offered.
+#
+# A link to upstream does not satisfy it. The archive has to be on this release.
+# See licenses/README.md.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to attach compliance assets to'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  compliance-assets:
+    name: Build the compliance bundle
+    runs-on: ubuntu-latest
+    outputs:
+      sidecar-version: ${{ steps.pin.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the pinned sidecar
+        id: pin
+        run: echo "version=$(jq -r .version sidecar.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch the corresponding source
+        run: scripts/fetch-sidecar-source.sh dist/licences
+
+      - name: Bundle the licence texts that ship with the app
+        run: |
+          set -euo pipefail
+          cp licenses/fonts/Inter-OFL.txt            dist/licences/
+          cp licenses/fonts/JetBrainsMono-OFL.txt    dist/licences/
+          cp licenses/lucide/ISC.txt                 dist/licences/lucide-ISC.txt
+          cp LICENSE                                 dist/licences/rigseed-LICENSE-Apache-2.0.txt
+          cp NOTICE                                  dist/licences/rigseed-NOTICE.txt
+          ls -la dist/licences
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: compliance-bundle
+          path: dist/licences/
+          retention-days: 90
+
+  # ---------------------------------------------------------------------------
+  # The application build lands here once there is an app to build. It should
+  # produce the Tauri bundles per platform and depend on compliance-assets, so a
+  # release can never publish a binary without its corresponding source.
+  #
+  #  build-app:
+  #    needs: compliance-assets
+  #    strategy:
+  #      matrix:
+  #        platform: [macos-latest, ubuntu-latest, windows-latest]
+  # ---------------------------------------------------------------------------
+
+  publish:
+    name: Attach assets to the release
+    needs: compliance-assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: compliance-bundle
+          path: dist/licences
+
+      - name: Confirm the source archive is present before publishing
+        run: |
+          set -euo pipefail
+          archive=$(find dist/licences -name 'qbittorrent-nox-*-source.tar.gz' | head -1)
+          if [ -z "$archive" ]; then
+            echo "::error::no sidecar source archive in the bundle, refusing to publish"
+            exit 1
+          fi
+          size=$(wc -c <"$archive")
+          if [ "$size" -lt 1000000 ]; then
+            echo "::error::source archive is only $size bytes, refusing to publish"
+            exit 1
+          fi
+          echo "source archive present: $archive ($size bytes)"
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" dist/licences/* \
+            --repo "${{ github.repository }}" --clobber
+          echo "attached the compliance bundle to $TAG"
