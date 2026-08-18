@@ -1,0 +1,15 @@
+{
+  "$comment": "The qbittorrent-nox build rigseed ships. Changing any field here means the licence bundle and the release source archive must be regenerated. See licenses/README.md.",
+  "name": "qbittorrent-nox",
+  "upstream": "qbittorrent/qBittorrent",
+  "version": "5.2.3",
+  "tag": "release-5.2.3",
+  "commit": "0b63c3d17373f6132ea211c9dcd4241284ccdfaf",
+  "sourceArchive": "https://github.com/qbittorrent/qBittorrent/archive/refs/tags/release-5.2.3.tar.gz",
+  "license": {
+    "source": "GPL-2.0-or-later",
+    "binary": "GPL-3.0-or-later",
+    "note": "Upstream COPYING states the source is GPLv2+ but the binary distribution is GPLv3+ because it bundles GPLv3+ assets. rigseed ships the binary, so GPLv3+ is the licence that governs redistribution.",
+    "exception": "OpenSSL linking exception, see licenses/qbittorrent/COPYING.txt"
+  }
+}
