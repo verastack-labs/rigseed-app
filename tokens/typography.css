@@ -1,7 +1,7 @@
 /* rigseed typography.
    Inter carries every sentence and label. JetBrains Mono carries every
    number: sizes, speeds, ratios, percentages, hashes, IPs, API endpoints.
-   The split is semantic, not decorative — it is how a value is recognised
+   The split is semantic, not decorative - it is how a value is recognised
    as machine data at a glance. */
 
 :root {

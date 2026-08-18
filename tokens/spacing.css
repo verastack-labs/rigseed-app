@@ -1,5 +1,5 @@
 /* rigseed spacing.
-   Not a strict 4px grid — the prototypes use half-steps (9px, 13px, 11.5px)
+   Not a strict 4px grid - the prototypes use half-steps (9px, 13px, 11.5px)
    where a control needed to sit right. Use the tokens; do not round them. */
 
 :root {
