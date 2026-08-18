@@ -1,0 +1,11 @@
+pnpm-lock.yaml
+dist/
+coverage/
+licenses/
+src-tauri/target/
+
+# Prototype output and the design system package are not ours to reformat.
+ui_kits/
+guidelines/
+components/
+*.dc.html
