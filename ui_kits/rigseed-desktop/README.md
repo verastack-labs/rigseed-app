@@ -1,7 +1,7 @@
-# UI kit — rigseed desktop
+# UI kit - rigseed desktop
 
 A click-through recreation of the app: the shell (rail, top bar, footer) with four
-screens inside it — Transfers, Torrent Detail, Settings and Logs — plus the first-run
+screens inside it - Transfers, Torrent Detail, Settings and Logs - plus the first-run
 setup modal and the add-torrent FAB.
 
 Open `index.html`. It boots straight into the setup modal, exactly as a first launch

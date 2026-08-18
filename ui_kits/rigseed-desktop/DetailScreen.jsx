@@ -236,7 +236,7 @@ export function DetailScreen({ torrent }) {
                   <DataValue style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{tr.url}</DataValue>
                   <StatusDot tone={tr.status[0]} label={tr.status[1]} />
                   <DataValue tone="dim">{tr.peers}</DataValue>
-                  <span style={{ fontSize: '11.5px', color: 'var(--text-dim)' }}>{tr.msg || '—'}</span>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-dim)' }}>{tr.msg || '-'}</span>
                 </Row>
               ))}
             </Card>
@@ -298,7 +298,7 @@ export function DetailScreen({ torrent }) {
                     padding: '11px 16px', background: 'var(--surface2)', borderTop: '1px solid var(--line)',
                   }}>
                     <span style={{ fontSize: '11.5px', fontWeight: 600 }}>Limit</span>
-                    <Input mono width={92} size="sm" defaultValue={unl ? '' : '2048'} placeholder="—" />
+                    <Input mono width={92} size="sm" defaultValue={unl ? '' : '2048'} placeholder="-" />
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: 'var(--text-dimmer)' }}>KiB/s</span>
                     <span style={{ flex: 1 }} />
                     <span style={{ fontSize: '11.5px', color: 'var(--text-dim)' }}>Unlimited</span>
