@@ -17,7 +17,7 @@ export interface SparklineProps {
   tone?: 'accent' | 'accent2';
   /** Filled area under the line at 16% opacity. */
   fill?: boolean;
-  /** Two hairline gridlines — the Speed tab cards. */
+  /** Two hairline gridlines - the Speed tab cards. */
   gridlines?: boolean;
   style?: React.CSSProperties;
 }

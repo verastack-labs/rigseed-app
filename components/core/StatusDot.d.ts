@@ -8,7 +8,7 @@ export interface StatusDotProps {
   tone?: 'accent' | 'accent2' | 'warn' | 'danger' | 'muted';
   /** The word beside the dot. Omit only in a dense table cell that repeats a labelled legend. */
   label?: string;
-  /** Slow opacity pulse — a job in progress. */
+  /** Slow opacity pulse - a job in progress. */
   pulse?: boolean;
   size?: number;
   mono?: boolean;

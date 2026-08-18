@@ -4,14 +4,14 @@ export interface Tab {
   value: string;
   label: string;
   icon?: React.ReactNode;
-  /** Mono count badge — file, tracker and peer counts. */
+  /** Mono count badge - file, tracker and peer counts. */
   count?: number | string;
 }
 
 /**
  * Underlined tab strip. Used once, on Torrent Detail (General, Files,
  * Trackers, Peers, Speed). For exclusive choices inside a screen use
- * `SegmentedControl` instead — tabs mean "another view of this object".
+ * `SegmentedControl` instead - tabs mean "another view of this object".
  */
 export interface TabBarProps {
   tabs: Tab[];

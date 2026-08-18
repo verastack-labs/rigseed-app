@@ -1,4 +1,4 @@
-Flat surface container — the default way to group anything.
+Flat surface container - the default way to group anything.
 
 ```jsx
 <Card title="Alternative rate schedule" api="scheduler_enabled" action={<Switch checked />}>

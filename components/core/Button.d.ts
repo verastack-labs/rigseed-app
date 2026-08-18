@@ -5,7 +5,7 @@ import * as React from 'react';
  *
  * Primary is the one committing action in a view (Apply, Add and start,
  * Start using rigseed). Secondary is everything else. Ghost is for Skip and
- * Cancel. Danger is remove and delete — never use the accent for those.
+ * Cancel. Danger is remove and delete - never use the accent for those.
  *
  * @startingPoint section="Core" subtitle="Action buttons in four variants" viewport="700x150"
  */

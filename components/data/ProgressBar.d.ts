@@ -4,7 +4,7 @@ import * as React from 'react';
  * Progress track. 4px in tables, 6px in cards, 8px on the detail header
  * and the swarm-health bar.
  *
- * Paused torrents are never accent-coloured — pass `paused` and the fill
+ * Paused torrents are never accent-coloured - pass `paused` and the fill
  * drops to text-dimmer.
  */
 export interface ProgressBarProps {
@@ -16,7 +16,7 @@ export interface ProgressBarProps {
   paused?: boolean;
   /** Trailing mono percentage. */
   showValue?: boolean;
-  /** Fill the remainder with accent-soft — the Search swarm-health bar. */
+  /** Fill the remainder with accent-soft - the Search swarm-health bar. */
   split?: boolean;
   style?: React.CSSProperties;
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 
-/** Underlined tabs — the detail screen's five sections. */
+/** Underlined tabs - the detail screen's five sections. */
 export function TabBar({ tabs = [], value, onChange, style }) {
   return (
     <div style={{ display: 'flex', gap: '2px', ...style }}>

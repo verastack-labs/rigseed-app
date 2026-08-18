@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 /**
- * 16×16 selection box (20px in the Easy layout). Selection only —
+ * 16×16 selection box (20px in the Easy layout). Selection only -
  * for a preference use `Switch`.
  */
 export interface CheckboxProps {

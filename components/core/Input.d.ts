@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 /**
- * Text input. Set `mono` for anything machine-readable — paths, ports,
+ * Text input. Set `mono` for anything machine-readable - paths, ports,
  * magnet links, numeric limits. Leave it off for human names.
  */
 export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size' | 'style'> {
@@ -15,7 +15,7 @@ export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElem
   unit?: string;
   /** Leading icon, 13–14px. */
   icon?: React.ReactNode;
-  /** Danger border — a failed validation. */
+  /** Danger border - a failed validation. */
   invalid?: boolean;
   style?: React.CSSProperties;
 }

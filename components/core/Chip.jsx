@@ -1,6 +1,6 @@
 import React from 'react';
 
-/** Pill filter chip — engines, categories, tags. */
+/** Pill filter chip - engines, categories, tags. */
 export function Chip({
   label, dot, icon, count, selected, dashed, onClick, color, style,
 }) {

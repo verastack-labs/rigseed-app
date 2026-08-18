@@ -9,7 +9,7 @@ const MARK = (
   </svg>
 );
 
-/** Left navigation. Expands as an overlay — the page never reflows. */
+/** Left navigation. Expands as an overlay - the page never reflows. */
 export function NavRail({
   items = [], active, onSelect, expanded, onToggle, brand = 'rigseed', style,
 }) {

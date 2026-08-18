@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 /**
- * Small count or status word — tab counts, plugin status badges
+ * Small count or status word - tab counts, plugin status badges
  * (Update / Enabled / Disabled), log level counts.
  */
 export interface BadgeProps {

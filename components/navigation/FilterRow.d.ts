@@ -6,7 +6,7 @@ import * as React from 'react';
  */
 export interface FilterRowProps {
   icon?: React.ReactNode;
-  /** Colour value — renders a 9px dot instead of an icon. Tags use this. */
+  /** Colour value - renders a 9px dot instead of an icon. Tags use this. */
   dot?: string;
   label: string;
   /** Mono count on the right. */

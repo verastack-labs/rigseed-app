@@ -1,4 +1,4 @@
-Square icon-only button, 30–34px — for actions with no room for a word.
+Square icon-only button, 30–34px - for actions with no room for a word.
 
 ```jsx
 <IconButton title="Settings"><Icon name="settings" /></IconButton>

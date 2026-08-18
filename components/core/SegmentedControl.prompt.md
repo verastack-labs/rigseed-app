@@ -1,4 +1,4 @@
-Exclusive choice strip on a surface2 track — selected item takes accent-soft.
+Exclusive choice strip on a surface2 track - selected item takes accent-soft.
 
 ```jsx
 <SegmentedControl

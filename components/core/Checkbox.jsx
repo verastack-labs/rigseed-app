@@ -1,6 +1,6 @@
 import React from 'react';
 
-/** 16×16 selection box — torrent rows, file lists. */
+/** 16×16 selection box - torrent rows, file lists. */
 export function Checkbox({ checked, indeterminate, onChange, disabled, size = 16, label, style }) {
   return (
     <button

@@ -7,7 +7,7 @@ import * as React from 'react';
  */
 export interface IconTileProps {
   size?: number;
-  /** Explicit colour — pass a category's swatch token. Overrides `tone`. */
+  /** Explicit colour - pass a category's swatch token. Overrides `tone`. */
   color?: string;
   tone?: 'accent' | 'accent2' | 'warn';
   /** Override the derived radius. */

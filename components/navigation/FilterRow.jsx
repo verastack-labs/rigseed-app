@@ -1,6 +1,6 @@
 import React from 'react';
 
-/** Sidebar filter line — status, category or tag. */
+/** Sidebar filter line - status, category or tag. */
 export function FilterRow({ icon, dot, label, count, active, onClick, style }) {
   const [hover, setHover] = React.useState(false);
   return (

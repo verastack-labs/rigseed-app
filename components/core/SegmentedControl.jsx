@@ -1,6 +1,6 @@
 import React from 'react';
 
-/** Mutually exclusive choices in one strip — layouts, tabs, modes. */
+/** Mutually exclusive choices in one strip - layouts, tabs, modes. */
 export function SegmentedControl({ options = [], value, onChange, size = 'md', style }) {
   const pad = size === 'sm' ? '5px 9px' : '6px 12px';
   return (

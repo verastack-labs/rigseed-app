@@ -4,4 +4,4 @@ Opens a group of filters, chips or settings.
 <SectionHeader>Engines</SectionHeader>
 ```
 
-Sentence case is the rule everywhere else — this and table headers are the exceptions.
+Sentence case is the rule everywhere else - this and table headers are the exceptions.

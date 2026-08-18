@@ -1,4 +1,4 @@
-Pill chip, radius 20px — filters, engines, categories, tags.
+Pill chip, radius 20px - filters, engines, categories, tags.
 
 ```jsx
 <Chip label="1337x" dot count={18} selected color="var(--swatch-sage)" />

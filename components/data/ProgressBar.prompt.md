@@ -6,4 +6,4 @@ Progress track used in every torrent row, card and detail header.
 <ProgressBar value={38} paused showValue />
 ```
 
-Always animate the width between polls — never let it jump.
+Always animate the width between polls - never let it jump.

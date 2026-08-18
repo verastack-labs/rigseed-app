@@ -12,4 +12,4 @@ Three-dot menu, anchored to its button.
 </div>
 ```
 
-Standard order: Resume · Pause · Force recheck — Copy magnet link · Open folder — Remove.
+Standard order: Resume · Pause · Force recheck - Copy magnet link · Open folder - Remove.
