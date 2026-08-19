@@ -68,25 +68,25 @@
    --accent2 drives upload, seeding, peer progress, the connected tick.     */
 
 [data-mode="dark"][data-accent="dustblue"]   { --accent: #7FA2BC; --accent2: #C97B63; }
-[data-mode="light"][data-accent="dustblue"]  { --accent: #43718F; --accent2: #A85A42; }
+[data-mode="light"][data-accent="dustblue"]  { --accent: #43718F; --accent2: #9F553F; }
 
 [data-mode="dark"][data-accent="amber"]      { --accent: #E2AC66; --accent2: #93B393; }
-[data-mode="light"][data-accent="amber"]     { --accent: #B0731F; --accent2: #4C7A4C; }
+[data-mode="light"][data-accent="amber"]     { --accent: #B0731F; --accent2: #487448; }
 
 [data-mode="dark"][data-accent="sage"]       { --accent: #8FB08F; --accent2: #E0A458; }
-[data-mode="light"][data-accent="sage"]      { --accent: #4C7A4C; --accent2: #B8752E; }
+[data-mode="light"][data-accent="sage"]      { --accent: #4C7A4C; --accent2: #925D25; }
 
 [data-mode="dark"][data-accent="terracotta"] { --accent: #C97B63; --accent2: #7C9CB4; }
-[data-mode="light"][data-accent="terracotta"]{ --accent: #A85A42; --accent2: #4E7590; }
+[data-mode="light"][data-accent="terracotta"]{ --accent: #A85A42; --accent2: #496D87; }
 
 [data-mode="dark"][data-accent="mustard"]    { --accent: #D4B15E; --accent2: #6FA3A0; }
-[data-mode="light"][data-accent="mustard"]   { --accent: #93761F; --accent2: #3E7A76; }
+[data-mode="light"][data-accent="mustard"]   { --accent: #93761F; --accent2: #3B736F; }
 
 [data-mode="dark"][data-accent="slateteal"]  { --accent: #6FA3A0; --accent2: #D4B15E; }
-[data-mode="light"][data-accent="slateteal"] { --accent: #35726E; --accent2: #9C7E2E; }
+[data-mode="light"][data-accent="slateteal"] { --accent: #35726E; --accent2: #7E6625; }
 
 [data-mode="dark"][data-accent="lavender"]   { --accent: #A69BC9; --accent2: #B08F6A; }
-[data-mode="light"][data-accent="lavender"]  { --accent: #7367A5; --accent2: #8A6A42; }
+[data-mode="light"][data-accent="lavender"]  { --accent: #7367A5; --accent2: #82643E; }
 
 /* The quiet option. Low enough chroma that the tint reads as a faint cool cast
    on the neutrals rather than a colour wash, which is the point: it makes "no

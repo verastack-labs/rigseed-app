@@ -165,13 +165,13 @@ Seven options, each with a dark value, a light value and a paired secondary. **D
 
 | Key | Label | Accent (dark) | Accent (light) | Accent2 (dark) | Accent2 (light) |
 |---|---|---|---|---|---|
-| `dustblue` | Dusty Blue | `#7FA2BC` | `#43718F` | `#C97B63` | `#A85A42` |
-| `amber` | Amber | `#E2AC66` | `#B0731F` | `#93B393` | `#4C7A4C` |
-| `sage` | Sage | `#8FB08F` | `#4C7A4C` | `#E0A458` | `#B8752E` |
-| `terracotta` | Terracotta | `#C97B63` | `#A85A42` | `#7C9CB4` | `#4E7590` |
-| `mustard` | Mustard | `#D4B15E` | `#93761F` | `#6FA3A0` | `#3E7A76` |
-| `slateteal` | Slate Teal | `#6FA3A0` | `#35726E` | `#D4B15E` | `#9C7E2E` |
-| `lavender` | Lavender | `#A69BC9` | `#7367A5` | `#B08F6A` | `#8A6A42` |
+| `dustblue` | Dusty Blue | `#7FA2BC` | `#43718F` | `#C97B63` | `#9F553F` |
+| `amber` | Amber | `#E2AC66` | `#B0731F` | `#93B393` | `#487448` |
+| `sage` | Sage | `#8FB08F` | `#4C7A4C` | `#E0A458` | `#925D25` |
+| `terracotta` | Terracotta | `#C97B63` | `#A85A42` | `#7C9CB4` | `#496D87` |
+| `mustard` | Mustard | `#D4B15E` | `#93761F` | `#6FA3A0` | `#3B736F` |
+| `slateteal` | Slate Teal | `#6FA3A0` | `#35726E` | `#D4B15E` | `#7E6625` |
+| `lavender` | Lavender | `#A69BC9` | `#7367A5` | `#B08F6A` | `#82643E` |
 | `slate` | Slate | `#98A0AC` | `#5A626E` | `#C0A176` | `#856239` |
 
 ### Named Rules
