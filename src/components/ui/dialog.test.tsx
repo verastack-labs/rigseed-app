@@ -85,3 +85,33 @@ describe('Dialog', () => {
     expect(trigger).toHaveFocus()
   })
 })
+
+describe('Dialog close button', () => {
+  it('is absent unless asked for, so a confirmation keeps one way out', () => {
+    render(<Dialog open onClose={vi.fn()} title="Remove" footer={footer} />)
+    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
+  })
+
+  it('closes the dialog when clicked', async () => {
+    const onClose = vi.fn()
+    render(<Dialog open showClose onClose={onClose} title="Add torrent" footer={footer} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('does not take opening focus, since Enter would then dismiss the dialog', () => {
+    render(<Dialog open showClose onClose={vi.fn()} title="Add torrent" footer={footer} />)
+
+    // It is first in the DOM, so the naive "focus the first control" lands
+    // there. It stays reachable by Tab; it is only skipped for the initial
+    // placement.
+    expect(screen.getByRole('button', { name: 'Close' })).not.toHaveFocus()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
+  })
+
+  it('still takes focus when it is the only control', () => {
+    render(<Dialog open showClose onClose={vi.fn()} title="Add torrent" />)
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus()
+  })
+})
