@@ -1,7 +1,11 @@
 import {
   ArrowDownToLine,
+  BookOpen,
+  Brush,
+  Disc,
   FileText,
   Folder,
+  Package,
   Palette,
   Pause,
   Play,
@@ -35,4 +39,20 @@ export const icons = {
   pause: Pause,
   remove: Trash2,
   clear: X,
+} as const
+
+/**
+ * The icons a category can be given.
+ *
+ * Separate from the map above because these are user-chosen rather than
+ * assigned by the app, and the stored value is the key: swapping the drawing
+ * later must not orphan every category somebody already labelled.
+ */
+export const categoryIcons = {
+  disc: Disc,
+  brush: Brush,
+  box: Package,
+  book: BookOpen,
+  folder: Folder,
+  file: FileText,
 } as const

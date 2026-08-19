@@ -5,6 +5,7 @@ import { FilterRow } from '@/components/ui/filter-row'
 import { SectionHeader } from '@/components/ui/section-header'
 import { Sparkline } from '@/components/ui/sparkline'
 import { icons } from '@/lib/icons'
+import { swatchColor, swatchFor } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 import type { StatusFilter } from '@/state/transfers-store'
 import { formatSpeed } from '@/utils/format'
@@ -18,31 +19,6 @@ const STATUSES: { key: StatusFilter; label: string }[] = [
   { key: 'active', label: 'Active' },
   { key: 'stalled', label: 'Stalled' },
 ]
-
-/** A fixed swatch per category name, so a colour is stable across sessions. */
-const SWATCHES = [
-  'var(--swatch-blue)',
-  'var(--swatch-terracota)',
-  'var(--swatch-sage)',
-  'var(--swatch-mustard)',
-  'var(--swatch-lavender)',
-  'var(--swatch-teal)',
-  'var(--swatch-clay)',
-  'var(--swatch-rose)',
-]
-
-/**
- * Categories and tags carry a colour the API has no field for.
- *
- * Until the app-local settings file exists, the colour is derived from the
- * name so it is at least stable rather than random per render. A real stored
- * choice replaces this without the sidebar changing.
- */
-export function swatchFor(name: string): string {
-  let hash = 0
-  for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) >>> 0
-  return SWATCHES[hash % SWATCHES.length]!
-}
 
 export interface SidebarProps {
   status: StatusFilter
@@ -109,7 +85,7 @@ export function Sidebar({
             <FilterRow
               key={name}
               label={name}
-              dot={swatchFor(name)}
+              dot={swatchColor(swatchFor(name))}
               count={count}
               active={category === name}
               onClick={() => onCategory(category === name ? null : name)}
@@ -125,7 +101,7 @@ export function Sidebar({
             <FilterRow
               key={name}
               label={name}
-              dot={swatchFor(name)}
+              dot={swatchColor(swatchFor(name))}
               count={count}
               active={tag === name}
               onClick={() => onTag(tag === name ? null : name)}
