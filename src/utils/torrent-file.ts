@@ -22,6 +22,12 @@ export interface TorrentMeta {
   totalSize: number
   /** A single-file torrent yields one entry named after the torrent itself. */
   entries: TorrentEntry[]
+  /**
+   * The `info` value's raw bytes, for hashing.
+   *
+   * A view into the original buffer, not a copy.
+   */
+  infoBytes: Uint8Array
 }
 
 export class TorrentParseError extends Error {
@@ -54,6 +60,17 @@ const MINUS = 0x2d
  */
 class Reader {
   at = 0
+  /**
+   * Byte span of each value in the root dictionary.
+   *
+   * Recorded because the info hash is the SHA-1 of the `info` value exactly as
+   * it appeared in the file. Re-encoding the parsed object would produce a
+   * different hash the moment a key order or an integer form differed, and
+   * bencode is only canonical if the producer made it so.
+   */
+  spans: Record<string, [number, number]> = {}
+  private depth = 0
+
   constructor(readonly bytes: Uint8Array) {}
 
   byte(): number {
@@ -111,11 +128,17 @@ class Reader {
 
   dict(): BencodeDict {
     this.at += 1
+    this.depth += 1
     const out: BencodeDict = {}
     while (this.byte() !== END) {
       const key = text(this.string())
+      const start = this.at
       out[key] = this.value()
+      // Only the root's own keys. A nested dict with an `info` key of its own
+      // would otherwise overwrite the span that matters.
+      if (this.depth === 1) this.spans[key] = [start, this.at]
     }
+    this.depth -= 1
     this.at += 1
     return out
   }
@@ -145,11 +168,15 @@ export function parseTorrent(data: ArrayBuffer | Uint8Array): TorrentMeta {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data)
   if (bytes.length === 0) throw new TorrentParseError('empty file')
 
-  const root = new Reader(bytes).value()
+  const reader = new Reader(bytes)
+  const root = reader.value()
   if (!isDict(root)) throw new TorrentParseError('not a torrent: root is not a dictionary')
 
   const info = root['info']
   if (!isDict(info)) throw new TorrentParseError('not a torrent: no info dictionary')
+
+  const span = reader.spans['info']!
+  const infoBytes = bytes.subarray(span[0], span[1])
 
   const nameBytes = info['name']
   if (!ArrayBuffer.isView(nameBytes)) throw new TorrentParseError('not a torrent: no name')
@@ -163,7 +190,7 @@ export function parseTorrent(data: ArrayBuffer | Uint8Array): TorrentMeta {
   if (!Array.isArray(files)) {
     const length = info['length']
     if (typeof length !== 'number') throw new TorrentParseError('not a torrent: no length')
-    return { name, totalSize: length, entries: [{ path: name, size: length }] }
+    return { name, totalSize: length, entries: [{ path: name, size: length }], infoBytes }
   }
 
   const entries: TorrentEntry[] = []
@@ -181,10 +208,28 @@ export function parseTorrent(data: ArrayBuffer | Uint8Array): TorrentMeta {
 
   if (entries.length === 0) throw new TorrentParseError('not a torrent: no readable files')
 
-  return { name, totalSize: entries.reduce((sum, e) => sum + e.size, 0), entries }
+  return { name, totalSize: entries.reduce((sum, e) => sum + e.size, 0), entries, infoBytes }
 }
 
 /** Convenience for the picker, which hands over a `File`. */
 export async function readTorrentFile(file: File): Promise<TorrentMeta> {
   return parseTorrent(await file.arrayBuffer())
+}
+
+/**
+ * The v1 info hash: SHA-1 of the `info` value, lowercase hex.
+ *
+ * Needed because file exclusions cannot be sent with the add. `torrents/add`
+ * has no per-file parameter, so the priorities have to go in a follow-up
+ * `torrents/filePrio`, and that takes a hash. Computing it here means the
+ * follow-up can be made immediately rather than by polling the list and
+ * guessing which new torrent was ours by name.
+ *
+ * v1 only. A v2-only torrent is identified by a SHA-256 hash instead, and
+ * would need the same treatment against `meta version 2`; hybrid torrents
+ * carry both and qBittorrent reports the v1 hash, which is this one.
+ */
+export async function infoHash(meta: TorrentMeta): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-1', meta.infoBytes)
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
