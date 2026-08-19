@@ -8,6 +8,14 @@ export interface TorrentState {
   categories: Record<string, Category>
   tags: string[]
   serverState: Partial<GlobalTransferInfo>
+  /**
+   * Global speed history, appended once per poll.
+   *
+   * Lives here rather than in the screen because it is derived from poll data
+   * and accumulating it during render would mean mutating state while
+   * rendering, which breaks under concurrent rendering.
+   */
+  speedHistory: { down: readonly number[]; up: readonly number[] }
   /** The daemon's response id. Send it back to get the next diff. */
   rid: number
   /** True once any response has been merged. Drives the skeleton state. */
@@ -17,11 +25,15 @@ export interface TorrentState {
   reset: () => void
 }
 
+/** The sparkline's window. */
+const SPEED_SAMPLES = 60
+
 const EMPTY = {
   torrents: {} as Record<string, Torrent>,
   categories: {} as Record<string, Category>,
   tags: [] as string[],
   serverState: {} as Partial<GlobalTransferInfo>,
+  speedHistory: { down: [] as number[], up: [] as number[] },
   rid: 0,
   loaded: false,
 }
@@ -75,13 +87,24 @@ export const useTorrentStore = create<TorrentState>()((set) => ({
         tags = tags.filter((t) => !gone.has(t))
       }
 
+      const serverState = full
+        ? (data.server_state ?? {})
+        : { ...prev.serverState, ...data.server_state }
+
+      // 60 samples, one per poll, matching the sparkline window. A full update
+      // means a new session, so the history starts over with it.
+      const previous = full ? { down: [], up: [] } : prev.speedHistory
+      const speedHistory = {
+        down: [...previous.down, serverState.dl_info_speed ?? 0].slice(-SPEED_SAMPLES),
+        up: [...previous.up, serverState.up_info_speed ?? 0].slice(-SPEED_SAMPLES),
+      }
+
       return {
         torrents,
         categories,
         tags,
-        serverState: full
-          ? (data.server_state ?? {})
-          : { ...prev.serverState, ...data.server_state },
+        speedHistory,
+        serverState,
         rid: data.rid,
         loaded: true,
       }
