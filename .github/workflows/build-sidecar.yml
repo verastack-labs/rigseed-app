@@ -8,10 +8,14 @@ name: Build sidecar
 # downloads the published binary, so a normal CI run stays a few seconds rather
 # than half an hour.
 #
-# We build it ourselves rather than vendoring a third party's binary. Upstream
-# supports the headless target directly via -DGUI=OFF, so this is a supported
-# configuration, and building it means nothing we ship was compiled by someone
-# outside this repo.
+# The recipe is a port of qBittorrent's own ci_ubuntu / ci_macos / ci_windows
+# workflows at the pinned tag, narrowed to the headless target. That is
+# deliberate: the first attempt used each platform's package manager for
+# libtorrent and boost, and every platform drifted outside the version window
+# qBittorrent supports. Homebrew shipped libtorrent 2.1, which fails against
+# 5.2.3 with "no member named 'mapped_files'". Upstream builds libtorrent and
+# boost from pinned source precisely to avoid that, so we do too. See
+# docs/sidecar.md in rigseed-internal for the full account.
 #
 # See src-tauri/binaries/README.md and licenses/README.md. Shipping this binary
 # obliges us to ship its corresponding source on the same release.
@@ -43,6 +47,10 @@ jobs:
       version: ${{ steps.read.outputs.version }}
       tag: ${{ steps.read.outputs.tag }}
       release: ${{ steps.read.outputs.release }}
+      qt: ${{ steps.read.outputs.qt }}
+      libtorrent: ${{ steps.read.outputs.libtorrent }}
+      boost: ${{ steps.read.outputs.boost }}
+      boost_underscored: ${{ steps.read.outputs.boost_underscored }}
       exists: ${{ steps.check.outputs.exists }}
     steps:
       - uses: actions/checkout@v4
@@ -52,11 +60,17 @@ jobs:
         run: |
           set -euo pipefail
           version=$(jq -r .version sidecar.json)
-          tag=$(jq -r .tag sidecar.json)
-          echo "version=$version"        >> "$GITHUB_OUTPUT"
-          echo "tag=$tag"                >> "$GITHUB_OUTPUT"
-          echo "release=sidecar-$version" >> "$GITHUB_OUTPUT"
-          echo "Building qbittorrent-nox $version from $tag"
+          boost=$(jq -r .build.boost sidecar.json)
+          {
+            echo "version=$version"
+            echo "tag=$(jq -r .tag sidecar.json)"
+            echo "release=sidecar-$version"
+            echo "qt=$(jq -r .build.qt sidecar.json)"
+            echo "libtorrent=$(jq -r .build.libtorrent sidecar.json)"
+            echo "boost=$boost"
+            echo "boost_underscored=${boost//./_}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Building qbittorrent-nox $version"
 
       - name: Has this version already been built?
         id: check
@@ -84,14 +98,34 @@ jobs:
             label: linux-x86_64
             triple: x86_64-unknown-linux-gnu
             binary: qbittorrent-nox
+            qt_arch: ''
+            # Qt's Linux binaries link against ICU and aqtinstall ships it as a
+            # separate archive. Without it lupdate dies on a missing
+            # libicui18n.so at the first translation target. The archive only
+            # exists for the Linux build, so it cannot go in the shared list.
+            qt_archives: icu qtbase qtdeclarative qttools
           - os: windows-latest
             label: windows-x86_64
             triple: x86_64-pc-windows-msvc
             binary: qbittorrent-nox.exe
+            # Named explicitly because install-qt-action still defaults to the
+            # msvc2019 build, and Qt stopped publishing that from 6.8.
+            qt_arch: win64_msvc2022_64
+            qt_archives: qtbase qtdeclarative qttools
           - os: macos-latest
             label: macos-aarch64
             triple: aarch64-apple-darwin
             binary: qbittorrent-nox
+            # The default clang_64 build is universal, so it covers arm64.
+            qt_arch: ''
+            qt_archives: qtbase qtdeclarative qttools
+
+    env:
+      # Kept beside the workspace rather than inside it, so the `find` over the
+      # build tree in a later step cannot pick up a dependency's artefacts.
+      BOOST_PATH: ${{ github.workspace }}/../boost
+      LIBTORRENT_PATH: ${{ github.workspace }}/../libtorrent
+      VCPKG_TRIPLET: x64-windows-static-md-release
 
     steps:
       - uses: actions/checkout@v4
@@ -103,55 +137,264 @@ jobs:
           ref: ${{ needs.pin.outputs.tag }}
           path: qbittorrent
 
+      # ---------------------------------------------------------------- tools
+
+      - name: Set up MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: TheMrMilchmann/setup-msvc-dev@v4
+        with:
+          arch: x64
+
+      - name: Install build tools (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          if ((Get-Command "ninja.exe" -ErrorAction SilentlyContinue) -eq $null) { choco install ninja }
+          ninja --version
+
+      # Nothing is installed unless it is actually missing, and apt-get update
+      # is a last resort rather than the first line.
+      #
+      # An unconditional update sat here for twelve minutes producing no output
+      # at all: the Azure mirror answered Ign for every index, apt fell back to
+      # archive.ubuntu.com, and the fetch then stalled with no timeout to end
+      # it. The acquire timeouts below exist so that a repeat is a failure
+      # rather than a hang.
+      #
+      # build-essential, cmake, libssl-dev and zlib1g-dev ship on the image, so
+      # in practice this step installs ninja and nothing else.
+      - name: Install build tools (Linux)
+        if: runner.os == 'Linux'
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          set -euo pipefail
+
+          APT_OPTS=(
+            -o Acquire::Retries=3
+            -o Acquire::http::Timeout=20
+            -o Acquire::https::Timeout=20
+            -o DPkg::Lock::Timeout=300
+          )
+
+          missing=()
+          for pkg in build-essential cmake ninja-build libssl-dev zlib1g-dev; do
+            dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
+          done
+
+          if [ ${#missing[@]} -eq 0 ]; then
+            echo "Every build tool is already on the image."
+            exit 0
+          fi
+
+          echo "Installing: ${missing[*]}"
+          if ! sudo apt-get install -y --no-install-recommends "${APT_OPTS[@]}" "${missing[@]}"; then
+            echo "::warning::Install failed against the image's package lists, refreshing them"
+            sudo apt-get update "${APT_OPTS[@]}"
+            sudo apt-get install -y --no-install-recommends "${APT_OPTS[@]}" "${missing[@]}"
+          fi
+
+      # cmake and ninja are preinstalled on the image. Notably absent:
+      # libtorrent-rasterbar. Homebrew's is 2.1.x and qBittorrent 5.2.3
+      # supports 2.0.10 - 2.0.x, so it is built from source below.
+      - name: Install build tools (macOS)
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+          HOMEBREW_NO_INSTALL_CLEANUP: 1
+        run: brew install openssl@3 zlib
+
+      # Recompiling the same pinned version after a late-stage failure is the
+      # common case while this recipe is being tuned, and ccache turns that
+      # from half an hour into a couple of minutes.
+      - name: Set up ccache
+        if: runner.os != 'Windows'
+        uses: Chocobo1/setup-ccache-action@v1
+        with:
+          update_packager_index: false
+          ccache_options: |
+            max_size=1G
+
+      - name: Set up the vcpkg binary cache (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      # vcpkg supplies only what libtorrent and qBittorrent link against, plus
+      # b2 to stage boost's headers. Not libtorrent, and not boost's compiled
+      # libraries: asking vcpkg for those is what made the first attempt run
+      # for over half an hour on this step. The overlay triplet exists to set
+      # VCPKG_BUILD_TYPE=release, without which every package is built twice.
+      - name: Install dependencies with vcpkg (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $overlay = "$env:VCPKG_INSTALLATION_ROOT/triplets_overlay"
+          New-Item -Force -ItemType Directory -Path $overlay | Out-Null
+          # OpenSSL is not compatible with /guard:cf, so control flow guard is
+          # left off here. Upstream does the same.
+          Set-Content -Path "$overlay/$env:VCPKG_TRIPLET.cmake" -Value @(
+            "set(VCPKG_TARGET_ARCHITECTURE x64)",
+            "set(VCPKG_LIBRARY_LINKAGE static)",
+            "set(VCPKG_CRT_LINKAGE dynamic)",
+            "set(VCPKG_BUILD_TYPE release)")
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install `
+            --binarysource="clear;x-gha,readwrite" `
+            --clean-after-build `
+            --overlay-triplets="$overlay" `
+            "boost-build:$env:VCPKG_TRIPLET" `
+            "openssl:$env:VCPKG_TRIPLET" `
+            "zlib:$env:VCPKG_TRIPLET"
+
+      # ---------------------------------------------------------------- boost
+
+      # Headers only. libtorrent's use of boost is header-only at this version,
+      # so `--with-headers` is all that is needed and it costs a couple of
+      # minutes rather than the twenty a full boost build takes. The staged
+      # tree carries the BoostConfig.cmake that qBittorrent's
+      # CMAKE_FIND_PACKAGE_PREFER_CONFIG lookup wants.
+      - name: Fetch boost
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="boost_${{ needs.pin.outputs.boost_underscored }}"
+          primary="https://archives.boost.io/release/${{ needs.pin.outputs.boost }}/source/$name.tar.gz"
+          mirror="https://sourceforge.net/projects/boost/files/boost/${{ needs.pin.outputs.boost }}/$name.tar.gz"
+
+          # Every path here is relative on purpose. GNU tar reads an argument
+          # containing a colon as host:path, so handing it a Windows path like
+          # D:\a\_temp\boost.tar.gz sends it off trying to open an rsync
+          # connection to a host named D, which is what "Cannot connect to D:
+          # resolve failed" means. Relative names carry no drive letter.
+          cd ..
+
+          if ! curl -fLo boost.tar.gz "$primary"; then
+            echo "::warning::archives.boost.io failed, falling back to the SourceForge mirror"
+            curl -fLo boost.tar.gz "$mirror"
+          fi
+          tar -xf boost.tar.gz
+          rm -f boost.tar.gz
+          rm -rf boost
+          mv "$name" boost
+
+      - name: Stage boost headers (Linux, macOS)
+        if: runner.os != 'Windows'
+        working-directory: ${{ env.BOOST_PATH }}
+        run: |
+          ./bootstrap.sh
+          ./b2 stage --stagedir=./ --with-headers
+
+      # vcpkg's b2 rather than the bundled bootstrap.bat, which needs a
+      # compiler probe that is flaky under the runner's MSVC layout.
+      - name: Stage boost headers (Windows)
+        if: runner.os == 'Windows'
+        working-directory: ${{ env.BOOST_PATH }}
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT/installed/$env:VCPKG_TRIPLET/tools/boost-build/b2.exe" stage toolset=msvc --stagedir=.\ --with-headers
+
+      # ------------------------------------------------------------------- Qt
+
       # Qt is the slowest dependency to build from source by a wide margin, so
-      # it comes prebuilt. Everything else is cheap enough to take from the
-      # platform's own package manager.
+      # it comes prebuilt. The archive list is the reason this step takes two
+      # minutes instead of the thirty-five the first attempt spent here:
+      # without it, aqtinstall pulls every module Qt publishes. qbittorrent-nox
+      # needs Core, Network, Sql and Xml (all in qtbase) plus LinguistTools (in
+      # qttools); qtdeclarative is here only because qttools declares a hard
+      # dependency on it.
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.7.*'
+          version: ${{ needs.pin.outputs.qt }}
+          arch: ${{ matrix.qt_arch }}
+          archives: ${{ matrix.qt_archives }}
           cache: true
 
-      - name: Install dependencies (Linux)
-        if: runner.os == 'Linux'
+      # ----------------------------------------------------------- libtorrent
+
+      # Built statically and installed, so the binary we ship does not depend
+      # on a libtorrent being present on the user's machine.
+      - name: Build libtorrent
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential cmake ninja-build pkg-config \
-            libboost-dev libssl-dev zlib1g-dev libtorrent-rasterbar-dev
+          set -euo pipefail
+          git clone --branch "v${{ needs.pin.outputs.libtorrent }}" --depth 1 --recurse-submodules \
+            https://github.com/arvidn/libtorrent.git "$LIBTORRENT_PATH"
+          cd "$LIBTORRENT_PATH"
+          # Expanded below as ${extra[@]+"..."} rather than plain "${extra[@]}".
+          # macOS runners still ship bash 3.2, where expanding an empty array
+          # under `set -u` is an unbound-variable error rather than nothing.
+          extra=()
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            extra+=(
+              -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+              -DVCPKG_TARGET_TRIPLET="$VCPKG_TRIPLET"
+              -DCMAKE_INSTALL_PREFIX="$LIBTORRENT_PATH/install"
+              -Dstatic_runtime=OFF
+            )
+          fi
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_CXX_STANDARD=20 \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DBOOST_ROOT="$BOOST_PATH/lib/cmake" \
+            -Ddeprecated-functions=OFF \
+            ${extra[@]+"${extra[@]}"}
+          cmake --build build
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cmake --install build
+          else
+            sudo cmake --install build
+          fi
 
-      - name: Install dependencies (macOS)
-        if: runner.os == 'macOS'
-        run: brew install cmake ninja boost openssl@3 zlib libtorrent-rasterbar
+      # ---------------------------------------------------------- qbittorrent
 
-      - name: Install dependencies (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          vcpkg install boost-circular-buffer:x64-windows-static-md `
-                        boost-system:x64-windows-static-md `
-                        openssl:x64-windows-static-md `
-                        zlib:x64-windows-static-md `
-                        libtorrent:x64-windows-static-md
-          echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
-
-      # -DGUI=OFF is the headless target. WEBUI stays on, since it is the only
-      # interface rigseed uses. STACKTRACE off keeps the binary smaller and
-      # avoids a dependency we have no use for.
-      - name: Configure
+      # -DGUI=OFF is the headless target, supported upstream. WEBUI stays on,
+      # since it is the only interface rigseed uses. STACKTRACE off keeps the
+      # binary smaller and drops a dependency we have no use for.
+      - name: Configure qbittorrent-nox
         working-directory: qbittorrent
         shell: bash
         run: |
+          set -euo pipefail
+          extra=()
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            extra+=(
+              -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+              -DVCPKG_TARGET_TRIPLET="$VCPKG_TRIPLET"
+              -DLibtorrentRasterbar_DIR="$LIBTORRENT_PATH/install/lib/cmake/LibtorrentRasterbar"
+              -DMSVC_RUNTIME_DYNAMIC=ON
+            )
+          fi
           cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
             -DGUI=OFF \
             -DWEBUI=ON \
             -DSTACKTRACE=OFF \
-            ${CMAKE_TOOLCHAIN_FILE:+-DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN_FILE"} \
-            ${VCPKG_TARGET_TRIPLET:+-DVCPKG_TARGET_TRIPLET="$VCPKG_TARGET_TRIPLET"}
+            -DVERBOSE_CONFIGURE=ON \
+            -DBOOST_ROOT="$BOOST_PATH/lib/cmake" \
+            ${extra[@]+"${extra[@]}"}
 
-      - name: Build
+      - name: Build qbittorrent-nox
         working-directory: qbittorrent
-        run: cmake --build build --config Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --target qbt_update_translations
+          cmake --build build
+
+      # Cheap, and the only step that proves the thing links and starts rather
+      # than merely compiling.
+      - name: Smoke test
+        working-directory: qbittorrent
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            build/qbittorrent-nox.app/Contents/MacOS/qbittorrent-nox -v
+          else
+            "build/${{ matrix.binary }}" -v
+          fi
 
       - name: Stage the binary under its target triple
         shell: bash
@@ -171,11 +414,30 @@ jobs:
           cp "$found" "out/qbittorrent-nox-${{ matrix.triple }}$ext"
           ls -la out
 
+      # Which shared libraries the binary still expects decides how it has to
+      # be packaged: a lone executable if the list is all system libraries, a
+      # directory of Qt libraries beside it otherwise. Recorded rather than
+      # guessed at. Not fatal if the tool is missing.
+      - name: Record runtime dependencies
+        shell: bash
+        continue-on-error: true
+        run: |
+          bin=$(find out -type f | head -1)
+          {
+            case "$RUNNER_OS" in
+              Linux) ldd "$bin" ;;
+              macOS) otool -L "$bin" ;;
+              Windows) dumpbin //dependents "$bin" ;;
+            esac
+          } | tee "runtime-deps-${{ matrix.label }}.txt"
+
       - name: Checksum
         shell: bash
         working-directory: out
         run: |
+          set -euo pipefail
           for f in *; do
+            case "$f" in *.sha256) continue;; esac
             if command -v sha256sum >/dev/null; then sha256sum "$f" > "$f.sha256";
             else shasum -a 256 "$f" > "$f.sha256"; fi
           done
@@ -187,6 +449,14 @@ jobs:
           path: out/*
           retention-days: 7
 
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: runtime-deps-${{ matrix.label }}
+          path: runtime-deps-${{ matrix.label }}.txt
+          retention-days: 7
+          if-no-files-found: ignore
+
   publish:
     name: Publish the release
     needs: [pin, build]
@@ -194,9 +464,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Only the sidecar artifacts. The runtime-deps reports are diagnostics
+      # for us, not something to attach to a public release.
       - uses: actions/download-artifact@v4
         with:
           path: staged
+          pattern: sidecar-*
           merge-multiple: true
 
       # The GPL obligation from licenses/README.md. The binary and its
@@ -211,6 +484,9 @@ jobs:
           RELEASE: ${{ needs.pin.outputs.release }}
           VERSION: ${{ needs.pin.outputs.version }}
           TAG: ${{ needs.pin.outputs.tag }}
+          QT: ${{ needs.pin.outputs.qt }}
+          LT: ${{ needs.pin.outputs.libtorrent }}
+          BOOST: ${{ needs.pin.outputs.boost }}
         run: |
           set -euo pipefail
           ls -la staged
@@ -219,7 +495,7 @@ jobs:
           # YAML block scalar has to stay indented, and release notes are the
           # one place that is easy to forget.
           cat > notes.md <<EOF
-          Built from \`$TAG\` with \`-DGUI=OFF\`.
+          Built from \`$TAG\` with \`-DGUI=OFF\`, against Qt $QT, libtorrent-rasterbar $LT and Boost $BOOST.
 
           Consumed by the release workflow, which downloads these rather than
           rebuilding. The corresponding source archive is attached here to
@@ -230,5 +506,9 @@ jobs:
           if gh release view "$RELEASE" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$RELEASE" staged/* --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$RELEASE"               --repo "$GITHUB_REPOSITORY"               --title "qbittorrent-nox $VERSION"               --notes-file notes.md               staged/*
+            gh release create "$RELEASE" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "qbittorrent-nox $VERSION" \
+              --notes-file notes.md \
+              staged/*
           fi
