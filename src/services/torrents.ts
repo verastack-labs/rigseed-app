@@ -1,4 +1,10 @@
-import type { Category, Torrent, TorrentFile, Tracker } from '@/types/qbittorrent'
+import type {
+  AddTorrentOptions,
+  Category,
+  Torrent,
+  TorrentFile,
+  Tracker,
+} from '@/types/qbittorrent'
 import type { Transport } from '@/services/transport'
 
 /**
@@ -13,6 +19,32 @@ export function createTorrentsApi(transport: Transport) {
   return {
     info: (params: { filter?: string; category?: string; tag?: string; sort?: string } = {}) =>
       transport.get<Torrent[]>('torrents/info', params),
+
+    /**
+     * Adds magnet links, URLs and `.torrent` files in one request.
+     *
+     * Empty strings are dropped rather than sent. An empty `savepath` is not
+     * "use the default", it is an explicit override of it, and sending one
+     * with `autoTMM` on puts the daemon in a state the UI never asked for.
+     * Booleans always go, since `false` is meaningful for every one of them.
+     */
+    add: (options: AddTorrentOptions) => {
+      const form = new FormData()
+
+      if (options.urls?.length) form.append('urls', options.urls.join('\n'))
+      for (const file of options.files ?? []) form.append('torrents', file, file.name)
+
+      if (options.savepath) form.append('savepath', options.savepath)
+      if (options.category) form.append('category', options.category)
+      if (options.tags?.length) form.append('tags', options.tags.join(','))
+
+      for (const key of ['paused', 'skip_checking', 'sequentialDownload', 'autoTMM'] as const) {
+        const value = options[key]
+        if (value !== undefined) form.append(key, String(value))
+      }
+
+      return transport.postForm<void>('torrents/add', form)
+    },
 
     properties: (hash: string) => transport.get<unknown>('torrents/properties', { hash }),
     files: (hash: string) => transport.get<TorrentFile[]>('torrents/files', { hash }),
