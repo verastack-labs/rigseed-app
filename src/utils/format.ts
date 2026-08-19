@@ -17,8 +17,10 @@ export function formatBytes(bytes: number, decimals = 2): string {
   const i = Math.min(UNITS.length - 1, Math.floor(Math.log(bytes) / Math.log(1000)))
   const value = bytes / 1000 ** i
   // Bytes are never fractional, and a large number needs fewer decimals to
-  // stay readable in a column.
-  const places = i === 0 ? 0 : value >= 100 ? 1 : decimals
+  // stay readable in a column. `decimals` is a ceiling rather than a target,
+  // so asking for none gets none: free space is a rough figure and "412.0 GB"
+  // implies a precision the number does not have.
+  const places = Math.min(decimals, i === 0 ? 0 : value >= 100 ? 1 : decimals)
   return `${value.toFixed(places)} ${UNITS[i]}`
 }
 
