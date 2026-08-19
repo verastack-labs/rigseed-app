@@ -1,3 +1,4 @@
+import { PRIORITY, type Priority } from '@/lib/priority'
 import type { Transport } from '@/services/transport'
 import type {
   Category,
@@ -144,7 +145,10 @@ export function createMockTransport({
    * a time, and generating peers and file lists for a thousand of them to
    * render six rows would be the mock's own performance bug.
    */
-  const details = new Map<string, { files: TorrentFile[]; peers: Record<string, Peer> }>()
+  const details = new Map<
+    string,
+    { files: TorrentFile[]; peers: Record<string, Peer>; trackers: Tracker[] }
+  >()
 
   function detailFor(t: Torrent) {
     const existing = details.get(t.hash)
@@ -198,7 +202,7 @@ export function createMockTransport({
       }
     }
 
-    const detail = { files, peers }
+    const detail = { files, peers, trackers: seedTrackers(t) }
     details.set(t.hash, detail)
     return detail
   }
@@ -208,8 +212,16 @@ export function createMockTransport({
     const t = torrents.get(hash)
     return t ? detailFor(t).peers : {}
   }
+  const trackersFor = (t: Torrent) => detailFor(t).trackers
 
-  function trackersFor(t: Torrent): Tracker[] {
+  /**
+   * The starting tracker list, kept per torrent from here on.
+   *
+   * Adding and removing has to survive the next poll or the Trackers tab
+   * cannot be reviewed at all: a row that appears and then vanishes two
+   * seconds later looks exactly like a bug in the screen.
+   */
+  function seedTrackers(t: Torrent): Tracker[] {
     return [
       // The three synthetic entries qBittorrent always reports alongside real
       // trackers. Showing them is correct: the stock client does, and a user
@@ -398,7 +410,10 @@ export function createMockTransport({
 
         const list = peersFor(hash)
         if (requested === 0) {
-          return wait({ rid: peerRid, full_update: true, peers: list, show_flags: true } as T)
+          const snapshot = Object.fromEntries(
+            Object.entries(list).map(([key, peer]) => [key, { ...peer }]),
+          )
+          return wait({ rid: peerRid, full_update: true, peers: snapshot, show_flags: true } as T)
         }
 
         // Only what moved, which for a peer is its progress and its rates.
@@ -420,13 +435,17 @@ export function createMockTransport({
         const t = torrents.get(String(params?.hash ?? ''))
         return wait((t ? propertiesFor(t) : undefined) as T)
       }
+      // Copies, because a real transport answers with freshly parsed JSON and
+      // shares nothing. Handing back the live arrays let a caller mutate the
+      // mock's own state, and made a read taken before a write quietly become
+      // a read taken after it.
       if (path === 'torrents/files') {
         const t = torrents.get(String(params?.hash ?? ''))
-        return wait((t ? filesFor(t) : []) as T)
+        return wait((t ? filesFor(t).map((f) => ({ ...f })) : []) as T)
       }
       if (path === 'torrents/trackers') {
         const t = torrents.get(String(params?.hash ?? ''))
-        return wait((t ? trackersFor(t) : []) as T)
+        return wait((t ? trackersFor(t).map((tr) => ({ ...tr })) : []) as T)
       }
 
       if (path === 'torrents/info') return wait([...torrents.values()] as T)
@@ -493,6 +512,93 @@ export function createMockTransport({
         for (const h of hashes) {
           const t = torrents.get(h)
           if (t) t.auto_tmm = enable
+        }
+      }
+
+      /**
+       * The detail screen's writes, stored rather than accepted and dropped.
+       *
+       * These were the last endpoints the mock ignored, and ignoring them is
+       * indistinguishable on screen from the write failing: the control moves,
+       * the refetch comes back with the old value, the control snaps back. The
+       * service layer proves the request is well formed; only the mock can
+       * prove the loop closes.
+       */
+      const one = torrents.get(String(body?.hash ?? ''))
+
+      if (path === 'torrents/filePrio' && one) {
+        // The daemon rejects a priority outside its own four with a 400, so
+        // the mock declines it too rather than quietly rounding it to normal.
+        const asked = Number(body?.priority)
+        const priority = (Object.values(PRIORITY) as number[]).includes(asked)
+          ? (asked as Priority)
+          : null
+        const ids = new Set(
+          String(body?.id ?? '')
+            .split('|')
+            .filter(Boolean)
+            .map(Number),
+        )
+        if (priority !== null) {
+          for (const file of filesFor(one)) {
+            if (ids.has(file.index)) file.priority = priority
+          }
+        }
+      }
+
+      if (path === 'torrents/renameFile' && one) {
+        const file = filesFor(one).find((f) => f.index === Number(body?.id ?? -1))
+        if (file) file.name = String(body?.newPath ?? file.name)
+      }
+
+      if (path === 'torrents/addTrackers' && one) {
+        const list = trackersFor(one)
+        for (const url of String(body?.urls ?? '')
+          .split('\n')
+          .map((u) => u.trim())
+          .filter(Boolean)) {
+          // status 1 is "not contacted yet", which is what a tracker added a
+          // moment ago genuinely is. Reporting it as working would be a nicer
+          // screenshot and a worse mock.
+          if (!list.some((t) => t.url === url)) list.push({ url, status: 1, num_peers: 0, msg: '' })
+        }
+      }
+
+      if (path === 'torrents/removeTrackers' && one) {
+        const gone = new Set(
+          String(body?.urls ?? '')
+            .split('|')
+            .filter(Boolean),
+        )
+        const list = trackersFor(one)
+        for (let i = list.length - 1; i >= 0; i -= 1) {
+          if (gone.has(list[i]!.url)) list.splice(i, 1)
+        }
+      }
+
+      if (path === 'torrents/editTracker' && one) {
+        const tracker = trackersFor(one).find((t) => t.url === String(body?.origUrl ?? ''))
+        if (tracker) {
+          tracker.url = String(body?.newUrl ?? tracker.url)
+          tracker.status = 1
+        }
+      }
+
+      if (path === 'torrents/recheck') {
+        for (const h of hashes) {
+          const t = torrents.get(h)
+          if (t) t.state = t.progress >= 1 ? 'checkingUP' : 'checkingDL'
+        }
+      }
+
+      if (path === 'app/banPeers') {
+        // Session-wide, which is the daemon's design: the address goes from
+        // every torrent, not just the one the row was clicked in.
+        const banned = String(body?.peers ?? '')
+          .split('|')
+          .filter(Boolean)
+        for (const detail of details.values()) {
+          for (const key of banned) delete detail.peers[key]
         }
       }
 
