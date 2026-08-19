@@ -7,36 +7,22 @@ import {
   tagCounts,
   tagsOf,
 } from '@/features/transfers/filter'
-import type { Torrent, TorrentState } from '@/types/qbittorrent'
+import { makeTorrent } from '@/test/torrent'
+import type { Torrent } from '@/types/qbittorrent'
 
+/** Small on purpose: these tests care about category, tag, state and name. */
 function t(over: Partial<Torrent> & { hash: string }): Torrent {
-  return {
-    name: 'ubuntu.iso',
+  // Uncategorised and untagged by default: these tests are about what
+  // filtering does with an assignment, so the fixture must not arrive with one.
+  return makeTorrent({
     size: 1000,
     progress: 0.5,
     dlspeed: 0,
     upspeed: 0,
-    priority: 1,
-    num_seeds: 1,
-    num_leechs: 1,
-    ratio: 1,
-    eta: 100,
-    state: 'downloading' as TorrentState,
     category: '',
     tags: '',
-    added_on: 0,
-    completion_on: 0,
-    save_path: '/d',
-    dl_limit: -1,
-    up_limit: -1,
-    downloaded: 0,
-    uploaded: 0,
-    seeding_time: 0,
-    auto_tmm: false,
-    sequential_download: false,
-    super_seeding: false,
     ...over,
-  }
+  })
 }
 
 const base = { status: 'all' as const, category: null, tag: null, query: '' }

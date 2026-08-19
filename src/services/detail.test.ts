@@ -130,16 +130,14 @@ describe('the write-backs the Speed tab makes', () => {
 
   it('flips sequential download, since the API offers no way to set it', async () => {
     const client = api()
-    const before = (await client.torrents.info()).find((t) => t.hash === FIRST)!.sequential_download
+    const before = (await client.torrents.info()).find((t) => t.hash === FIRST)!.seq_dl
 
     await client.torrents.toggleSequentialDownload([FIRST])
-    const after = (await client.torrents.info()).find((t) => t.hash === FIRST)!.sequential_download
+    const after = (await client.torrents.info()).find((t) => t.hash === FIRST)!.seq_dl
     expect(after).toBe(!before)
 
     await client.torrents.toggleSequentialDownload([FIRST])
-    expect((await client.torrents.info()).find((t) => t.hash === FIRST)!.sequential_download).toBe(
-      before,
-    )
+    expect((await client.torrents.info()).find((t) => t.hash === FIRST)!.seq_dl).toBe(before)
   })
 
   it('sets automatic management rather than toggling it', async () => {
@@ -232,5 +230,58 @@ describe('the write-backs the Files, Trackers and Peers tabs make', () => {
     await client.app.banPeers([victim])
 
     expect((await client.sync.torrentPeers(FIRST, 0)).peers).not.toHaveProperty(victim)
+  })
+})
+
+describe('what the sync loop is told about a write', () => {
+  // Every screen reads its live numbers out of the store, and the store is
+  // filled by sync/maindata rather than by the endpoint that did the writing.
+  // A mock that stores a change without putting it in the next diff makes a
+  // control look dead: the write lands, the daemon has the new value, and the
+  // switch on screen never moves.
+  //
+  // This is how the earlier verification of the rate limit was fooled. The
+  // field showed the new number across a poll because it was holding its own
+  // draft, not because the store had heard anything.
+
+  const drain = async (client: ReturnType<typeof api>) => {
+    await client.sync.maindata(0)
+    return client.sync.maindata(1)
+  }
+
+  it('puts a toggled sequential download in the next diff', async () => {
+    const client = api()
+    await drain(client)
+
+    await client.torrents.toggleSequentialDownload([FIRST])
+    const next = await client.sync.maindata(2)
+    expect(next.torrents?.[FIRST]?.seq_dl).toBe(true)
+  })
+
+  it('puts a first and last piece toggle in the next diff', async () => {
+    const client = api()
+    await drain(client)
+
+    await client.torrents.toggleFirstLastPiecePrio([FIRST])
+    expect((await client.sync.maindata(2)).torrents?.[FIRST]?.f_l_piece_prio).toBe(true)
+  })
+
+  it('puts a new rate limit in the next diff', async () => {
+    const client = api()
+    await drain(client)
+
+    await client.torrents.setDownloadLimit([FIRST], 512_000)
+    expect((await client.sync.maindata(2)).torrents?.[FIRST]?.dl_limit).toBe(512_000)
+  })
+
+  it('leaves torrents nobody wrote to out of it', async () => {
+    // The diff carries speeds for everything, so the check is that the other
+    // torrent did not get a full record dumped into it.
+    const client = api()
+    await drain(client)
+
+    await client.torrents.setDownloadLimit([FIRST], 512_000)
+    const next = await client.sync.maindata(2)
+    expect(next.torrents?.['hash01']).not.toHaveProperty('dl_limit')
   })
 })

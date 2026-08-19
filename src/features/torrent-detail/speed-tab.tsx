@@ -207,18 +207,14 @@ export function SpeedTab({
       label: 'Sequential download',
       hint: 'Fetch pieces in order. Useful for media, slower overall.',
       api: 'torrents/toggleSequentialDownload',
-      checked: torrent.sequential_download,
+      checked: torrent.seq_dl,
       onChange: () => onToggleSequential(),
     },
     {
       label: 'Download first and last pieces first',
       hint: 'Lets a player read the container header before the rest arrives.',
       api: 'torrents/toggleFirstLastPiecePrio',
-      // The list endpoint does not report this one, so the switch reflects
-      // what was asked for rather than what is set. Shown rather than hidden
-      // because it pairs with sequential download and its absence would be
-      // more confusing than its imprecision.
-      checked: torrent.sequential_download,
+      checked: torrent.f_l_piece_prio,
       onChange: () => onToggleFirstLast(),
     },
   ]

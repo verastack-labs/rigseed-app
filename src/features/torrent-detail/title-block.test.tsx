@@ -2,35 +2,14 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { TitleBlock } from '@/features/torrent-detail/title-block'
+import { makeTorrent } from '@/test/torrent'
 import type { Torrent } from '@/types/qbittorrent'
 
-const torrent: Torrent = {
+const torrent = makeTorrent({
   hash: 'a1b2c3d4e5f6',
   name: 'ubuntu-24.04.2-desktop-amd64.iso',
-  size: 5_700_000_000,
-  progress: 0.64,
-  dlspeed: 13_000_000,
-  upspeed: 1_800_000,
-  priority: 1,
-  num_seeds: 34,
-  num_leechs: 7,
-  ratio: 1.42,
-  eta: 252,
-  state: 'downloading',
-  category: 'Linux',
-  tags: 'iso',
-  added_on: 1_770_000_000,
-  completion_on: 0,
   save_path: '/downloads/linux',
-  dl_limit: -1,
-  up_limit: -1,
-  downloaded: 3_648_000_000,
-  uploaded: 1_000_000_000,
-  seeding_time: 0,
-  auto_tmm: false,
-  sequential_download: false,
-  super_seeding: false,
-}
+})
 
 const setup = (overrides: Partial<Torrent> = {}) =>
   render(<TitleBlock torrent={{ ...torrent, ...overrides }} />)

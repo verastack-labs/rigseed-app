@@ -83,7 +83,10 @@ export function TorrentDetail() {
       void (isPaused(torrent.state) ? api.torrents.resume([hash]) : api.torrents.pause([hash])),
     onRecheck: () => void api.torrents.recheck([hash]),
     onReannounce: () => void api.torrents.reannounce([hash]),
-    onCopyMagnet: () => void navigator.clipboard?.writeText(`magnet:?xt=urn:btih:${hash}`),
+    // The daemon's own magnet, which carries the display name and trackers.
+    // Rebuilding one from the info hash produces a valid link that has lost
+    // everything a client needs to find peers without waiting on DHT.
+    onCopyMagnet: () => void navigator.clipboard?.writeText(torrent.magnet_uri),
     onRemove: () => setConfirmRemove(true),
   }
 
