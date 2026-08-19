@@ -80,16 +80,26 @@ function makeTorrent(index: number, rand: () => number): Torrent {
   const paused = index === 2
   const state: TorrentState = paused ? 'pausedDL' : done ? 'uploading' : 'downloading'
 
+  const size = Math.round((1 + rand() * 8) * 1_000_000_000)
+  const hash = `hash${index.toString().padStart(2, '0')}`
+  const name = NAMES[index % NAMES.length]!
+  const numSeeds = Math.round(rand() * 40)
+  const numLeechs = Math.round(rand() * 12)
+
   return {
-    hash: `hash${index.toString().padStart(2, '0')}`,
-    name: NAMES[index % NAMES.length]!,
-    size: Math.round((1 + rand() * 8) * 1_000_000_000),
+    hash,
+    name,
+    size,
     progress,
     dlspeed: paused || done ? 0 : Math.round(rand() * 14_000_000),
     upspeed: paused ? 0 : Math.round(rand() * 2_000_000),
     priority: index + 1,
-    num_seeds: Math.round(rand() * 40),
-    num_leechs: Math.round(rand() * 12),
+    num_seeds: numSeeds,
+    num_leechs: numLeechs,
+    // The swarm, not the connection. Always at least what is connected, since
+    // a peer we are talking to is by definition one the swarm has.
+    num_complete: numSeeds + Math.round(rand() * 60),
+    num_incomplete: numLeechs + Math.round(rand() * 20),
     ratio: Number((rand() * 3).toFixed(2)),
     eta: done || paused ? 8640000 : Math.round(60 + rand() * 4000),
     state,
@@ -104,8 +114,15 @@ function makeTorrent(index: number, rand: () => number): Torrent {
     uploaded: Math.round(rand() * 2_000_000_000),
     seeding_time: done ? 86_400 : 0,
     auto_tmm: false,
-    sequential_download: false,
+    seq_dl: false,
+    f_l_piece_prio: false,
     super_seeding: false,
+    completed: Math.round(size * progress),
+    amount_left: size - Math.round(size * progress),
+    // With a display name and a tracker, which is what the daemon hands back
+    // and what makes it worth copying rather than rebuilding from the hash.
+    magnet_uri: `magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(name)}&tr=${encodeURIComponent('https://torrent.ubuntu.com/announce')}`,
+    tracker: paused ? '' : 'https://torrent.ubuntu.com/announce',
   }
 }
 
@@ -463,6 +480,22 @@ export function createMockTransport({
         .split('|')
         .filter(Boolean)
 
+      /**
+       * Every write below stores its change. That is only half of it: the
+       * screens read the live numbers out of the store, and the store is
+       * filled by `sync/maindata`, whose diff carries speeds and totals and
+       * nothing else. So a stored change stayed invisible until something
+       * asked for a full update.
+       *
+       * The daemon does not behave that way. Marking the torrent pending
+       * makes the next diff carry its whole record, which is what qBittorrent
+       * does with a field that changed.
+       */
+      const touched = (...list: string[]) => {
+        for (const h of list) if (torrents.has(h)) pendingTorrents.add(h)
+      }
+      touched(...hashes, String(body?.hash ?? ''))
+
       if (path === 'torrents/pause') {
         for (const h of hashes) {
           const t = torrents.get(h)
@@ -504,7 +537,13 @@ export function createMockTransport({
           const t = torrents.get(h)
           // A toggle, not a setter. The API has no way to say "on", which is
           // why the caller has to know the current state.
-          if (t) t.sequential_download = !t.sequential_download
+          if (t) t.seq_dl = !t.seq_dl
+        }
+      }
+      if (path === 'torrents/toggleFirstLastPiecePrio') {
+        for (const h of hashes) {
+          const t = torrents.get(h)
+          if (t) t.f_l_piece_prio = !t.f_l_piece_prio
         }
       }
       if (path === 'torrents/setAutoManagement') {
@@ -665,7 +704,7 @@ export function createMockTransport({
           tags: text('tags'),
           save_path: text('savepath') || '/downloads',
           auto_tmm: flag('autoTMM'),
-          sequential_download: flag('sequentialDownload'),
+          seq_dl: flag('sequentialDownload'),
         })
         pendingTorrents.add(hash)
       }

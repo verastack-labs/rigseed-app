@@ -62,8 +62,35 @@ export interface Torrent {
   uploaded: number
   seeding_time: number
   auto_tmm: boolean
-  sequential_download: boolean
+  /**
+   * Sequential download.
+   *
+   * `seq_dl`, not `sequential_download`. The long name is what
+   * `torrents/properties` and the add form use; `torrents/info` and
+   * `sync/maindata` use this one, and reading the wrong one gets `undefined`
+   * rather than an error.
+   */
+  seq_dl: boolean
+  /** First and last piece priority. */
+  f_l_piece_prio: boolean
   super_seeding: boolean
+  /** Bytes done. Exact, where `size * progress` is a reconstruction. */
+  completed: number
+  /** Bytes still to fetch. */
+  amount_left: number
+  /**
+   * The daemon's own magnet, with trackers and display name.
+   *
+   * Worth taking rather than rebuilding from the hash: `magnet:?xt=urn:btih:`
+   * plus an info hash is a valid magnet that has lost everything a client
+   * needs to find peers quickly.
+   */
+  magnet_uri: string
+  /** Seeds and leechers in the whole swarm, not just the connected ones. */
+  num_complete: number
+  num_incomplete: number
+  /** The first working tracker's URL, empty while none is working. */
+  tracker: string
 }
 
 export interface TorrentFile {

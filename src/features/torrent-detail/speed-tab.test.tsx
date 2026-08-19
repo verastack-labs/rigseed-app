@@ -2,35 +2,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { SpeedTab, type SpeedTabProps } from '@/features/torrent-detail/speed-tab'
+import { makeTorrent } from '@/test/torrent'
 import type { Torrent } from '@/types/qbittorrent'
 
-const torrent: Torrent = {
-  hash: 'a1b2c3',
-  name: 'ubuntu.iso',
-  size: 5_700_000_000,
-  progress: 0.64,
-  dlspeed: 13_000_000,
-  upspeed: 1_800_000,
-  priority: 1,
-  num_seeds: 34,
-  num_leechs: 7,
-  ratio: 1.42,
-  eta: 252,
-  state: 'downloading',
-  category: 'Linux',
-  tags: 'iso',
-  added_on: 1_770_000_000,
-  completion_on: 0,
-  save_path: '/downloads',
-  dl_limit: -1,
-  up_limit: -1,
-  downloaded: 3_648_000_000,
-  uploaded: 1_000_000_000,
-  seeding_time: 0,
-  auto_tmm: false,
-  sequential_download: false,
-  super_seeding: false,
-}
+const torrent = makeTorrent()
 
 const base: SpeedTabProps = {
   torrent,
@@ -168,7 +143,7 @@ describe('SpeedTab behaviour switches', () => {
   })
 
   it('reflects the torrent’s current state', () => {
-    setup({ auto_tmm: true, sequential_download: true })
+    setup({ auto_tmm: true, seq_dl: true })
     expect(screen.getByRole('switch', { name: 'Automatic Torrent Management' })).toBeChecked()
     expect(screen.getByRole('switch', { name: 'Sequential download' })).toBeChecked()
   })
