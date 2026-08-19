@@ -1,144 +1,207 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { Search } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
 
-import { TransfersToolbar } from '@/components/shell/transfers-toolbar'
-import { Card } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
-import { DataValue } from '@/components/ui/data-value'
-import { ProgressBar } from '@/components/ui/progress-bar'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Input } from '@/components/ui/input'
 import { SectionHeader } from '@/components/ui/section-header'
-import { Sparkline } from '@/components/ui/sparkline'
-import { StatusDot } from '@/components/ui/status-dot'
+import { SegmentedControl } from '@/components/ui/segmented-control'
+import { Skeleton } from '@/components/ui/skeleton'
+import { TransfersToolbar } from '@/components/shell/transfers-toolbar'
+import { AddFab } from '@/features/transfers/add-fab'
+import { Sidebar } from '@/features/transfers/sidebar'
+import { TorrentEasy } from '@/features/transfers/torrent-easy'
+import { TorrentGrid } from '@/features/transfers/torrent-grid'
+import { TorrentList } from '@/features/transfers/torrent-list'
+import {
+  categoryCounts,
+  filterTorrents,
+  statusCounts,
+  tagCounts,
+} from '@/features/transfers/filter'
 import { icons } from '@/lib/icons'
+import { useApi } from '@/services/context'
+import { useThemeStore, type Layout } from '@/state/theme-store'
+import { selectTorrentList, useTorrentStore } from '@/state/torrent-store'
+import { hasActiveFilters, useTransfersStore } from '@/state/transfers-store'
+import { useSyncPoll } from '@/state/use-sync-poll'
 
-const DOWN = [2, 5, 3, 8, 12, 9, 14, 11, 18, 22, 19, 24, 21, 26, 30, 28, 33, 31, 29, 34]
-const UP = [1, 1, 2, 2, 3, 2, 4, 3, 5, 4, 6, 5, 7, 6, 8, 7, 9, 8, 7, 9]
-
-const TORRENTS = [
-  {
-    name: 'ubuntu-24.04.2-desktop-amd64.iso',
-    pct: 64,
-    down: '12.4 MB/s',
-    up: '1.8 MB/s',
-    state: 'downloading' as const,
-  },
-  {
-    name: 'debian-12.9.0-amd64-netinst.iso',
-    pct: 100,
-    down: '0 B/s',
-    up: '640 KB/s',
-    state: 'seeding' as const,
-  },
-  {
-    name: 'archlinux-2026.08.01-x86_64.iso',
-    pct: 23,
-    down: '0 B/s',
-    up: '0 B/s',
-    state: 'paused' as const,
-  },
-]
-
-/**
- * A slice of the real Transfers screen, enough to prove the shell and the
- * component layer render together under every palette. The full screen with
- * its three layouts, filters and toolbar arrives with M3.
- */
 export function Transfers() {
-  const [selected, setSelected] = useState<readonly string[]>([])
+  useSyncPoll()
+  const api = useApi()
 
-  const toggle = (name: string) =>
-    setSelected((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]))
+  const torrents = useTorrentStore(useShallow(selectTorrentList))
+  const serverState = useTorrentStore((s) => s.serverState)
+  const loaded = useTorrentStore((s) => s.loaded)
+
+  const defaultLayout = useThemeStore((s) => s.defaultLayout)
+  const {
+    status,
+    category,
+    tag,
+    query,
+    layout,
+    selected,
+    setStatus,
+    setCategory,
+    setTag,
+    setQuery,
+    setLayout,
+    toggleSelected,
+    clearSelection,
+    clearFilters,
+  } = useTransfersStore()
+  const filtersActive = useTransfersStore(hasActiveFilters)
+
+  const [confirmRemove, setConfirmRemove] = useState<readonly string[] | null>(null)
+
+  // The screen's own choice wins, otherwise the one picked at first run.
+  const activeLayout: Layout = layout ?? defaultLayout
+
+  // Accumulated in the store on each poll, not here: appending during render
+  // would be a write while rendering.
+  const speedHistory = useTorrentStore((s) => s.speedHistory)
+  const down = serverState.dl_info_speed ?? 0
+  const up = serverState.up_info_speed ?? 0
+
+  const visible = useMemo(
+    () => filterTorrents(torrents, { status, category, tag, query }),
+    [torrents, status, category, tag, query],
+  )
+  const counts = useMemo(() => statusCounts(torrents), [torrents])
+  const categories = useMemo(() => categoryCounts(torrents), [torrents])
+  const tags = useMemo(() => tagCounts(torrents), [torrents])
+
+  const act = {
+    onResume: (hashes: readonly string[]) => void api.torrents.resume(hashes),
+    onPause: (hashes: readonly string[]) => void api.torrents.pause(hashes),
+    onRemove: (hashes: readonly string[]) => setConfirmRemove(hashes),
+  }
+
+  // With nothing selected the toolbar acts on everything in view, which is
+  // what the fixed labels rely on the audience already understanding.
+  const scope = selected.length ? selected : visible.map((t) => t.hash)
+
+  const layoutProps = {
+    torrents: visible,
+    selected,
+    onToggle: toggleSelected,
+    ...act,
+  }
 
   return (
-    <div className="flex h-full">
-      <aside className="flex w-[236px] shrink-0 flex-col gap-4 overflow-auto border-r border-line bg-sidebar px-3 py-3.5">
-        <div className="flex flex-col gap-1.5">
-          <SectionHeader>Status</SectionHeader>
-          {['All torrents', 'Downloading', 'Seeding', 'Paused'].map((s, i) => (
-            <button
-              key={s}
-              type="button"
-              className={`flex items-center gap-2.5 rounded-md px-[9px] py-2 text-left text-[12.5px] transition-colors duration-quick ${
-                i === 0 ? 'bg-accent-soft font-semibold text-accent' : 'text-text hover:bg-surface2'
-              }`}
-            >
-              <icons.folder className="size-[15px] shrink-0" strokeWidth={2} />
-              <span className="flex-1 truncate">{s}</span>
-              <DataValue size="xs" tone="dimmer">
-                {[12, 3, 8, 1][i]}
-              </DataValue>
-            </button>
-          ))}
-        </div>
-
-        <span className="flex-1" />
-
-        <Card padding="row">
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-2">
-              <icons.download className="size-[13px] text-accent" strokeWidth={2} />
-              <span className="flex-1 text-[11px] text-text-dim">Down</span>
-              <DataValue tone="accent">12.4 MB/s</DataValue>
-            </div>
-            <div className="flex items-center gap-2">
-              <icons.download className="size-[13px] rotate-180 text-accent2" strokeWidth={2} />
-              <span className="flex-1 text-[11px] text-text-dim">Up</span>
-              <DataValue tone="accent2">1.8 MB/s</DataValue>
-            </div>
-          </div>
-          <div className="-mx-3 mt-3 -mb-3 border-t border-line bg-surface2">
-            <Sparkline data={DOWN} upload={UP} height={46} />
-          </div>
-        </Card>
-      </aside>
+    <div className="relative flex h-full">
+      <Sidebar
+        status={status}
+        statusCounts={counts}
+        categories={categories}
+        tags={tags}
+        category={category}
+        tag={tag}
+        filtersActive={filtersActive}
+        downSpeed={down}
+        upSpeed={up}
+        downHistory={speedHistory.down}
+        upHistory={speedHistory.up}
+        onStatus={setStatus}
+        onCategory={setCategory}
+        onTag={setTag}
+        onClear={clearFilters}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <TransfersToolbar
-          selectedCount={selected.length}
-          totalCount={TORRENTS.length}
-          onClearSelection={() => setSelected([])}
-          onResume={() => {}}
-          onPause={() => {}}
-          onRemove={() => {}}
-        />
+        <div className="flex items-center">
+          <TransfersToolbar
+            className="flex-1 border-b-0"
+            selectedCount={selected.length}
+            totalCount={visible.length}
+            onClearSelection={clearSelection}
+            onResume={() => act.onResume(scope)}
+            onPause={() => act.onPause(scope)}
+            onRemove={() => act.onRemove(scope)}
+          />
+          <div className="flex h-[52px] items-center gap-2.5 border-b border-line pr-6 pl-0">
+            <Input
+              mono
+              size="sm"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search torrents…"
+              aria-label="Search torrents"
+              icon={<Search className="size-[13px]" strokeWidth={2} />}
+              className="w-[232px]"
+            />
+            <SectionHeader>View</SectionHeader>
+            <SegmentedControl
+              size="sm"
+              label="View"
+              options={[
+                { value: 'easy', label: 'Easy' },
+                { value: 'grid', label: 'Grid' },
+                { value: 'list', label: 'List' },
+              ]}
+              value={activeLayout}
+              onChange={(next) => setLayout(next as Layout)}
+            />
+          </div>
+        </div>
 
-        <div className="grid grid-cols-2 gap-3.5 overflow-auto p-6 xl:grid-cols-3">
-          {TORRENTS.map((t) => (
-            <Card key={t.name} hoverable padding="card">
-              <div className="flex flex-col gap-2.5">
-                <div className="flex items-center gap-2.5">
-                  <Checkbox
-                    checked={selected.includes(t.name)}
-                    onChange={() => toggle(t.name)}
-                    label={`Select ${t.name}`}
-                  />
-                  <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-text">
-                    {t.name}
-                  </span>
-                </div>
-                <StatusDot
-                  tone={
-                    t.state === 'downloading'
-                      ? 'accent'
-                      : t.state === 'seeding'
-                        ? 'accent2'
-                        : 'muted'
-                  }
-                  label={t.state}
-                />
-                <ProgressBar value={t.pct} paused={t.state === 'paused'} showValue label={t.name} />
-                <div className="flex items-center gap-3">
-                  <DataValue size="xs" tone="accent">
-                    {t.down}
-                  </DataValue>
-                  <DataValue size="xs" tone="accent2">
-                    {t.up}
-                  </DataValue>
-                </div>
-              </div>
-            </Card>
-          ))}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {!loaded ? (
+            <div className="p-6">
+              <Skeleton rows={6} rowHeight={96} />
+            </div>
+          ) : visible.length === 0 ? (
+            <EmptyState
+              icon={<icons.folder className="size-6" strokeWidth={1.7} />}
+              title={filtersActive ? 'No torrents match these filters' : 'Nothing here yet'}
+              body={
+                filtersActive
+                  ? 'Nothing matches every filter you have applied at once. Clearing them brings the rest of the list back.'
+                  : 'Add a torrent with the button in the corner. A magnet link or a .torrent file both work.'
+              }
+              action={
+                filtersActive ? (
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="rounded-lg bg-accent-soft px-4 py-2 text-[12.5px] font-semibold text-accent transition-colors duration-quick hover:bg-accent hover:text-accent-on"
+                  >
+                    Clear filters
+                  </button>
+                ) : undefined
+              }
+            />
+          ) : activeLayout === 'easy' ? (
+            <TorrentEasy {...layoutProps} />
+          ) : activeLayout === 'list' ? (
+            <TorrentList {...layoutProps} />
+          ) : (
+            <TorrentGrid {...layoutProps} />
+          )}
         </div>
       </div>
+
+      <AddFab onSelect={() => {}} />
+
+      <ConfirmDialog
+        open={confirmRemove !== null}
+        onCancel={() => setConfirmRemove(null)}
+        onConfirm={(alsoDeleteFiles) => {
+          if (confirmRemove) void api.torrents.delete(confirmRemove, alsoDeleteFiles)
+          setConfirmRemove(null)
+          clearSelection()
+        }}
+        title={
+          confirmRemove && confirmRemove.length > 1
+            ? `Remove ${confirmRemove.length} torrents?`
+            : 'Remove this torrent?'
+        }
+        body="The torrent stops and leaves the list. The files it already downloaded stay on disk unless you also tick the option below."
+        confirmLabel="Remove"
+        optionLabel="Also delete the files on disk"
+      />
     </div>
   )
 }
