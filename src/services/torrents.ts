@@ -58,6 +58,22 @@ export function createTorrentsApi(transport: Transport) {
     delete: (list: readonly string[], deleteFiles: boolean) =>
       transport.post<void>('torrents/delete', { ...hashes(list), deleteFiles }),
 
+    /**
+     * Per-file priority, including 0 to skip a file entirely.
+     *
+     * A follow-up to `add` rather than part of it: `torrents/add` has no
+     * per-file parameter at all, so a torrent added with files deselected is
+     * added whole and then narrowed. Ids are indices into the torrent's own
+     * file list, which is the order `torrents/files` and a parsed `.torrent`
+     * both report.
+     */
+    filePrio: (hash: string, ids: readonly number[], priority: number) =>
+      transport.post<void>('torrents/filePrio', {
+        hash,
+        id: ids.join('|'),
+        priority,
+      }),
+
     recheck: (list: readonly string[]) => transport.post<void>('torrents/recheck', hashes(list)),
     reannounce: (list: readonly string[]) =>
       transport.post<void>('torrents/reannounce', hashes(list)),

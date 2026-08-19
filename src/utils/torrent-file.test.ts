@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { TorrentParseError, parseTorrent, readTorrentFile } from '@/utils/torrent-file'
+import { TorrentParseError, infoHash, parseTorrent, readTorrentFile } from '@/utils/torrent-file'
 
 const enc = new TextEncoder()
 
@@ -127,10 +127,44 @@ describe('parseTorrent', () => {
   it('reads from a File, which is what the picker hands over', async () => {
     const bytes = bencode({ info: { name: 'sintel', length: 129_000_000 } })
     const meta = await readTorrentFile(new File([bytes], 'sintel.torrent'))
-    expect(meta).toEqual({
+    expect(meta).toMatchObject({
       name: 'sintel',
       totalSize: 129_000_000,
       entries: [{ path: 'sintel', size: 129_000_000 }],
     })
+  })
+})
+
+describe('infoHash', () => {
+  it('hashes the info value exactly as it appeared in the file', async () => {
+    const info = { name: 'sintel', length: 129_000_000 }
+    const meta = parseTorrent(bencode({ announce: 'http://t.example', info, comment: 'hi' }))
+
+    // The span, not a re-encode. Re-encoding the parsed object would change
+    // the hash the moment a key order or an integer form differed from what
+    // the producer wrote, and bencode is only canonical if they made it so.
+    expect(new TextDecoder().decode(meta.infoBytes)).toBe(new TextDecoder().decode(bencode(info)))
+    expect(await infoHash(meta)).toMatch(/^[0-9a-f]{40}$/)
+  })
+
+  it('is stable for the same info and different for different info', async () => {
+    const one = parseTorrent(bencode({ info: { name: 'a', length: 1 } }))
+    const same = parseTorrent(bencode({ announce: 'x', info: { name: 'a', length: 1 } }))
+    const other = parseTorrent(bencode({ info: { name: 'b', length: 1 } }))
+
+    // Same info, different surrounding keys: the hash must not notice the
+    // announce URL, which is exactly why it is the info dict that is hashed.
+    expect(await infoHash(one)).toBe(await infoHash(same))
+    expect(await infoHash(one)).not.toBe(await infoHash(other))
+  })
+
+  it('ignores a nested key called info', async () => {
+    // A tracker or a creator field could carry its own dictionary with an
+    // info key. Only the root's own span is the one that identifies a torrent.
+    const meta = parseTorrent(
+      bencode({ info: { name: 'real', length: 5 }, nested: { info: { name: 'decoy' } } }),
+    )
+    expect(new TextDecoder().decode(meta.infoBytes)).toContain('real')
+    expect(new TextDecoder().decode(meta.infoBytes)).not.toContain('decoy')
   })
 })
