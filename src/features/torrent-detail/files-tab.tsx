@@ -3,31 +3,17 @@ import { ProgressBar } from '@/components/ui/progress-bar'
 import { SectionHeader } from '@/components/ui/section-header'
 import { Skeleton } from '@/components/ui/skeleton'
 import { icons } from '@/lib/icons'
+import { PRIORITY_CHOICES, type Priority } from '@/lib/priority'
 import { cn } from '@/lib/utils'
 import type { TorrentFile } from '@/types/qbittorrent'
 import { formatBytes, formatPercent } from '@/utils/format'
-
-/**
- * The four priorities `torrents/filePrio` accepts.
- *
- * 6 is "high", which the add dialog does not offer because a torrent nobody
- * has started yet has no ordering to influence. Here it does.
- */
-export const FILE_PRIORITIES = [
-  { value: 0, label: 'Skip' },
-  { value: 1, label: 'Normal' },
-  { value: 6, label: 'High' },
-  { value: 7, label: 'Max' },
-] as const
-
-export type FilePriority = (typeof FILE_PRIORITIES)[number]['value']
 
 export interface FilesTabProps {
   /** Null until `torrents/files` answers. */
   files: readonly TorrentFile[] | null
   selected: readonly number[]
   onToggle: (index: number) => void
-  onPriority: (indices: readonly number[], priority: FilePriority) => void
+  onPriority: (indices: readonly number[], priority: Priority) => void
 }
 
 /** The last path segment, which is what the row shows. */
@@ -58,7 +44,7 @@ export function FilesTab({ files, selected, onToggle, onPriority }: FilesTabProp
         <span className="flex-1" />
         <div className="flex items-center gap-1.5">
           <SectionHeader>Set priority</SectionHeader>
-          {FILE_PRIORITIES.map((option) => (
+          {PRIORITY_CHOICES.map((option) => (
             <button
               key={option.value}
               type="button"
@@ -147,14 +133,14 @@ export function FilesTab({ files, selected, onToggle, onPriority }: FilesTabProp
                 <select
                   aria-label={`Priority for ${basename(file.name)}`}
                   value={file.priority}
-                  onChange={(e) => onPriority([file.index], Number(e.target.value) as FilePriority)}
+                  onChange={(e) => onPriority([file.index], Number(e.target.value) as Priority)}
                   className={cn(
                     'rounded-md px-2 py-1 text-[11px] font-semibold',
                     'border border-line bg-surface2 outline-none',
                     skipped ? 'text-text-dimmer' : 'text-text-dim',
                   )}
                 >
-                  {FILE_PRIORITIES.map((option) => (
+                  {PRIORITY_CHOICES.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>

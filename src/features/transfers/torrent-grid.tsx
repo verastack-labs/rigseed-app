@@ -5,6 +5,7 @@ import { IconTile } from '@/components/ui/icon-tile'
 import { ProgressBar } from '@/components/ui/progress-bar'
 import { StatusDot } from '@/components/ui/status-dot'
 import { RowMenu, type LayoutProps } from '@/features/transfers/row-menu'
+import { TorrentLink } from '@/features/transfers/torrent-link'
 import { icons } from '@/lib/icons'
 import { STATE_LABEL, formatPercent, formatSpeed, isPaused, stateTone } from '@/utils/format'
 
@@ -26,12 +27,11 @@ export function TorrentGrid({ torrents, selected, onToggle, ...actions }: Layout
               <IconTile size={26}>
                 <icons.folder className="size-[13px]" strokeWidth={2} />
               </IconTile>
-              <span
-                title={torrent.name}
-                className="min-w-0 flex-1 truncate pt-1 text-[12.5px] font-semibold text-text"
-              >
-                {torrent.name}
-              </span>
+              <TorrentLink
+                hash={torrent.hash}
+                name={torrent.name}
+                className="min-w-0 flex-1 truncate pt-1 text-[12.5px] font-semibold"
+              />
               <RowMenu torrent={torrent} actions={actions} />
             </div>
 

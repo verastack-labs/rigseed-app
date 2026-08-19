@@ -4,13 +4,11 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ContextMenu } from '@/components/ui/context-menu'
 import { TabBar, type Tab } from '@/components/ui/tab-bar'
+import type { DetailTab } from '@/features/torrent-detail/tabs'
 import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import type { Torrent } from '@/types/qbittorrent'
 import { isPaused } from '@/utils/format'
-
-export const DETAIL_TABS = ['general', 'files', 'trackers', 'peers', 'speed'] as const
-export type DetailTab = (typeof DETAIL_TABS)[number]
 
 export interface DetailHeaderProps {
   torrent: Torrent

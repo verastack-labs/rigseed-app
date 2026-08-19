@@ -5,6 +5,7 @@ import { IconTile } from '@/components/ui/icon-tile'
 import { ProgressBar } from '@/components/ui/progress-bar'
 import { icons } from '@/lib/icons'
 import { type LayoutProps } from '@/features/transfers/row-menu'
+import { TorrentLink } from '@/features/transfers/torrent-link'
 import {
   STATE_PLAIN,
   formatEtaPlain,
@@ -49,9 +50,11 @@ export function TorrentEasy({ torrents, selected, onToggle, onResume, onPause }:
               </IconTile>
 
               <div className="flex min-w-0 flex-1 flex-col gap-2.5">
-                <span title={torrent.name} className="truncate text-[15px] font-semibold text-text">
-                  {torrent.name}
-                </span>
+                <TorrentLink
+                  hash={torrent.hash}
+                  name={torrent.name}
+                  className="truncate text-[15px] font-semibold"
+                />
 
                 <span
                   className={
