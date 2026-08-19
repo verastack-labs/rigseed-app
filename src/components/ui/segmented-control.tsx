@@ -37,7 +37,7 @@ export function SegmentedControl<T extends string = string>({
       role="radiogroup"
       aria-label={label}
       className={cn(
-        'bg-surface2 border-line inline-flex gap-[3px] rounded-xl border p-[3px]',
+        'bg-surface2 border-line inline-flex shrink-0 gap-[3px] rounded-xl border p-[3px]',
         className,
       )}
     >
