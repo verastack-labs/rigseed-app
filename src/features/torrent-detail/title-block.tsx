@@ -36,7 +36,11 @@ function formatDate(seconds: number): string {
  * switches to Peers has not stopped needing either.
  */
 export function TitleBlock({ torrent, className }: TitleBlockProps) {
-  const done = Math.round(torrent.progress * torrent.size)
+  // `completed` from the daemon, not `progress * size`. The reconstruction is
+  // close enough to look right and wrong at the edges: progress is rounded for
+  // transport, and it counts selected files only, so a torrent with files
+  // skipped reported a figure that never quite reached its own total.
+  const done = torrent.completed
 
   const meta: { label: string; value: string; mono?: boolean }[] = [
     { label: 'Category', value: torrent.category || 'none' },
