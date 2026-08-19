@@ -93,3 +93,53 @@ describe('connect', () => {
     expect(result.status === 'failed' && result.reason).toMatch(/could not reach/i)
   })
 })
+
+describe('waiting for a daemon that is still starting', () => {
+  const target = { baseUrl: '', username: 'rigseed', password: 'hunter2' }
+
+  it('retries while nothing answers', async () => {
+    // The bundled daemon is spawned as the window opens and takes a moment to
+    // bind its port, so the app is ready to ask before there is anything to
+    // ask. Without this the first launch after install always shows sample
+    // data, and only a restart fixes it.
+    let attempts = 0
+    const transport: Transport = {
+      get: (path) =>
+        path === 'app/version'
+          ? Promise.resolve('v5.2.3' as never)
+          : Promise.resolve('2.11.2' as never),
+      post: () => {
+        attempts += 1
+        return attempts < 3
+          ? Promise.reject(new Error('ECONNREFUSED'))
+          : Promise.resolve('Ok.' as never)
+      },
+      postForm: () => Promise.resolve(undefined as never),
+    }
+    vi.spyOn(transportModule, 'createHttpTransport').mockReturnValue(transport)
+
+    const result = await connect(target, { waitMs: 5_000 })
+    expect(result.status).toBe('connected')
+    expect(attempts).toBe(3)
+  })
+
+  it('does not retry a refusal', async () => {
+    // A daemon that answered and said no has given a final answer. Asking
+    // again is a slow way to lock the account out, and qBittorrent does count
+    // failed logins per address.
+    let attempts = 0
+    const { transport } = fakeTransport({ 'auth/login': 'Fails.' })
+    const counted: Transport = {
+      ...transport,
+      post: (path) => {
+        attempts += 1
+        return transport.post(path)
+      },
+    }
+    vi.spyOn(transportModule, 'createHttpTransport').mockReturnValue(counted)
+
+    const result = await connect(target, { waitMs: 5_000 })
+    expect(result.status).toBe('failed')
+    expect(attempts).toBe(1)
+  })
+})

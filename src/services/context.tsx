@@ -93,7 +93,11 @@ export function ApiProvider({ target, children }: ApiProviderProps) {
       const found = target ?? (await findTarget())
       if (!found) return mockConnection('No daemon configured. Showing sample data.')
 
-      const result = await connect(found)
+      // The bundled daemon is spawned by Rust as the window opens, so on a
+      // cold start the app asks before the port is bound. A daemon somebody
+      // configured themselves is either up or it is not, and waiting ten
+      // seconds to say so helps nobody.
+      const result = await connect(found, { waitMs: target ? 0 : 10_000 })
       return result.status === 'failed'
         ? mockConnection(`${result.reason} Showing sample data.`)
         : result

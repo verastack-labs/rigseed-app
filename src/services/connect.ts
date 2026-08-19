@@ -29,19 +29,45 @@ export type ConnectionState =
  * HTTP 200, so a transport that only checks status codes reports a healthy
  * connection that 403s on the next call.
  */
-export async function connect(target: DaemonTarget): Promise<ConnectionState> {
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+export interface ConnectOptions {
+  /**
+   * How long to keep trying while nothing answers at all.
+   *
+   * The bundled daemon is spawned by Rust and takes a moment to bind its port,
+   * so the app is ready to ask before there is anything to ask. Only refusals
+   * to connect are retried. A daemon that answers and rejects the credentials
+   * has given a final answer, and asking again would just be a slow way to
+   * lock the account out.
+   */
+  waitMs?: number
+}
+
+export async function connect(
+  target: DaemonTarget,
+  { waitMs = 0 }: ConnectOptions = {},
+): Promise<ConnectionState> {
   const transport = createHttpTransport({ baseUrl: target.baseUrl })
   const probe = createClient(transport)
 
-  try {
-    const accepted = await probe.auth.login(target.username, target.password)
-    if (!accepted) {
-      return { status: 'failed', reason: 'The daemon rejected those credentials.' }
-    }
-  } catch (error) {
-    return {
-      status: 'failed',
-      reason: `Could not reach the daemon at ${target.baseUrl || 'this origin'}: ${String(error)}`,
+  const deadline = Date.now() + waitMs
+
+  for (;;) {
+    try {
+      const accepted = await probe.auth.login(target.username, target.password)
+      if (!accepted) {
+        return { status: 'failed', reason: 'The daemon rejected those credentials.' }
+      }
+      break
+    } catch (error) {
+      if (Date.now() >= deadline) {
+        return {
+          status: 'failed',
+          reason: `Could not reach the daemon at ${target.baseUrl || 'this origin'}: ${String(error)}`,
+        }
+      }
+      await sleep(250)
     }
   }
 
