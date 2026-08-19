@@ -23,3 +23,18 @@ describe('cn', () => {
     expect(cn('text-text-dim', 'text-accent')).toBe('text-accent')
   })
 })
+
+describe('cn with the rigseed theme scales', () => {
+  it('lets a custom radius displace a stock one', () => {
+    expect(cn('rounded-lg', 'rounded-chip')).toBe('rounded-chip')
+    expect(cn('rounded-chip', 'rounded-lg')).toBe('rounded-lg')
+  })
+
+  it('lets a custom easing displace another', () => {
+    expect(cn('ease-spring', 'ease-panel-reveal')).toBe('ease-panel-reveal')
+  })
+
+  it('lets a custom duration displace another', () => {
+    expect(cn('duration-fast', 'duration-spring')).toBe('duration-spring')
+  })
+})
