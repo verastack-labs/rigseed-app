@@ -126,6 +126,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
+        // The daemon is reached through this rather than through the webview's
+        // own fetch. qBittorrent's CSRF protection compares the request origin
+        // against its own host, and a webview sends http://tauri.localhost,
+        // which it rejects with a 401. A request from Rust carries no Origin
+        // and no Referer at all, which the daemon accepts.
+        .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .manage(Daemon::default())

@@ -77,11 +77,50 @@ export interface ConnectOptions {
   waitMs?: number
 }
 
+/**
+ * The fetch to reach the daemon with.
+ *
+ * Inside Tauri this is the HTTP plugin, which performs the request in Rust.
+ * That is not an optimisation: qBittorrent's CSRF protection compares the
+ * request origin against its own host, and a webview sends
+ * `http://tauri.localhost`, which it answers with 401. Measured against a real
+ * daemon, a correct password with that Origin is rejected and the same
+ * password with no Origin at all is accepted.
+ *
+ * The alternative was turning the daemon's CSRF protection off, which would
+ * leave it open to any page in the user's browser that learned the password.
+ */
+async function daemonFetch(): Promise<typeof fetch | undefined> {
+  if (!(globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return undefined
+
+  // Not caught. Falling back to the webview's fetch inside Tauri means every
+  // request carries an origin the daemon rejects, and it rejects it as a 401,
+  // so the app would report "the daemon rejected those credentials" about a
+  // password that is perfectly correct. That happened once already, during a
+  // Vite dependency re-optimisation, and cost more time to understand than the
+  // fix took. A missing plugin should say it is missing.
+  const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
+  return tauriFetch as typeof fetch
+}
+
 export async function connect(
   target: DaemonTarget,
   { waitMs = 0 }: ConnectOptions = {},
 ): Promise<ConnectionState> {
-  const transport = createHttpTransport({ baseUrl: target.baseUrl })
+  let fetchImpl: typeof fetch | undefined
+  try {
+    fetchImpl = await daemonFetch()
+  } catch (error) {
+    return {
+      status: 'failed',
+      reason: `The HTTP plugin is unavailable, so the daemon cannot be reached without tripping its CSRF protection: ${String(error)}`,
+    }
+  }
+
+  const transport = createHttpTransport({
+    baseUrl: target.baseUrl,
+    ...(fetchImpl ? { fetchImpl } : {}),
+  })
   const probe = createClient(transport)
 
   const deadline = Date.now() + waitMs
