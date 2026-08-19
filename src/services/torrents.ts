@@ -14,7 +14,28 @@ import type { Transport } from '@/services/transport'
  * Hashes go over the wire as a `|` separated list, which is why every mutating
  * call takes an array and joins it here rather than at the call site.
  */
-export function createTorrentsApi(transport: Transport) {
+/**
+ * What the daemon on the other end can do.
+ *
+ * Derived once at connect from `app/webapiVersion` rather than sniffed per
+ * call, so a screen never pays for the question and a version check lives in
+ * one place.
+ */
+export interface Capabilities {
+  /** 2.11+ (qBittorrent 5.0): `torrents/stop` and `torrents/start`. */
+  stopStart: boolean
+}
+
+export const DEFAULT_CAPABILITIES: Capabilities = { stopStart: true }
+
+/** `"2.11.2"` to `{ stopStart: true }`. Unparseable input assumes modern. */
+export function capabilitiesFor(webApiVersion: string): Capabilities {
+  const [major, minor] = webApiVersion.split('.').map(Number)
+  if (!Number.isFinite(major) || !Number.isFinite(minor)) return DEFAULT_CAPABILITIES
+  return { stopStart: major! > 2 || (major === 2 && minor! >= 11) }
+}
+
+export function createTorrentsApi(transport: Transport, caps: Capabilities = DEFAULT_CAPABILITIES) {
   const hashes = (list: readonly string[]) => ({ hashes: list.join('|') })
 
   return {
@@ -51,10 +72,23 @@ export function createTorrentsApi(transport: Transport) {
     files: (hash: string) => transport.get<TorrentFile[]>('torrents/files', { hash }),
     trackers: (hash: string) => transport.get<Tracker[]>('torrents/trackers', { hash }),
 
-    // Pause and Resume are the verbs for a running or paused torrent. Start and
-    // Stop are reserved for 0% and 100% in the UI, and are not API names.
-    pause: (list: readonly string[]) => transport.post<void>('torrents/pause', hashes(list)),
-    resume: (list: readonly string[]) => transport.post<void>('torrents/resume', hashes(list)),
+    /**
+     * Pause and Resume stay the names rigseed uses, in the UI and here.
+     *
+     * The endpoint underneath is not stable across versions. Web API 2.11
+     * (qBittorrent 5.0) renamed `torrents/pause` and `torrents/resume` to
+     * `torrents/stop` and `torrents/start`, keeping the old pair as
+     * deprecated aliases. A daemon older than that answers 404 for the new
+     * names, and a future one may drop the old ones, so the call picks by what
+     * the daemon reports rather than betting on either.
+     *
+     * The user-facing verbs do not follow the API. Somebody pausing a torrent
+     * has not stopped it, and the copy rules say Pause/Resume.
+     */
+    pause: (list: readonly string[]) =>
+      transport.post<void>(caps.stopStart ? 'torrents/stop' : 'torrents/pause', hashes(list)),
+    resume: (list: readonly string[]) =>
+      transport.post<void>(caps.stopStart ? 'torrents/start' : 'torrents/resume', hashes(list)),
 
     delete: (list: readonly string[], deleteFiles: boolean) =>
       transport.post<void>('torrents/delete', { ...hashes(list), deleteFiles }),

@@ -220,14 +220,14 @@ describe('the write-backs the Files, Trackers and Peers tabs make', () => {
   })
 
   it('bans a peer everywhere, not just where the row was clicked', async () => {
-    // app/banPeers is session-wide. A mock that scoped it per torrent would
+    // transfer/banPeers is session-wide. A mock that scoped it per torrent would
     // teach the wrong thing about what the button does.
     const client = api()
     await client.sync.torrentPeers(FIRST, 0)
     await client.sync.torrentPeers('hash01', 0)
 
     const victim = Object.keys((await client.sync.torrentPeers(FIRST, 0)).peers ?? {})[0]!
-    await client.app.banPeers([victim])
+    await client.transfer.banPeers([victim])
 
     expect((await client.sync.torrentPeers(FIRST, 0)).peers).not.toHaveProperty(victim)
   })

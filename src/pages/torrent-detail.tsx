@@ -15,7 +15,7 @@ import { TrackersTab } from '@/features/torrent-detail/trackers-tab'
 import { TitleBlock } from '@/features/torrent-detail/title-block'
 import { isSynthetic } from '@/features/torrent-detail/tracker-status'
 import { icons } from '@/lib/icons'
-import { useApi } from '@/services/context'
+import { useApi } from '@/services/api-context'
 import { selectTorrent, useTorrentStore } from '@/state/torrent-store'
 import { useDetailPoll } from '@/state/use-detail-poll'
 import { useSyncPoll } from '@/state/use-sync-poll'
@@ -134,10 +134,10 @@ export function TorrentDetail() {
         ) : null}
 
         {tab === 'peers' ? (
-          // The key is `ip:port`, which is exactly what app/banPeers takes.
-          // The ban is session-wide rather than per torrent, which is the
-          // daemon's design and not something this screen can scope.
-          <PeersTab peers={peers} onBan={(key) => void api.app.banPeers([key])} />
+          // The key is `ip:port`, which is exactly what transfer/banPeers
+          // takes. The ban is session-wide rather than per torrent, which is
+          // the daemon's design and not something this screen can scope.
+          <PeersTab peers={peers} onBan={(key) => void api.transfer.banPeers([key])} />
         ) : null}
 
         {tab === 'speed' ? (
