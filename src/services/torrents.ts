@@ -3,6 +3,7 @@ import type {
   Category,
   Torrent,
   TorrentFile,
+  TorrentProperties,
   Tracker,
 } from '@/types/qbittorrent'
 import type { Transport } from '@/services/transport'
@@ -46,7 +47,7 @@ export function createTorrentsApi(transport: Transport) {
       return transport.postForm<void>('torrents/add', form)
     },
 
-    properties: (hash: string) => transport.get<unknown>('torrents/properties', { hash }),
+    properties: (hash: string) => transport.get<TorrentProperties>('torrents/properties', { hash }),
     files: (hash: string) => transport.get<TorrentFile[]>('torrents/files', { hash }),
     trackers: (hash: string) => transport.get<Tracker[]>('torrents/trackers', { hash }),
 
@@ -90,6 +91,47 @@ export function createTorrentsApi(transport: Transport) {
       transport.post<void>('torrents/createCategory', { category, savePath }),
     removeCategories: (list: readonly string[]) =>
       transport.post<void>('torrents/removeCategories', { categories: list.join('\n') }),
+
+    /**
+     * Per-torrent rate limits, in bytes per second. -1 is unlimited.
+     *
+     * The setters are plural and the getters are not, which is the API's own
+     * inconsistency rather than ours: `setDownloadLimit` takes a hash list,
+     * `downloadLimit` takes one too but the Speed tab only ever asks about the
+     * torrent it is showing.
+     */
+    setDownloadLimit: (list: readonly string[], limit: number) =>
+      transport.post<void>('torrents/setDownloadLimit', { ...hashes(list), limit }),
+    setUploadLimit: (list: readonly string[], limit: number) =>
+      transport.post<void>('torrents/setUploadLimit', { ...hashes(list), limit }),
+
+    // Toggles, not setters. The API has no way to say "sequential on"; it
+    // only flips, which means the caller has to know the current state and a
+    // double click is a no-op rather than an error.
+    toggleSequentialDownload: (list: readonly string[]) =>
+      transport.post<void>('torrents/toggleSequentialDownload', hashes(list)),
+    toggleFirstLastPiecePrio: (list: readonly string[]) =>
+      transport.post<void>('torrents/toggleFirstLastPiecePrio', hashes(list)),
+
+    /** This one is a setter, unlike the two above. The API is not uniform. */
+    setAutoManagement: (list: readonly string[], enable: boolean) =>
+      transport.post<void>('torrents/setAutoManagement', { ...hashes(list), enable }),
+
+    addTrackers: (hash: string, urls: readonly string[]) =>
+      transport.post<void>('torrents/addTrackers', { hash, urls: urls.join('\n') }),
+    editTracker: (hash: string, origUrl: string, newUrl: string) =>
+      transport.post<void>('torrents/editTracker', { hash, origUrl, newUrl }),
+    removeTrackers: (hash: string, urls: readonly string[]) =>
+      transport.post<void>('torrents/removeTrackers', { hash, urls: urls.join('|') }),
+
+    /**
+     * Renaming is per file, and the id is the index into `torrents/files`.
+     *
+     * `newPath` is the full path inside the torrent, not just a name, which is
+     * how a file gets moved between folders as well as renamed.
+     */
+    renameFile: (hash: string, id: number, newPath: string) =>
+      transport.post<void>('torrents/renameFile', { hash, id, newPath }),
 
     tags: () => transport.get<string[]>('torrents/tags'),
     createTags: (list: readonly string[]) =>

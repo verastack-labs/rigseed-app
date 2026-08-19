@@ -93,6 +93,74 @@ export interface Peer {
   dl_speed: number
   up_speed: number
   country?: string
+  /** Two-letter code. `country` is the full name, this is what the badge shows. */
+  country_code?: string
+  connection?: string
+  flags?: string
+  relevance?: number
+}
+
+/**
+ * One `sync/torrentPeers` response.
+ *
+ * The same diff contract as `sync/maindata`, scoped to one torrent: `rid`
+ * advances, `full_update` means replace, and absent keys mean unchanged.
+ */
+export interface TorrentPeers {
+  rid: number
+  full_update?: boolean
+  peers?: Record<string, Partial<Peer>>
+  peers_removed?: string[]
+  show_flags?: boolean
+}
+
+/**
+ * `torrents/properties`, the per-torrent detail the list does not carry.
+ *
+ * Overlaps `Torrent` in places and disagrees with it in naming: the same
+ * concept is `dlspeed` in the list and `dl_speed` here. Both names are kept as
+ * the daemon sends them rather than reconciled, for the same reason the rest
+ * of the wire model is: a renaming layer is a place for a typo to become a
+ * silent undefined.
+ */
+export interface TorrentProperties {
+  save_path: string
+  download_path?: string
+  creation_date: number
+  piece_size: number
+  comment: string
+  created_by: string
+  addition_date: number
+  completion_date: number
+  total_size: number
+  total_wasted: number
+  total_uploaded: number
+  total_uploaded_session: number
+  total_downloaded: number
+  total_downloaded_session: number
+  /** -1 is unlimited. */
+  up_limit: number
+  dl_limit: number
+  time_elapsed: number
+  seeding_time: number
+  nb_connections: number
+  nb_connections_limit: number
+  share_ratio: number
+  dl_speed: number
+  dl_speed_avg: number
+  up_speed: number
+  up_speed_avg: number
+  eta: number
+  last_seen: number
+  peers: number
+  peers_total: number
+  seeds: number
+  seeds_total: number
+  pieces_have: number
+  pieces_num: number
+  reannounce: number
+  infohash_v1?: string
+  infohash_v2?: string
 }
 
 export interface Category {

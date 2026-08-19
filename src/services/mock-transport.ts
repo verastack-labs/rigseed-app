@@ -1,5 +1,14 @@
 import type { Transport } from '@/services/transport'
-import type { Category, MainData, Torrent, TorrentState } from '@/types/qbittorrent'
+import type {
+  Category,
+  MainData,
+  Peer,
+  Torrent,
+  TorrentFile,
+  TorrentProperties,
+  TorrentState,
+  Tracker,
+} from '@/types/qbittorrent'
 
 /**
  * A stand-in daemon.
@@ -124,8 +133,145 @@ export function createMockTransport({
   const tags = [...TAGS]
 
   let rid = 0
+  let peerRid = 0
   let sessionDown = 0
   let sessionUp = 0
+
+  /**
+   * Detail fixtures, built once per torrent and then mutated in place.
+   *
+   * Built lazily rather than up front: the detail screen shows one torrent at
+   * a time, and generating peers and file lists for a thousand of them to
+   * render six rows would be the mock's own performance bug.
+   */
+  const details = new Map<string, { files: TorrentFile[]; peers: Record<string, Peer> }>()
+
+  function detailFor(t: Torrent) {
+    const existing = details.get(t.hash)
+    if (existing) return existing
+
+    // A folder torrent, so the Files tab has nesting to render rather than one
+    // row. Sizes add up to the torrent's own, since the tab shows both.
+    const shares = [0.62, 0.24, 0.11, 0.02, 0.01]
+    const names = [
+      `${t.name}/${t.name}.iso`,
+      `${t.name}/extras/bonus-features.mkv`,
+      `${t.name}/extras/artwork.tar.gz`,
+      `${t.name}/SHA256SUMS`,
+      `${t.name}/SHA256SUMS.gpg`,
+    ]
+    const files: TorrentFile[] = names.map((name, index) => ({
+      index,
+      name,
+      size: Math.round(t.size * shares[index]!),
+      progress: Math.min(1, t.progress * (1 + index * 0.05)),
+      priority: index === 2 ? 0 : index === 0 ? 7 : 1,
+      piece_range: [index * 200, index * 200 + 199],
+    }))
+
+    const peers: Record<string, Peer> = {}
+    const clients = ['qBittorrent 5.2.3', 'Transmission 4.0.6', 'libtorrent 2.0.11', 'Deluge 2.1.1']
+    const countries = [
+      ['Netherlands', 'nl'],
+      ['Germany', 'de'],
+      ['Sweden', 'se'],
+      ['Japan', 'jp'],
+      ['Canada', 'ca'],
+      ['India', 'in'],
+    ]
+    const count = 3 + Math.floor(rand() * 4)
+    for (let i = 0; i < count; i += 1) {
+      const ip = `${10 + Math.floor(rand() * 200)}.${Math.floor(rand() * 255)}.${Math.floor(rand() * 255)}.${1 + Math.floor(rand() * 250)}`
+      const port = 6881 + Math.floor(rand() * 2000)
+      const place = countries[i % countries.length]!
+      peers[`${ip}:${port}`] = {
+        ip,
+        port,
+        client: clients[i % clients.length]!,
+        progress: rand(),
+        dl_speed: Math.round(rand() * 900_000),
+        up_speed: Math.round(rand() * 200_000),
+        country: place[0]!,
+        country_code: place[1]!,
+        connection: i % 3 === 0 ? 'µTP' : 'BT',
+        flags: i % 2 ? 'D X' : 'U I',
+      }
+    }
+
+    const detail = { files, peers }
+    details.set(t.hash, detail)
+    return detail
+  }
+
+  const filesFor = (t: Torrent) => detailFor(t).files
+  const peersFor = (hash: string) => {
+    const t = torrents.get(hash)
+    return t ? detailFor(t).peers : {}
+  }
+
+  function trackersFor(t: Torrent): Tracker[] {
+    return [
+      // The three synthetic entries qBittorrent always reports alongside real
+      // trackers. Showing them is correct: the stock client does, and a user
+      // comparing the two would otherwise think rigseed lost a row.
+      { url: '** [DHT] **', status: 2, num_peers: Math.round(rand() * 30), msg: '' },
+      { url: '** [PeX] **', status: 2, num_peers: Math.round(rand() * 12), msg: '' },
+      { url: '** [LSD] **', status: 2, num_peers: 0, msg: '' },
+      {
+        url: 'https://torrent.ubuntu.com/announce',
+        status: 2,
+        num_peers: t.num_seeds + t.num_leechs,
+        msg: '',
+      },
+      { url: 'https://ipv6.torrent.ubuntu.com/announce', status: 3, num_peers: 0, msg: '' },
+      {
+        url: 'udp://tracker.example.invalid:6969/announce',
+        status: 4,
+        num_peers: 0,
+        msg: 'connection timed out',
+      },
+    ]
+  }
+
+  function propertiesFor(t: Torrent): TorrentProperties {
+    return {
+      save_path: t.save_path,
+      download_path: '',
+      creation_date: t.added_on - 86_400 * 30,
+      piece_size: 262_144,
+      comment: 'Ubuntu CD releases are published under a mix of free licences.',
+      created_by: 'mktorrent 1.1',
+      addition_date: t.added_on,
+      completion_date: t.completion_on,
+      total_size: t.size,
+      total_wasted: Math.round(t.size * 0.001),
+      total_uploaded: t.uploaded,
+      total_uploaded_session: Math.round(t.uploaded * 0.4),
+      total_downloaded: t.downloaded,
+      total_downloaded_session: Math.round(t.downloaded * 0.6),
+      up_limit: t.up_limit,
+      dl_limit: t.dl_limit,
+      time_elapsed: 4_200,
+      seeding_time: t.seeding_time,
+      nb_connections: 24,
+      nb_connections_limit: 100,
+      share_ratio: t.ratio,
+      dl_speed: t.dlspeed,
+      dl_speed_avg: Math.round(t.dlspeed * 0.85),
+      up_speed: t.upspeed,
+      up_speed_avg: Math.round(t.upspeed * 0.9),
+      eta: t.eta,
+      last_seen: t.added_on + 3_600,
+      peers: t.num_leechs,
+      peers_total: t.num_leechs * 3,
+      seeds: t.num_seeds,
+      seeds_total: t.num_seeds * 2,
+      pieces_have: Math.round((t.size / 262_144) * t.progress),
+      pieces_num: Math.round(t.size / 262_144),
+      reannounce: 900,
+      infohash_v1: t.hash,
+    }
+  }
 
   // Things created since the last poll. The sync contract sends diffs, and a
   // torrent appearing for the first time has to arrive whole: `tick` reports
@@ -245,6 +391,44 @@ export function createMockTransport({
         } as MainData as T)
       }
 
+      if (path === 'sync/torrentPeers') {
+        const hash = String(params?.hash ?? '')
+        const requested = Number(params?.rid ?? 0)
+        peerRid += 1
+
+        const list = peersFor(hash)
+        if (requested === 0) {
+          return wait({ rid: peerRid, full_update: true, peers: list, show_flags: true } as T)
+        }
+
+        // Only what moved, which for a peer is its progress and its rates.
+        const changed: Record<string, Partial<Peer>> = {}
+        for (const [key, peer] of Object.entries(list)) {
+          peer.progress = Math.min(1, peer.progress + rand() * 0.02)
+          peer.dl_speed = Math.round(rand() * 900_000)
+          peer.up_speed = Math.round(rand() * 200_000)
+          changed[key] = {
+            progress: peer.progress,
+            dl_speed: peer.dl_speed,
+            up_speed: peer.up_speed,
+          }
+        }
+        return wait({ rid: peerRid, peers: changed } as T)
+      }
+
+      if (path === 'torrents/properties') {
+        const t = torrents.get(String(params?.hash ?? ''))
+        return wait((t ? propertiesFor(t) : undefined) as T)
+      }
+      if (path === 'torrents/files') {
+        const t = torrents.get(String(params?.hash ?? ''))
+        return wait((t ? filesFor(t) : []) as T)
+      }
+      if (path === 'torrents/trackers') {
+        const t = torrents.get(String(params?.hash ?? ''))
+        return wait((t ? trackersFor(t) : []) as T)
+      }
+
       if (path === 'torrents/info') return wait([...torrents.values()] as T)
       if (path === 'torrents/categories') return wait(categories as T)
       if (path === 'torrents/tags') return wait(tags as T)
@@ -286,6 +470,32 @@ export function createMockTransport({
           pendingCategories.add(name)
         }
       }
+      // The Speed tab writes back, and a control that reports success while
+      // the value snaps back on the next poll is worse than one that fails.
+      if (path === 'torrents/setDownloadLimit' || path === 'torrents/setUploadLimit') {
+        const limit = Number(body?.limit ?? -1)
+        const key = path.endsWith('DownloadLimit') ? 'dl_limit' : 'up_limit'
+        for (const h of hashes) {
+          const t = torrents.get(h)
+          if (t) t[key] = limit
+        }
+      }
+      if (path === 'torrents/toggleSequentialDownload') {
+        for (const h of hashes) {
+          const t = torrents.get(h)
+          // A toggle, not a setter. The API has no way to say "on", which is
+          // why the caller has to know the current state.
+          if (t) t.sequential_download = !t.sequential_download
+        }
+      }
+      if (path === 'torrents/setAutoManagement') {
+        const enable = String(body?.enable ?? 'false') === 'true'
+        for (const h of hashes) {
+          const t = torrents.get(h)
+          if (t) t.auto_tmm = enable
+        }
+      }
+
       if (path === 'torrents/createTags') {
         for (const tag of String(body?.tags ?? '')
           .split(',')
