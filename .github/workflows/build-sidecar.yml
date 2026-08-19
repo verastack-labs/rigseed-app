@@ -144,11 +144,17 @@ jobs:
           if ((Get-Command "ninja.exe" -ErrorAction SilentlyContinue) -eq $null) { choco install ninja }
           ninja --version
 
+      # The lock timeout is not decoration. The runner's own unattended-upgrades
+      # holds the dpkg lock for the first minutes after boot and apt waits on it
+      # indefinitely by default, which is how this step sat for eight minutes
+      # showing no output at all.
       - name: Install build tools (Linux)
         if: runner.os == 'Linux'
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          sudo apt-get update -o DPkg::Lock::Timeout=300
+          sudo apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=300 \
             build-essential cmake ninja-build libssl-dev zlib1g-dev
 
       # cmake and ninja are preinstalled on the image. Notably absent:
@@ -269,6 +275,9 @@ jobs:
           git clone --branch "v${{ needs.pin.outputs.libtorrent }}" --depth 1 --recurse-submodules \
             https://github.com/arvidn/libtorrent.git "$LIBTORRENT_PATH"
           cd "$LIBTORRENT_PATH"
+          # Expanded below as ${extra[@]+"..."} rather than plain "${extra[@]}".
+          # macOS runners still ship bash 3.2, where expanding an empty array
+          # under `set -u` is an unbound-variable error rather than nothing.
           extra=()
           if [ "$RUNNER_OS" = "Windows" ]; then
             extra+=(
@@ -284,7 +293,7 @@ jobs:
             -DBUILD_SHARED_LIBS=OFF \
             -DBOOST_ROOT="$BOOST_PATH/lib/cmake" \
             -Ddeprecated-functions=OFF \
-            "${extra[@]}"
+            ${extra[@]+"${extra[@]}"}
           cmake --build build
           if [ "$RUNNER_OS" = "Windows" ]; then
             cmake --install build
@@ -318,7 +327,7 @@ jobs:
             -DSTACKTRACE=OFF \
             -DVERBOSE_CONFIGURE=ON \
             -DBOOST_ROOT="$BOOST_PATH/lib/cmake" \
-            "${extra[@]}"
+            ${extra[@]+"${extra[@]}"}
 
       - name: Build qbittorrent-nox
         working-directory: qbittorrent
