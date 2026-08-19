@@ -411,7 +411,27 @@ jobs:
           # the name the app will look for.
           ext=""
           case "${{ matrix.binary }}" in *.exe) ext=".exe";; esac
-          cp "$found" "out/qbittorrent-nox-${{ matrix.triple }}$ext"
+          staged="out/qbittorrent-nox-${{ matrix.triple }}$ext"
+          cp "$found" "$staged"
+
+          # RelWithDebInfo is upstream's build type and worth keeping, but GCC
+          # embeds the debug info in the executable rather than putting it
+          # beside one: the first Linux artifact was 270 MB against 21 MB for
+          # macOS, which separates into a .dSYM, and 20 MB for MSVC, which
+          # writes a .pdb. We ship the binary, not the symbols.
+          before=$(wc -c < "$staged")
+          if command -v strip >/dev/null 2>&1; then
+            strip --strip-unneeded "$staged" 2>/dev/null || strip "$staged" || true
+          fi
+          after=$(wc -c < "$staged")
+          echo "size: $before -> $after bytes"
+
+          # A sidecar this large is a packaging problem rather than a curiosity,
+          # so fail rather than publish one quietly.
+          if [ "$after" -gt 120000000 ]; then
+            echo "::error::$staged is $after bytes after stripping, which is far outside the expected range."
+            exit 1
+          fi
           ls -la out
 
       # Which shared libraries the binary still expects decides how it has to
