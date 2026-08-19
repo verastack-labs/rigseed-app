@@ -2,40 +2,20 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { SectionHeader } from '@/components/ui/section-header'
 import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
+import {
+  PRIORITY,
+  PRIORITY_LABEL,
+  selectedSize,
+  type Priority,
+} from '@/features/add-torrent/priority'
 import { formatBytes } from '@/utils/format'
 import type { TorrentEntry } from '@/utils/torrent-file'
-
-/**
- * The daemon's own priority numbers, not an enum of our own.
- *
- * `torrents/filePrio` takes these values literally, and inventing a parallel
- * vocabulary here would mean a mapping table whose only job is to undo itself.
- */
-export const PRIORITY = { skip: 0, normal: 1, max: 7 } as const
-export type Priority = (typeof PRIORITY)[keyof typeof PRIORITY]
-
-const PRIORITY_LABEL: Record<Priority, string> = {
-  [PRIORITY.skip]: 'Skip',
-  [PRIORITY.normal]: 'Normal',
-  [PRIORITY.max]: 'Max',
-}
 
 export interface ContentsTableProps {
   entries: readonly TorrentEntry[]
   /** Priority per entry, by index into `entries`. */
   priorities: readonly Priority[]
   onChange: (next: Priority[]) => void
-}
-
-/** Total of everything not skipped. This is what the save-path hint compares. */
-export function selectedSize(
-  entries: readonly TorrentEntry[],
-  priorities: readonly Priority[],
-): number {
-  return entries.reduce(
-    (sum, entry, i) => (priorities[i] === PRIORITY.skip ? sum : sum + entry.size),
-    0,
-  )
 }
 
 /**

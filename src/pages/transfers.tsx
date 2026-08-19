@@ -9,7 +9,9 @@ import { SectionHeader } from '@/components/ui/section-header'
 import { SegmentedControl } from '@/components/ui/segmented-control'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TransfersToolbar } from '@/components/shell/transfers-toolbar'
-import { AddFab } from '@/features/transfers/add-fab'
+import { AddTorrentDialog } from '@/features/add-torrent/add-torrent-dialog'
+import type { Source } from '@/features/add-torrent/source-picker'
+import { AddFab, type AddSource } from '@/features/transfers/add-fab'
 import { Sidebar } from '@/features/transfers/sidebar'
 import { TorrentEasy } from '@/features/transfers/torrent-easy'
 import { TorrentGrid } from '@/features/transfers/torrent-grid'
@@ -35,6 +37,12 @@ export function Transfers() {
   const serverState = useTorrentStore((s) => s.serverState)
   const loaded = useTorrentStore((s) => s.loaded)
 
+  // Every category and tag the daemon knows, not only the ones currently in
+  // use. The sidebar counts what is on screen; Add Torrent has to offer the
+  // empty ones too, or a category with nothing in it becomes unreachable.
+  const allCategories = useTorrentStore(useShallow((s) => Object.keys(s.categories)))
+  const allTags = useTorrentStore(useShallow((s) => s.tags))
+
   const defaultLayout = useThemeStore((s) => s.defaultLayout)
   const {
     status,
@@ -55,6 +63,9 @@ export function Transfers() {
   const filtersActive = useTransfersStore(hasActiveFilters)
 
   const [confirmRemove, setConfirmRemove] = useState<readonly string[] | null>(null)
+  // Null means closed. The source it opens on comes from the FAB option that
+  // was clicked, so picking "Add magnet link" does not land on the file tab.
+  const [adding, setAdding] = useState<Source | null>(null)
 
   // The screen's own choice wins, otherwise the one picked at first run.
   const activeLayout: Layout = layout ?? defaultLayout
@@ -183,7 +194,19 @@ export function Transfers() {
         </div>
       </div>
 
-      <AddFab onSelect={() => {}} />
+      <AddFab onSelect={(picked: AddSource) => setAdding(picked === 'file' ? 'file' : 'magnet')} />
+
+      {/* Mounted only while open, so every field starts fresh rather than
+          carrying the last attempt's choices into the next torrent. */}
+      {adding !== null ? (
+        <AddTorrentDialog
+          initialSource={adding}
+          onClose={() => setAdding(null)}
+          categories={allCategories}
+          tags={allTags}
+          freeSpace={serverState.free_space_on_disk ?? 0}
+        />
+      ) : null}
 
       <ConfirmDialog
         open={confirmRemove !== null}
