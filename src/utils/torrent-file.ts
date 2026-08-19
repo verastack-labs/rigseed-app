@@ -25,9 +25,11 @@ export interface TorrentMeta {
   /**
    * The `info` value's raw bytes, for hashing.
    *
-   * A view into the original buffer, not a copy.
+   * A view into the original buffer, not a copy. Typed against ArrayBuffer
+   * specifically because WebCrypto will not take a view that might be over a
+   * SharedArrayBuffer, and the alternative is copying the piece hashes.
    */
-  infoBytes: Uint8Array
+  infoBytes: Uint8Array<ArrayBuffer>
 }
 
 export class TorrentParseError extends Error {
@@ -37,7 +39,7 @@ export class TorrentParseError extends Error {
   }
 }
 
-type Bencode = number | Uint8Array | Bencode[] | BencodeDict
+type Bencode = number | Uint8Array<ArrayBuffer> | Bencode[] | BencodeDict
 interface BencodeDict {
   [key: string]: Bencode
 }
@@ -71,7 +73,7 @@ class Reader {
   spans: Record<string, [number, number]> = {}
   private depth = 0
 
-  constructor(readonly bytes: Uint8Array) {}
+  constructor(readonly bytes: Uint8Array<ArrayBuffer>) {}
 
   byte(): number {
     if (this.at >= this.bytes.length) throw new TorrentParseError('truncated')
@@ -102,7 +104,7 @@ class Reader {
     return n
   }
 
-  string(): Uint8Array {
+  string(): Uint8Array<ArrayBuffer> {
     let digits = ''
     while (this.byte() !== COLON) {
       digits += String.fromCharCode(this.byte())
@@ -145,7 +147,7 @@ class Reader {
 }
 
 const decoder = new TextDecoder('utf-8')
-const text = (bytes: Uint8Array): string => decoder.decode(bytes)
+const text = (bytes: Uint8Array<ArrayBuffer>): string => decoder.decode(bytes)
 
 function isDict(value: Bencode | undefined): value is BencodeDict {
   return (
@@ -164,7 +166,7 @@ function isDict(value: Bencode | undefined): value is BencodeDict {
  * saying so at the point of picking the file is better than adding it and
  * watching it fail.
  */
-export function parseTorrent(data: ArrayBuffer | Uint8Array): TorrentMeta {
+export function parseTorrent(data: ArrayBuffer | Uint8Array<ArrayBuffer>): TorrentMeta {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data)
   if (bytes.length === 0) throw new TorrentParseError('empty file')
 
@@ -180,7 +182,7 @@ export function parseTorrent(data: ArrayBuffer | Uint8Array): TorrentMeta {
 
   const nameBytes = info['name']
   if (!ArrayBuffer.isView(nameBytes)) throw new TorrentParseError('not a torrent: no name')
-  const name = text(nameBytes as Uint8Array)
+  const name = text(nameBytes as Uint8Array<ArrayBuffer>)
 
   const files = info['files']
 
@@ -200,7 +202,7 @@ export function parseTorrent(data: ArrayBuffer | Uint8Array): TorrentMeta {
     const segments = file['path']
     if (typeof size !== 'number' || !Array.isArray(segments)) continue
     const path = segments
-      .filter((s): s is Uint8Array => ArrayBuffer.isView(s))
+      .filter((s): s is Uint8Array<ArrayBuffer> => ArrayBuffer.isView(s))
       .map(text)
       .join('/')
     if (path) entries.push({ path, size })
