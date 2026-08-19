@@ -1,0 +1,63 @@
+import { Card } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { DataValue } from '@/components/ui/data-value'
+import { IconTile } from '@/components/ui/icon-tile'
+import { ProgressBar } from '@/components/ui/progress-bar'
+import { StatusDot } from '@/components/ui/status-dot'
+import { RowMenu, type LayoutProps } from '@/features/transfers/row-menu'
+import { icons } from '@/lib/icons'
+import { STATE_LABEL, formatPercent, formatSpeed, isPaused, stateTone } from '@/utils/format'
+
+/** Grid, the default layout. Balanced cards with progress and speeds. */
+export function TorrentGrid({ torrents, selected, onToggle, ...actions }: LayoutProps) {
+  return (
+    <div className="grid grid-cols-1 gap-3.5 p-6 md:grid-cols-2 xl:grid-cols-3">
+      {torrents.map((torrent) => (
+        <Card key={torrent.hash} hoverable padding="card" className="overflow-visible">
+          <div className="flex flex-col gap-2.5">
+            <div className="flex items-start gap-2.5">
+              <span className="pt-0.5">
+                <Checkbox
+                  checked={selected.includes(torrent.hash)}
+                  onChange={() => onToggle(torrent.hash)}
+                  label={`Select ${torrent.name}`}
+                />
+              </span>
+              <IconTile size={26}>
+                <icons.folder className="size-[13px]" strokeWidth={2} />
+              </IconTile>
+              <span
+                title={torrent.name}
+                className="min-w-0 flex-1 truncate pt-1 text-[12.5px] font-semibold text-text"
+              >
+                {torrent.name}
+              </span>
+              <RowMenu torrent={torrent} actions={actions} />
+            </div>
+
+            <StatusDot tone={stateTone(torrent.state)} label={STATE_LABEL[torrent.state]} />
+
+            <ProgressBar
+              value={torrent.progress * 100}
+              paused={isPaused(torrent.state)}
+              label={torrent.name}
+            />
+
+            <div className="flex items-center gap-3">
+              <DataValue size="xs" tone={isPaused(torrent.state) ? 'dimmer' : 'accent'}>
+                {formatSpeed(torrent.dlspeed)}
+              </DataValue>
+              <DataValue size="xs" tone={isPaused(torrent.state) ? 'dimmer' : 'accent2'}>
+                {formatSpeed(torrent.upspeed)}
+              </DataValue>
+              <span className="flex-1" />
+              <DataValue size="xs" tone="dim">
+                {formatPercent(torrent.progress)}
+              </DataValue>
+            </div>
+          </div>
+        </Card>
+      ))}
+    </div>
+  )
+}

@@ -1,6 +1,7 @@
 import { HashRouter, Route, Routes } from 'react-router'
 
 import { AppShell } from '@/components/shell/app-shell'
+import { ApiProvider } from '@/services/context'
 import { Placeholder } from '@/pages/placeholder'
 import { Transfers } from '@/pages/transfers'
 
@@ -14,32 +15,34 @@ import { Transfers } from '@/pages/transfers'
  */
 export function App() {
   return (
-    <HashRouter>
-      <Routes>
-        <Route element={<AppShell />}>
-          <Route index element={<Transfers />} />
-          <Route
-            path="search"
-            element={<Placeholder title="Search" tier="V2" api="search/start" />}
-          />
-          <Route path="rss" element={<Placeholder title="RSS" tier="V2" api="rss/items" />} />
-          <Route
-            path="categories"
-            element={
-              <Placeholder title="Categories and tags" tier="V1" api="torrents/categories" />
-            }
-          />
-          <Route path="logs" element={<Placeholder title="Logs" tier="V1" api="log/main" />} />
-          <Route
-            path="connections"
-            element={<Placeholder title="Connections" tier="V2" api="auth/login" />}
-          />
-          <Route
-            path="settings"
-            element={<Placeholder title="Settings" tier="MVP" api="app/preferences" />}
-          />
-        </Route>
-      </Routes>
-    </HashRouter>
+    <ApiProvider>
+      <HashRouter>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route index element={<Transfers />} />
+            <Route
+              path="search"
+              element={<Placeholder title="Search" tier="V2" api="search/start" />}
+            />
+            <Route path="rss" element={<Placeholder title="RSS" tier="V2" api="rss/items" />} />
+            <Route
+              path="categories"
+              element={
+                <Placeholder title="Categories and tags" tier="V1" api="torrents/categories" />
+              }
+            />
+            <Route path="logs" element={<Placeholder title="Logs" tier="V1" api="log/main" />} />
+            <Route
+              path="connections"
+              element={<Placeholder title="Connections" tier="V2" api="auth/login" />}
+            />
+            <Route
+              path="settings"
+              element={<Placeholder title="Settings" tier="MVP" api="app/preferences" />}
+            />
+          </Route>
+        </Routes>
+      </HashRouter>
+    </ApiProvider>
   )
 }

@@ -44,6 +44,7 @@ export default tseslint.config(
             'iconButtonVariants',
             'dataValueVariants',
             'statCardValueVariants',
+            'useApi',
           ],
         },
       ],
