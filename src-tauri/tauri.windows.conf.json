@@ -1,0 +1,12 @@
+{
+  "bundle": {
+    "resources": {
+      "binaries/Qt6*.dll": "./",
+      "binaries/msvcp140*.dll": "./",
+      "binaries/vcruntime140*.dll": "./",
+      "binaries/sqldrivers": "./sqldrivers",
+      "binaries/tls": "./tls",
+      "binaries/networkinformation": "./networkinformation"
+    }
+  }
+}

@@ -8,12 +8,35 @@ export interface DaemonTarget {
   baseUrl: string
   username: string
   password: string
+  /**
+   * What to call this daemon on screen.
+   *
+   * Needed because `baseUrl` is empty when the dev server proxies, and
+   * "connected to nothing" is a worse label than no label at all.
+   */
+  label?: string
+  /**
+   * True when rigseed started this daemon itself.
+   *
+   * Only then is waiting right. Our own daemon is spawned as the window opens
+   * and has not bound its port yet; one that was already running is either up
+   * or it is not, and ten seconds of "Connecting…" to tell somebody it is not
+   * helps nobody.
+   */
+  spawned?: boolean
 }
 
 export type ConnectionState =
   | { status: 'connecting' }
   | { status: 'mock'; client: Client; reason: string }
-  | { status: 'connected'; client: Client; version: string; webApiVersion: string }
+  | {
+      status: 'connected'
+      client: Client
+      version: string
+      webApiVersion: string
+      /** Host and port, for the top bar. */
+      label: string
+    }
   | { status: 'failed'; reason: string }
 
 /**
@@ -29,19 +52,94 @@ export type ConnectionState =
  * HTTP 200, so a transport that only checks status codes reports a healthy
  * connection that 403s on the next call.
  */
-export async function connect(target: DaemonTarget): Promise<ConnectionState> {
-  const transport = createHttpTransport({ baseUrl: target.baseUrl })
-  const probe = createClient(transport)
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+/** `http://127.0.0.1:8080/` to `127.0.0.1:8080`. Falls back to the input. */
+function hostOf(baseUrl: string): string {
+  if (!baseUrl) return 'this origin'
   try {
-    const accepted = await probe.auth.login(target.username, target.password)
-    if (!accepted) {
-      return { status: 'failed', reason: 'The daemon rejected those credentials.' }
-    }
+    return new URL(baseUrl).host
+  } catch {
+    return baseUrl
+  }
+}
+
+export interface ConnectOptions {
+  /**
+   * How long to keep trying while nothing answers at all.
+   *
+   * The bundled daemon is spawned by Rust and takes a moment to bind its port,
+   * so the app is ready to ask before there is anything to ask. Only refusals
+   * to connect are retried. A daemon that answers and rejects the credentials
+   * has given a final answer, and asking again would just be a slow way to
+   * lock the account out.
+   */
+  waitMs?: number
+}
+
+/**
+ * The fetch to reach the daemon with.
+ *
+ * Inside Tauri this is the HTTP plugin, which performs the request in Rust.
+ * That is not an optimisation: qBittorrent's CSRF protection compares the
+ * request origin against its own host, and a webview sends
+ * `http://tauri.localhost`, which it answers with 401. Measured against a real
+ * daemon, a correct password with that Origin is rejected and the same
+ * password with no Origin at all is accepted.
+ *
+ * The alternative was turning the daemon's CSRF protection off, which would
+ * leave it open to any page in the user's browser that learned the password.
+ */
+async function daemonFetch(): Promise<typeof fetch | undefined> {
+  if (!(globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return undefined
+
+  // Not caught. Falling back to the webview's fetch inside Tauri means every
+  // request carries an origin the daemon rejects, and it rejects it as a 401,
+  // so the app would report "the daemon rejected those credentials" about a
+  // password that is perfectly correct. That happened once already, during a
+  // Vite dependency re-optimisation, and cost more time to understand than the
+  // fix took. A missing plugin should say it is missing.
+  const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
+  return tauriFetch as typeof fetch
+}
+
+export async function connect(
+  target: DaemonTarget,
+  { waitMs = 0 }: ConnectOptions = {},
+): Promise<ConnectionState> {
+  let fetchImpl: typeof fetch | undefined
+  try {
+    fetchImpl = await daemonFetch()
   } catch (error) {
     return {
       status: 'failed',
-      reason: `Could not reach the daemon at ${target.baseUrl || 'this origin'}: ${String(error)}`,
+      reason: `The HTTP plugin is unavailable, so the daemon cannot be reached without tripping its CSRF protection: ${String(error)}`,
+    }
+  }
+
+  const transport = createHttpTransport({
+    baseUrl: target.baseUrl,
+    ...(fetchImpl ? { fetchImpl } : {}),
+  })
+  const probe = createClient(transport)
+
+  const deadline = Date.now() + waitMs
+
+  for (;;) {
+    try {
+      const accepted = await probe.auth.login(target.username, target.password)
+      if (!accepted) {
+        return { status: 'failed', reason: 'The daemon rejected those credentials.' }
+      }
+      break
+    } catch (error) {
+      if (Date.now() >= deadline) {
+        return {
+          status: 'failed',
+          reason: `Could not reach the daemon at ${target.baseUrl || 'this origin'}: ${String(error)}`,
+        }
+      }
+      await sleep(250)
     }
   }
 
@@ -55,6 +153,7 @@ export async function connect(target: DaemonTarget): Promise<ConnectionState> {
       client: createClient(transport, capabilitiesFor(webApiVersion)),
       version,
       webApiVersion,
+      label: target.label ?? hostOf(target.baseUrl),
     }
   } catch (error) {
     // Logged in but cannot be asked what it is, which is stranger than being

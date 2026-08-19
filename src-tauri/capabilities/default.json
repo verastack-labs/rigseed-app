@@ -3,5 +3,18 @@
   "identifier": "default",
   "description": "enables the default permissions",
   "windows": ["main"],
-  "permissions": ["core:default", "opener:default", "shell:allow-execute", "store:default"]
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "shell:allow-execute",
+    "store:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        {
+          "url": "http://127.0.0.1:*"
+        }
+      ]
+    }
+  ]
 }

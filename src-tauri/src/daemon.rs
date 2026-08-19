@@ -8,21 +8,17 @@
 //! daemon's WebUI is not open to anything else on the machine, not as something
 //! a person needs to know.
 
-// Written and tested, but not reachable until the sidecar question in
-// binaries/README.md is settled. Writing the config before there is a daemon to
-// read it would be pretending, and one of these needs a correct PBKDF2 hash in
-// qBittorrent's own format, which is work worth doing once rather than twice.
-#![allow(dead_code)]
-
-use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
+use hmac::Hmac;
 use rand::Rng;
+use sha2::Sha512;
 
 const SERVICE: &str = "rigseed";
 const ACCOUNT: &str = "bundled-webui";
-const USERNAME: &str = "rigseed";
 
 #[derive(Debug, thiserror::Error)]
 pub enum DaemonError {
@@ -30,22 +26,6 @@ pub enum DaemonError {
     Keychain(#[from] keyring::Error),
     #[error("could not read or write the qBittorrent config: {0}")]
     Config(#[from] std::io::Error),
-}
-
-/// What the frontend needs to talk to the local daemon.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct Credentials {
-    pub username: String,
-    pub password: String,
-    pub base_url: String,
-}
-
-impl fmt::Display for Credentials {
-    /// Never print the password. This type ends up in log lines and error
-    /// context, and a generated secret in a log file is still a leaked secret.
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Credentials({} @ {})", self.username, self.base_url)
-    }
 }
 
 /// 32 characters from an unambiguous alphabet.
@@ -58,6 +38,27 @@ fn generate_password() -> String {
     (0..32)
         .map(|_| ALPHABET[rng.gen_range(0..ALPHABET.len())] as char)
         .collect()
+}
+
+/// Hashes a password the way qBittorrent stores it.
+///
+/// PBKDF2-HMAC-SHA512, 100000 iterations, a 16-byte salt and a 64-byte key,
+/// written as `base64(salt):base64(key)`. The caller wraps the result in
+/// `@ByteArray(...)`, which is Qt's own encoding for a settings value that is
+/// bytes rather than text.
+///
+/// These numbers are not ours to choose. They are what qBittorrent's own
+/// `Utils::Password::generate` uses, and a config it cannot verify is a daemon
+/// nobody can log into.
+pub fn hash_password(password: &str) -> String {
+    const ITERATIONS: u32 = 100_000;
+
+    let salt: [u8; 16] = rand::thread_rng().gen();
+    let mut key = [0u8; 64];
+    pbkdf2::pbkdf2::<Hmac<Sha512>>(password.as_bytes(), &salt, ITERATIONS, &mut key)
+        .expect("HMAC-SHA512 accepts a key of any length");
+
+    format!("{}:{}", BASE64.encode(salt), BASE64.encode(key))
 }
 
 /// Fetches the stored password, generating and storing one on first launch.
@@ -75,13 +76,30 @@ pub fn ensure_password() -> Result<String, DaemonError> {
     }
 }
 
-/// Where qBittorrent keeps its config, per platform.
+/// Where qBittorrent keeps its config inside a profile directory.
 ///
-/// The path stays under `qBittorrent`, not `rigseed`. It describes the real
-/// software underneath, and renaming it would break a user's ability to point
-/// an existing install at the same data.
+/// The daemon is started with `--profile=<app_data>`, which is what keeps the
+/// bundled instance's settings and torrents out of any qBittorrent the user
+/// already has. Under a profile the layout is fixed:
+///
+/// ```text
+/// <app_data>/qBittorrent/config/qBittorrent.ini    (Windows)
+/// <app_data>/qBittorrent/config/qBittorrent.conf   (everywhere else)
+/// ```
+///
+/// The directory stays named `qBittorrent`, not `rigseed`. It describes the
+/// software that reads it, and renaming it would break a user's ability to
+/// point an existing install at the same data.
+///
+/// The Windows layout is confirmed against a running 5.0 daemon. The Unix
+/// extension follows qBittorrent's own Profile code and has not been run.
 pub fn config_path(app_data: &Path) -> PathBuf {
-    app_data.join("qBittorrent").join("qBittorrent.conf")
+    let name = if cfg!(windows) {
+        "qBittorrent.ini"
+    } else {
+        "qBittorrent.conf"
+    };
+    app_data.join("qBittorrent").join("config").join(name)
 }
 
 /// Writes the WebUI credentials into `qBittorrent.conf`.
@@ -89,47 +107,71 @@ pub fn config_path(app_data: &Path) -> PathBuf {
 /// The file is INI-shaped. Rather than parse it properly, existing keys are
 /// replaced line by line and missing ones appended under `[Preferences]`, which
 /// leaves any setting the user changed by hand untouched.
-pub fn write_config(path: &Path, username: &str, password_hash: &str, port: u16) -> Result<(), DaemonError> {
+pub fn write_config(
+    path: &Path,
+    username: &str,
+    password_hash: &str,
+    port: u16,
+) -> Result<(), DaemonError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
 
-    let existing = fs::read_to_string(path).unwrap_or_default();
-    let wanted: Vec<(&str, String)> = vec![
-        ("WebUI\\Enabled", "true".into()),
-        ("WebUI\\Port", port.to_string()),
-        ("WebUI\\Username", username.to_string()),
-        ("WebUI\\Password_PBKDF2", format!("\"{password_hash}\"")),
-        ("WebUI\\LocalHostAuth", "true".into()),
-        ("WebUI\\CSRFProtection", "true".into()),
+    // Section, key, value. The section matters: qBittorrent reads this through
+    // QSettings, where `Preferences/WebUI/Enabled` lands as `WebUI\Enabled`
+    // inside `[Preferences]`. Putting the legal notice there too would make it
+    // `Preferences/LegalNotice/Accepted`, which nothing reads.
+    let wanted: Vec<(&str, String, String)> = vec![
+        // qBittorrent shows a legal notice on first run and waits for an
+        // answer. Headless there is nobody to answer it, and rigseed carries
+        // the same notice in its own first-run flow, so accepting it here
+        // records a decision the user already made rather than skipping one.
+        ("LegalNotice", "Accepted".into(), "true".into()),
+        ("Preferences", webui("Enabled"), "true".into()),
+        ("Preferences", webui("Port"), port.to_string()),
+        ("Preferences", webui("Username"), username.to_string()),
+        (
+            "Preferences",
+            webui("Password_PBKDF2"),
+            format!("\"@ByteArray({password_hash})\""),
+        ),
+        // Localhost still authenticates. The daemon listens on 127.0.0.1, but
+        // so does everything else on the machine, and an unauthenticated WebUI
+        // is reachable by any of it.
+        ("Preferences", webui("LocalHostAuth"), "true".into()),
+        ("Preferences", webui("CSRFProtection"), "true".into()),
     ];
 
+    let existing = fs::read_to_string(path).unwrap_or_default();
     let mut lines: Vec<String> = existing.lines().map(str::to_string).collect();
-    let mut unhandled: Vec<(&str, String)> = Vec::new();
 
-    for (key, value) in wanted {
-        let prefix = format!("{key}=");
-        match lines.iter().position(|l| l.starts_with(&prefix)) {
-            Some(at) => lines[at] = format!("{prefix}{value}"),
-            None => unhandled.push((key, value)),
-        }
-    }
-
-    if !unhandled.is_empty() {
-        if !lines.iter().any(|l| l.trim() == "[Preferences]") {
-            lines.push("[Preferences]".into());
-        }
-        let at = lines
-            .iter()
-            .position(|l| l.trim() == "[Preferences]")
-            .expect("just ensured the section exists");
-        for (key, value) in unhandled.into_iter().rev() {
-            lines.insert(at + 1, format!("{key}={value}"));
+    for (section, key, value) in wanted {
+        let line = format!("{key}={value}");
+        match lines.iter().position(|l| l.starts_with(&format!("{key}="))) {
+            // Replaced in place, so whatever the user changed by hand around it
+            // survives. This file is theirs as much as ours.
+            Some(at) => lines[at] = line,
+            None => {
+                let header = format!("[{section}]");
+                let at = match lines.iter().position(|l| l.trim() == header) {
+                    Some(at) => at,
+                    None => {
+                        lines.push(header);
+                        lines.len() - 1
+                    }
+                };
+                lines.insert(at + 1, line);
+            }
         }
     }
 
     fs::write(path, lines.join("\n") + "\n")?;
     Ok(())
+}
+
+/// A `Preferences/WebUI/...` key in the shape QSettings writes it.
+fn webui(key: &str) -> String {
+    format!("WebUI\\{key}")
 }
 
 #[cfg(test)]
@@ -148,18 +190,6 @@ mod tests {
     #[test]
     fn generated_passwords_differ() {
         assert_ne!(generate_password(), generate_password());
-    }
-
-    #[test]
-    fn credentials_never_render_the_password() {
-        let creds = Credentials {
-            username: "rigseed".into(),
-            password: "hunter2-should-not-appear".into(),
-            base_url: "http://127.0.0.1:8080".into(),
-        };
-        let rendered = format!("{creds}");
-        assert!(!rendered.contains("hunter2-should-not-appear"));
-        assert!(rendered.contains("rigseed"));
     }
 
     #[test]
@@ -199,5 +229,71 @@ mod tests {
             "a setting the user changed by hand survives"
         );
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn hashes_in_qbittorrents_own_format() {
+        // base64(16-byte salt) : base64(64-byte key). qBittorrent parses this
+        // by splitting on the colon and decoding both halves, so the shape is
+        // not ours to vary: a hash it cannot parse is a daemon nobody can log
+        // into, and the failure looks like a wrong password.
+        let hash = hash_password("hunter2");
+        let (salt, key) = hash.split_once(':').expect("salt and key, colon separated");
+
+        assert_eq!(BASE64.decode(salt).unwrap().len(), 16);
+        assert_eq!(BASE64.decode(key).unwrap().len(), 64);
+    }
+
+    #[test]
+    fn hashes_differ_for_the_same_password() {
+        // The salt is per call. Two identical hashes would mean it is not.
+        assert_ne!(hash_password("hunter2"), hash_password("hunter2"));
+    }
+
+    #[test]
+    fn puts_the_legal_notice_in_its_own_section() {
+        // Under [Preferences] it would read as Preferences/LegalNotice/Accepted,
+        // which nothing looks at, and the daemon would sit waiting for an answer
+        // from a console nobody is watching.
+        let dir = std::env::temp_dir().join(format!("rigseed-test-notice-{}", std::process::id()));
+        let path = dir.join("qBittorrent.conf");
+        let _ = fs::remove_dir_all(&dir);
+
+        write_config(&path, "rigseed", "hash", 8080).unwrap();
+        let written = fs::read_to_string(&path).unwrap();
+
+        let notice = written.find("[LegalNotice]").expect("its own section");
+        let accepted = written.find("Accepted=true").expect("accepted");
+        let prefs = written.find("[Preferences]").expect("preferences");
+        assert!(accepted > notice, "Accepted sits under [LegalNotice]");
+        assert!(accepted < prefs || prefs > notice);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn wraps_the_hash_the_way_qt_stores_bytes() {
+        let dir = std::env::temp_dir().join(format!("rigseed-test-bytes-{}", std::process::id()));
+        let path = dir.join("qBittorrent.conf");
+        let _ = fs::remove_dir_all(&dir);
+
+        write_config(&path, "rigseed", "SALT:KEY", 8080).unwrap();
+        let written = fs::read_to_string(&path).unwrap();
+
+        assert!(
+            written.contains("Password_PBKDF2=\"@ByteArray(SALT:KEY)\""),
+            "got: {written}"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn config_path_sits_inside_the_profile() {
+        // qBittorrent reads <profile>/qBittorrent/config/ when given --profile.
+        // Anywhere else and it silently uses its defaults, which means its own
+        // generated password rather than ours.
+        let path = config_path(Path::new("/app-data"));
+        let text = path.to_string_lossy().replace('\\', "/");
+        assert!(text.ends_with("/qBittorrent/config/qBittorrent.ini")
+            || text.ends_with("/qBittorrent/config/qBittorrent.conf"), "got {text}");
     }
 }

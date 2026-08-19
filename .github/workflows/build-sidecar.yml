@@ -177,7 +177,9 @@ jobs:
           )
 
           missing=()
-          for pkg in build-essential cmake ninja-build libssl-dev zlib1g-dev; do
+          # patchelf rewrites the sidecar's RPATH so it finds the Qt
+          # libraries shipped beside it rather than the build machine's.
+          for pkg in build-essential cmake ninja-build libssl-dev zlib1g-dev patchelf; do
             dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
           done
 
@@ -432,6 +434,313 @@ jobs:
             echo "::error::$staged is $after bytes after stripping, which is far outside the expected range."
             exit 1
           fi
+          ls -la out
+
+      # ------------------------------------------------------- runtime bundle
+
+      # The sidecar cannot ship as a lone executable. `-DGUI=OFF` still links
+      # Qt Core, Network, Sql and Xml, and none of those are on an end user's
+      # machine; what else has to travel differs per platform. Each is
+      # collected with the tool that exists for it, laid out as the app will
+      # ship it, and then proved by running the binary with the build
+      # machine's own Qt taken off the search path.
+      #
+      # That last part is the whole point. A bundle that is missing a library
+      # still runs perfectly on the machine that built it.
+
+      - name: Collect the runtime libraries (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="qbittorrent-nox-${{ matrix.triple }}"
+          mkdir -p bundle/lib
+          cp "out/$bin" "bundle/$bin"
+
+          # Derived from what the binary actually resolves rather than from a
+          # list written down once. A Qt version that adds a dependency would
+          # otherwise ship a bundle that is quietly incomplete.
+          collect() {
+            ldd "$1" 2>/dev/null | awk '{print $3}' | grep -v '^$' || true
+          }
+
+          for dep in $(collect "bundle/$bin"); do
+            case "$dep" in "$QT_ROOT_DIR"/*) cp -Lv "$dep" bundle/lib/ ;; esac
+          done
+
+          # Qt's libraries resolve each other, and ICU is pulled in by Qt
+          # rather than by nox, so it never appears in the binary's own list.
+          # Three passes is one more than the depth Qt actually has.
+          for pass in 1 2 3; do
+            for lib in bundle/lib/*.so*; do
+              for dep in $(collect "$lib"); do
+                case "$dep" in
+                  "$QT_ROOT_DIR"/*)
+                    name=$(basename "$dep")
+                    [ -e "bundle/lib/$name" ] || cp -Lv "$dep" "bundle/lib/$name"
+                    ;;
+                esac
+              done
+            done
+          done
+
+          # Relative to the binary, so the bundle can be installed anywhere and
+          # needs no LD_LIBRARY_PATH from whatever spawns it. Single-quoted:
+          # $ORIGIN is read by the loader, not by this shell.
+          #
+          # Two candidates, because Tauri puts externalBin beside the app
+          # executable and resources somewhere else again, and only one of
+          # those is a directory we control the name of. Naming both costs
+          # nothing and removes a guess about a layout that does not exist yet.
+          patchelf --set-rpath '$ORIGIN/lib:$ORIGIN/../lib/rigseed/lib' "bundle/$bin"
+          for lib in bundle/lib/*.so*; do
+            patchelf --set-rpath '$ORIGIN' "$lib"
+          done
+
+          ls -la bundle bundle/lib
+
+      - name: Collect the runtime libraries (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="qbittorrent-nox-${{ matrix.triple }}"
+          mkdir -p bundle/lib
+          cp "out/$bin" "bundle/$bin"
+
+          # The closure of what the binary actually names, the same way the
+          # Linux step works, rather than whatever macdeployqt decided to copy.
+          #
+          # macdeployqt was the first approach and it over-collected badly: it
+          # deploys plugins as well as libraries, and the plugins drag in QtGui
+          # and QtWidgets, which is 30 MB of desktop toolkit in a build
+          # configured -DGUI=OFF. It also left every framework duplicated as a
+          # loose file beside its own .framework directory, because a framework
+          # install name looks like an ordinary path to anything that only
+          # calls basename on it.
+          #
+          # Walking the references costs a few lines and gets exactly the four
+          # frameworks the binary links, plus the OpenSSL pair.
+
+          # An install name to the thing on disk it refers to, or nothing.
+          resolve() {
+            case "$1" in
+              @rpath/*) echo "$QT_ROOT_DIR/lib/${1#@rpath/}" ;;
+              /*) echo "$1" ;;
+              *) echo "" ;;
+            esac
+          }
+
+          # Copy a dependency into lib, keeping a framework a framework, and
+          # print the install name it should be referred to by from now on.
+          bring_in() {
+            local ref="$1" src
+            src=$(resolve "$ref")
+            [ -n "$src" ] || return 1
+
+            case "$ref" in
+              *.framework/*)
+                local rest="${ref#*.framework/}"
+                local stem="${ref%%.framework/*}"
+                local fw="${stem##*/}"
+                if [ ! -d "bundle/lib/$fw.framework" ]; then
+                  local srcstem="${src%%.framework/*}"
+                  cp -R "$srcstem.framework" bundle/lib/ || return 1
+                  echo "collected $fw.framework" >&2
+                fi
+                echo "@rpath/$fw.framework/$rest"
+                ;;
+              *)
+                local base="${ref##*/}"
+                if [ ! -e "bundle/lib/$base" ]; then
+                  cp -L "$src" "bundle/lib/$base" || return 1
+                  echo "collected $base" >&2
+                fi
+                echo "@rpath/$base"
+                ;;
+            esac
+          }
+
+          # Rewrite one Mach-O so every non-system reference is @rpath, bringing
+          # in whatever it names. System libraries stay: they are on every Mac
+          # and shipping copies would be worse than pointless.
+          relink() {
+            local target="$1" ref new
+            chmod u+w "$target"
+            for ref in $(otool -L "$target" | tail -n +2 | awk '{print $1}'); do
+              case "$ref" in
+                /usr/lib/*|/System/*|@loader_path/*) continue ;;
+              esac
+              if new=$(bring_in "$ref"); then
+                [ "$new" = "$ref" ] || install_name_tool -change "$ref" "$new" "$target"
+              fi
+            done
+          }
+
+          relink "bundle/$bin"
+
+          # Until nothing new arrives: a framework brought in on one round names
+          # others that are not here yet. Qt is two deep, so three rounds is one
+          # spare and the loop is cheap.
+          for round in 1 2 3; do
+            for lib in bundle/lib/*.dylib; do
+              [ -e "$lib" ] || continue
+              install_name_tool -id "@rpath/${lib##*/}" "$lib" 2>/dev/null || true
+              relink "$lib"
+            done
+            for fw in bundle/lib/*.framework; do
+              [ -d "$fw" ] || continue
+              name=$(basename "$fw" .framework)
+              inner="$fw/Versions/A/$name"
+              [ -f "$inner" ] || continue
+              chmod u+w "$inner"
+              install_name_tool -id "@rpath/$name.framework/Versions/A/$name" "$inner"
+              # From lib/X.framework/Versions/A, three levels up is lib, so a
+              # framework can find its siblings by the same @rpath the binary
+              # uses.
+              install_name_tool -add_rpath "@loader_path/../../.." "$inner" 2>/dev/null || true
+              relink "$inner"
+            done
+          done
+
+          install_name_tool -add_rpath "@executable_path/lib" "bundle/$bin"
+          # The .app case: externalBin lands in Contents/MacOS and resources in
+          # Contents/Resources. Searched in order, so the sibling wins when both
+          # exist and the packaged layout still resolves when it does not.
+          install_name_tool -add_rpath "@executable_path/../Resources/lib" "bundle/$bin"
+
+          # Stripping invalidated whatever signature the binary carried, and an
+          # arm64 Mach-O with a modified load command and no signature will not
+          # launch at all. Ad-hoc is enough here; real signing happens when the
+          # app itself is signed, and has to come after this.
+          codesign --force --sign - --timestamp=none "bundle/$bin"
+          for lib in bundle/lib/*.dylib bundle/lib/*.framework; do
+            [ -e "$lib" ] || continue
+            codesign --force --sign - --timestamp=none "$lib"
+          done
+
+          # Anything still absolute, or still assuming a layout we are not
+          # shipping, fails here where we can name the file rather than two
+          # steps later as Abort trap: 6.
+          bad=0
+          for target in "bundle/$bin" bundle/lib/*.dylib; do
+            [ -e "$target" ] || continue
+            for ref in $(otool -L "$target" | tail -n +2 | awk '{print $1}'); do
+              case "$ref" in
+                /usr/lib/*|/System/*|@rpath/*|@loader_path/*) ;;
+                *) echo "::error::$target still references $ref"; bad=1 ;;
+              esac
+            done
+          done
+
+          # A GUI framework in a -DGUI=OFF build means the collection widened
+          # again, which is worth failing over rather than shipping quietly.
+          for unwanted in QtGui QtWidgets QtQml QtQuick; do
+            if [ -e "bundle/lib/$unwanted.framework" ]; then
+              echo "::error::$unwanted was collected into a headless build"
+              bad=1
+            fi
+          done
+          [ "$bad" = 0 ] || exit 1
+
+          echo "--- binary ---"; otool -L "bundle/$bin"
+          ls -la bundle bundle/lib
+
+      - name: Collect the runtime libraries (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="qbittorrent-nox-${{ matrix.triple }}.exe"
+          mkdir -p bundle
+          cp "out/$bin" "bundle/$bin"
+
+          # windeployqt reads the import table and copies what it finds, which
+          # on a GUI-less build is the four Qt DLLs and nothing else. Windows
+          # resolves imports from the executable's own directory first, so
+          # there is no path to rewrite and no lib subdirectory to justify.
+          "$QT_ROOT_DIR/bin/windeployqt.exe" --release --no-translations \
+            --no-system-d3d-compiler --no-opengl-sw --no-compiler-runtime \
+            --dir bundle "bundle/$bin"
+
+          # The MSVC runtime is the one thing windeployqt is told not to fetch,
+          # because --compiler-runtime drags in the whole redistributable
+          # installer rather than the DLLs.
+          #
+          # Chosen rather than taken. The first version of this said
+          # `find ... | grep -i x64 | head -1` and got the onecore variant of
+          # the 2019 runtime out of a 2022 install, for a binary compiled with
+          # the 2022 toolset. onecore is for a different Windows edition, and
+          # nothing here could have noticed: the runner has the real runtime in
+          # System32, so the standalone check passed on a machine that was
+          # never going to need what we shipped.
+          #
+          # Desktop rather than onecore, highest version rather than first
+          # found, and the choice is printed because it is the kind of thing
+          # that goes wrong silently.
+          redist=$(find "/c/Program Files/Microsoft Visual Studio" -type d -path '*/VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT' 2>/dev/null \
+            | grep -v onecore | sort -V | tail -1)
+          if [ -z "$redist" ]; then
+            echo "::error::no desktop x64 MSVC redistributable found. The image layout may have changed."
+            find "/c/Program Files/Microsoft Visual Studio" -type d -name 'Microsoft.VC*.CRT' 2>/dev/null | head -20
+            exit 1
+          fi
+          echo "CRT from: $redist"
+
+          # VC143 is the 2022 toolset, which is what qt_arch names and what the
+          # binary is built with. Anything older means the selection drifted.
+          case "$redist" in
+            *Microsoft.VC14[3-9].CRT) ;;
+            *) echo "::error::$redist is older than the toolset this binary was built with"; exit 1 ;;
+          esac
+
+          cp -v "$redist"/msvcp140*.dll "$redist"/vcruntime140*.dll bundle/
+
+          ls -la bundle
+
+      # A bundle missing a library still runs on the machine that built it,
+      # because the build machine has Qt installed. Moving Qt out of the way
+      # is what turns "it started" into evidence.
+      - name: Prove the bundle stands alone
+        shell: bash
+        run: |
+          set -euo pipefail
+          ext=""
+          [ "$RUNNER_OS" = "Windows" ] && ext=".exe"
+          bin="bundle/qbittorrent-nox-${{ matrix.triple }}$ext"
+
+          # Hide the build machine's Qt for the duration. On Linux and macOS
+          # the rewritten RPATH already makes this meaningful, since the
+          # original Qt prefix is no longer named in the binary at all. On
+          # Windows it is the whole test: the loader searches PATH, and
+          # install-qt-action puts Qt's bin on it.
+          hidden="$RUNNER_TEMP/qt-hidden"
+          moved=0
+          if mv "$QT_ROOT_DIR" "$hidden" 2>/dev/null; then
+            moved=1
+            trap 'mv "$hidden" "$QT_ROOT_DIR" || true' EXIT
+          else
+            echo "::warning::could not move $QT_ROOT_DIR aside, so this check is weaker than intended"
+          fi
+
+          env -u LD_LIBRARY_PATH -u DYLD_LIBRARY_PATH -u DYLD_FRAMEWORK_PATH "$bin" -v
+
+          if [ "$moved" = 1 ]; then
+            echo "Ran with the build machine's Qt moved out of the way."
+          fi
+
+      - name: Stage the runtime bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RUNNER_OS" in
+            Windows) name="qbittorrent-nox-${{ matrix.triple }}.exe" ;;
+            *) name="qbittorrent-nox-${{ matrix.triple }}" ;;
+          esac
+
+          # The executable is published on its own as well, so it is excluded
+          # here rather than shipped twice in a release that is already large.
+          tar -C bundle --exclude "$name" -czf "out/runtime-${{ matrix.triple }}.tar.gz" .
           ls -la out
 
       # Which shared libraries the binary still expects decides how it has to
