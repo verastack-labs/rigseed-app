@@ -10,7 +10,7 @@ import { OptionsCard, type AddOptions } from '@/features/add-torrent/options-car
 import { SavePathField } from '@/features/add-torrent/save-path-field'
 import { SourcePicker, type Source } from '@/features/add-torrent/source-picker'
 import { TagPicker, type NewTag } from '@/features/add-torrent/tag-picker'
-import { useApi } from '@/services/context'
+import { useApi } from '@/services/api-context'
 import { useLabelStore } from '@/state/label-store'
 import { formatBytes } from '@/utils/format'
 import {

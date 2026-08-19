@@ -69,6 +69,30 @@ describe('applyMainData', () => {
     expect(torrents().b!.name).toBe('debian.iso')
   })
 
+  it('ignores a patch for a torrent it has never seen', () => {
+    // Two poll loops overlapped once: the client swapped from the mock to a
+    // real daemon and the mock's in-flight response landed afterwards, as a
+    // diff full of hashes the store had never heard of. Each one minted a
+    // torrent out of two speed fields, and the first thing to read `state` off
+    // one took the whole screen down.
+    apply({ rid: 1, full_update: true, torrents: { a: fullTorrent({ hash: 'a' }) } })
+    apply({ rid: 2, torrents: { ghost: { dlspeed: 5, upspeed: 5 } } })
+
+    expect(Object.keys(torrents())).toEqual(['a'])
+  })
+
+  it('takes the hash from the map key, since maindata omits it', () => {
+    // `torrents/info` puts `hash` on every entry. `sync/maindata` does not:
+    // there it is only the key. The mock repeated it in both because it was
+    // written from a list response, which hid the difference until a real
+    // daemon answered.
+    // No `hash` key at all, which is exactly what the daemon sends.
+    const { hash: _omitted, ...withoutHash } = fullTorrent({ hash: 'ignored' })
+    apply({ rid: 1, full_update: true, torrents: { abc123: withoutHash } })
+
+    expect(torrents()['abc123']!.hash).toBe('abc123')
+  })
+
   it('removes torrents listed in torrents_removed', () => {
     apply({
       rid: 1,

@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 
-import { useApi } from '@/services/context'
+import { useApi } from '@/services/api-context'
 import { useTorrentStore } from '@/state/torrent-store'
 
 /**
@@ -14,10 +14,14 @@ import { useTorrentStore } from '@/state/torrent-store'
 export function useSyncPoll(intervalMs = 1000) {
   const api = useApi()
   const applyMainData = useTorrentStore((s) => s.applyMainData)
-  const stopped = useRef(false)
 
   useEffect(() => {
-    stopped.current = false
+    // Local to this run, not a ref. A ref is shared across runs, so when the
+    // client changed the new loop set it back to false and the old loop's
+    // in-flight response saw a green light. That is how mock torrents ended up
+    // merged into a real daemon's store: a diff for a hash the store had never
+    // seen, minting a torrent out of two speed fields and no state.
+    let stopped = false
     let timer: ReturnType<typeof setTimeout> | undefined
 
     // Each connection is its own session, so the rid starts fresh and the
@@ -27,7 +31,7 @@ export function useSyncPoll(intervalMs = 1000) {
     const tick = async () => {
       try {
         const data = await api.sync.maindata(rid)
-        if (stopped.current) return
+        if (stopped) return
         rid = data.rid
         applyMainData(data)
       } catch {
@@ -35,13 +39,13 @@ export function useSyncPoll(intervalMs = 1000) {
         // screen rather than blanking it, per the connection-loss rule, and
         // the next tick retries.
       }
-      if (!stopped.current) timer = setTimeout(() => void tick(), intervalMs)
+      if (!stopped) timer = setTimeout(() => void tick(), intervalMs)
     }
 
     void tick()
 
     return () => {
-      stopped.current = true
+      stopped = true
       if (timer) clearTimeout(timer)
     }
   }, [api, applyMainData, intervalMs])

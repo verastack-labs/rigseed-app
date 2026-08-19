@@ -66,11 +66,21 @@ export const useTorrentStore = create<TorrentState>()((set) => ({
       const torrents: Record<string, Torrent> = full ? {} : { ...prev.torrents }
       for (const [hash, patch] of Object.entries(data.torrents ?? {})) {
         const existing = torrents[hash]
-        torrents[hash] = existing
-          ? { ...existing, ...patch }
-          : // A torrent seen for the first time arrives complete, so the cast
-            // is safe here and nowhere else in this function.
-            ({ ...patch, hash } as Torrent)
+        if (existing) {
+          torrents[hash] = { ...existing, ...patch }
+          continue
+        }
+        // A torrent seen for the first time is supposed to arrive complete,
+        // and a patch is only ever a patch of one already here. That was an
+        // assumption rather than a guarantee, and it broke the moment two poll
+        // loops overlapped: a diff for a hash this store had never seen minted
+        // a torrent out of two speed fields, and the first thing to read
+        // `state` off it crashed the screen.
+        //
+        // `state` is the check because it is what everything branches on, and
+        // a torrent without it is not a torrent this app can draw.
+        if (patch.state === undefined) continue
+        torrents[hash] = { ...patch, hash } as Torrent
       }
       for (const hash of data.torrents_removed ?? []) delete torrents[hash]
 
@@ -112,6 +122,14 @@ export const useTorrentStore = create<TorrentState>()((set) => ({
 
   reset: () => set({ ...EMPTY }),
 }))
+
+/**
+ * The hash lives in the map key, not in the value.
+ *
+ * `torrents/info` carries `hash` on each entry; `sync/maindata` does not, and
+ * the mock repeated it in both because it was built from a list response. The
+ * merge above puts it back, which is why nothing downstream has to know.
+ */
 
 /** Stable empty array so selectors do not return a new reference each call. */
 const NO_TORRENTS: readonly Torrent[] = []

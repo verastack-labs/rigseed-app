@@ -10,6 +10,18 @@ export function createTransferApi(transport: Transport) {
     setDownloadLimit: (limit: number) =>
       transport.post<void>('transfer/setDownloadLimit', { limit }),
     setUploadLimit: (limit: number) => transport.post<void>('transfer/setUploadLimit', { limit }),
+
+    /**
+     * Bans peer addresses for the whole session.
+     *
+     * Under `transfer`, which is not where it reads like it belongs: it was
+     * written as `app/banPeers` on that reasoning and the daemon answered 404.
+     * The scope reasoning was right and the controller was not. A banned
+     * address is refused everywhere, not for the torrent whose row was
+     * clicked, which is worth knowing before offering it from one.
+     */
+    banPeers: (peers: readonly string[]) =>
+      transport.post<void>('transfer/banPeers', { peers: peers.join('|') }),
   }
 }
 

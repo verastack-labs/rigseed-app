@@ -496,13 +496,15 @@ export function createMockTransport({
       }
       touched(...hashes, String(body?.hash ?? ''))
 
-      if (path === 'torrents/pause') {
+      // Both spellings, as a 5.x daemon does: 2.11 renamed pause and resume
+      // to stop and start and kept the old pair as deprecated aliases.
+      if (path === 'torrents/pause' || path === 'torrents/stop') {
         for (const h of hashes) {
           const t = torrents.get(h)
           if (t) t.state = t.progress >= 1 ? 'pausedUP' : 'pausedDL'
         }
       }
-      if (path === 'torrents/resume') {
+      if (path === 'torrents/resume' || path === 'torrents/start') {
         for (const h of hashes) {
           const t = torrents.get(h)
           if (t) t.state = t.progress >= 1 ? 'uploading' : 'downloading'
@@ -630,7 +632,7 @@ export function createMockTransport({
         }
       }
 
-      if (path === 'app/banPeers') {
+      if (path === 'transfer/banPeers') {
         // Session-wide, which is the daemon's design: the address goes from
         // every torrent, not just the one the row was clicked in.
         const banned = String(body?.peers ?? '')
