@@ -5,16 +5,13 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
-    "useDefineForClassFields": true,
 
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
 
-    "allowImportingTsExtensions": false,
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "moduleDetection": "force",
@@ -22,10 +19,8 @@
     "skipLibCheck": true,
     "noEmit": true,
 
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+    "types": ["node", "vitest/globals", "@testing-library/jest-dom"],
+    "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test"]
+  "include": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test"]
 }
