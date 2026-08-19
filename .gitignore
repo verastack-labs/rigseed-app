@@ -33,3 +33,6 @@ pnpm-debug.log*
 # tauri
 src-tauri/target/
 src-tauri/gen/
+
+# rust build output
+src-tauri/target/

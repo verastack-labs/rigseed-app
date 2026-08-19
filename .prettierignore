@@ -20,3 +20,7 @@ COMPONENTS.md
 README.md
 SKILL.md
 PRODUCT.md
+
+# Rust build output and Tauri generated schemas
+src-tauri/target/
+src-tauri/gen/

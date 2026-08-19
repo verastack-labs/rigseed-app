@@ -1,0 +1,162 @@
+mod daemon;
+
+use std::sync::Mutex;
+
+use tauri::{LogicalPosition, LogicalSize, Manager};
+use tauri_plugin_shell::process::CommandChild;
+use tauri_plugin_shell::ShellExt;
+
+/// The port the bundled instance listens on.
+///
+/// Fixed rather than negotiated. A remote instance is a saved connection with
+/// its own address; this is only the local one, and a stable port means a user
+/// can point a browser at it when they need to debug something.
+const WEBUI_PORT: u16 = 8080;
+
+/// The size the screens were drawn at, and the smallest the layout holds at.
+///
+/// The design canvas is 1440x900, but that is a drawing size, not a promise
+/// that every display can show it. Opening at the documented minimum and
+/// letting the user grow the window is the safer default: a window larger than
+/// the screen puts its own controls out of reach.
+const PREFERRED: (f64, f64) = (1100.0, 700.0);
+
+/// Keeps the window inside the usable part of the screen.
+///
+/// `work_area` excludes the taskbar or dock, which is the difference between a
+/// window that fits and one whose footer sits underneath the taskbar.
+///
+/// On a display too small for the preferred size, the minimum constraint is
+/// relaxed rather than enforced. A minimum that exceeds the screen is worse
+/// than a cramped layout, because it cannot be dragged back into view.
+fn fit_within_screen(window: &tauri::WebviewWindow) {
+    let Ok(Some(monitor)) = window.current_monitor() else {
+        return;
+    };
+
+    let scale = monitor.scale_factor();
+    let area = monitor.work_area();
+    let available_w = area.size.width as f64 / scale;
+    let available_h = area.size.height as f64 / scale;
+
+    // Leave a margin so the window does not sit flush against the screen edge.
+    let width = PREFERRED.0.min(available_w - 40.0).max(640.0);
+    let height = PREFERRED.1.min(available_h - 40.0).max(480.0);
+
+    if width < PREFERRED.0 || height < PREFERRED.1 {
+        log::info!(
+            "screen work area is {available_w:.0}x{available_h:.0}, opening at {width:.0}x{height:.0}"
+        );
+        let _ = window.set_min_size(Some(LogicalSize::new(width, height)));
+    }
+
+    let _ = window.set_size(LogicalSize::new(width, height));
+
+    // Centre on the work area, not on the monitor.
+    //
+    // The built-in centre() uses full monitor bounds, which ignores wherever
+    // the taskbar or dock actually sits. The work area carries both an origin
+    // and a size, and the origin is the part that matters: a taskbar docked to
+    // the top gives a work area starting at y=40, and centring against a bare
+    // height would push the window down by half the taskbar.
+    //
+    // The outer size is what has to fit, since set_size sets the inner size and
+    // the title bar and borders sit outside it.
+    let outer = window
+        .outer_size()
+        .map(|s| (s.width as f64 / scale, s.height as f64 / scale))
+        .unwrap_or((width, height));
+
+    let x = area.position.x as f64 / scale + (available_w - outer.0).max(0.0) / 2.0;
+    let y = area.position.y as f64 / scale + (available_h - outer.1).max(0.0) / 2.0;
+    let _ = window.set_position(LogicalPosition::new(x.max(0.0), y.max(0.0)));
+}
+
+/// The sidecar handle, so the daemon can be stopped when the window closes.
+#[derive(Default)]
+struct Daemon(Mutex<Option<CommandChild>>);
+
+/// What the frontend needs to reach the local daemon.
+#[derive(serde::Serialize)]
+struct Connection {
+    base_url: String,
+    username: String,
+    password: String,
+}
+
+/// Hands the frontend its credentials for the bundled instance.
+///
+/// The password crosses this boundary once, into the API client, and is never
+/// rendered. It is not put in the store plugin: the keychain is the store.
+#[tauri::command]
+fn bundled_connection() -> Result<Connection, String> {
+    let password = daemon::ensure_password().map_err(|e| e.to_string())?;
+    Ok(Connection {
+        base_url: format!("http://127.0.0.1:{WEBUI_PORT}"),
+        username: "rigseed".into(),
+        password,
+    })
+}
+
+/// Whether the sidecar is running.
+#[tauri::command]
+fn daemon_running(state: tauri::State<'_, Daemon>) -> bool {
+    state.0.lock().map(|g| g.is_some()).unwrap_or(false)
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_opener::init())
+        .manage(Daemon::default())
+        .invoke_handler(tauri::generate_handler![bundled_connection, daemon_running])
+        .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                fit_within_screen(&window);
+            }
+
+            // Ensure the password exists before the daemon starts, so the
+            // config we hand it is already correct.
+            if let Err(error) = daemon::ensure_password() {
+                log::error!("could not prepare credentials: {error}");
+            }
+
+            match app.shell().sidecar("qbittorrent-nox") {
+                Ok(command) => match command
+                    .args(["--webui-port", &WEBUI_PORT.to_string()])
+                    .spawn()
+                {
+                    Ok((_rx, child)) => {
+                        log::info!("qbittorrent-nox started on port {WEBUI_PORT}");
+                        if let Ok(mut slot) = app.state::<Daemon>().0.lock() {
+                            *slot = Some(child);
+                        }
+                    }
+                    Err(error) => log::warn!("could not start qbittorrent-nox: {error}"),
+                },
+                // The app still opens without the sidecar. The frontend falls
+                // back to the mock transport, which is what makes the UI
+                // reviewable before the binary is vendored.
+                Err(error) => log::warn!("no qbittorrent-nox sidecar available: {error}"),
+            }
+
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                // The daemon is ours, so it goes down with the window rather
+                // than being left running headless after the UI closes.
+                if let Ok(mut slot) = window.state::<Daemon>().0.lock() {
+                    if let Some(child) = slot.take() {
+                        let _ = child.kill();
+                        log::info!("qbittorrent-nox stopped");
+                    }
+                }
+            }
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running rigseed");
+}
