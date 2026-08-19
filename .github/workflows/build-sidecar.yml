@@ -20,8 +20,11 @@ on:
   push:
     branches: [main]
     paths:
+      # Only the pin. Deliberately not this file: including it meant that
+      # editing the workflow, or merely adding it, kicked off a full
+      # three-platform build. The version is the thing that should trigger a
+      # rebuild, not the recipe. Use workflow_dispatch to test a recipe change.
       - 'sidecar.json'
-      - '.github/workflows/build-sidecar.yml'
   workflow_dispatch:
     inputs:
       force:
