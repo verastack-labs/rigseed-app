@@ -1,22 +1,45 @@
+import { HashRouter, Route, Routes } from 'react-router'
+
+import { AppShell } from '@/components/shell/app-shell'
+import { Placeholder } from '@/pages/placeholder'
+import { Transfers } from '@/pages/transfers'
+
 /**
- * Placeholder shell.
+ * HashRouter rather than BrowserRouter.
  *
- * This exists so the toolchain has something to compile and the token layer has
- * somewhere to prove itself. The real shell (nav rail, top bar, footer) arrives
- * with the shell branch; screens arrive after the components they consume.
+ * Tauri serves the frontend from a custom protocol with no server able to
+ * rewrite unknown paths, so a reload on /settings would 404 under history
+ * routing. The hash keeps every route reachable without any server rules,
+ * and the window has no address bar for the hash to be ugly in.
  */
 export function App() {
   return (
-    <div className="flex h-full items-center justify-center bg-bg text-text">
-      <div className="rounded-2xl border border-line bg-surface p-8 text-center">
-        <h1 className="text-[30px] font-semibold tracking-[-0.02em] text-text">rigseed</h1>
-        <p className="mt-2 text-[12.5px] text-text-dim">
-          Toolchain scaffold. Components land next.
-        </p>
-        <p className="mt-4 font-mono text-[11px] text-text-dimmer">
-          data-mode and data-accent are set on &lt;html&gt;
-        </p>
-      </div>
-    </div>
+    <HashRouter>
+      <Routes>
+        <Route element={<AppShell />}>
+          <Route index element={<Transfers />} />
+          <Route
+            path="search"
+            element={<Placeholder title="Search" tier="V2" api="search/start" />}
+          />
+          <Route path="rss" element={<Placeholder title="RSS" tier="V2" api="rss/items" />} />
+          <Route
+            path="categories"
+            element={
+              <Placeholder title="Categories and tags" tier="V1" api="torrents/categories" />
+            }
+          />
+          <Route path="logs" element={<Placeholder title="Logs" tier="V1" api="log/main" />} />
+          <Route
+            path="connections"
+            element={<Placeholder title="Connections" tier="V2" api="auth/login" />}
+          />
+          <Route
+            path="settings"
+            element={<Placeholder title="Settings" tier="MVP" api="app/preferences" />}
+          />
+        </Route>
+      </Routes>
+    </HashRouter>
   )
 }
