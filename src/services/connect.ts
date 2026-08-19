@@ -8,12 +8,35 @@ export interface DaemonTarget {
   baseUrl: string
   username: string
   password: string
+  /**
+   * What to call this daemon on screen.
+   *
+   * Needed because `baseUrl` is empty when the dev server proxies, and
+   * "connected to nothing" is a worse label than no label at all.
+   */
+  label?: string
+  /**
+   * True when rigseed started this daemon itself.
+   *
+   * Only then is waiting right. Our own daemon is spawned as the window opens
+   * and has not bound its port yet; one that was already running is either up
+   * or it is not, and ten seconds of "Connecting…" to tell somebody it is not
+   * helps nobody.
+   */
+  spawned?: boolean
 }
 
 export type ConnectionState =
   | { status: 'connecting' }
   | { status: 'mock'; client: Client; reason: string }
-  | { status: 'connected'; client: Client; version: string; webApiVersion: string }
+  | {
+      status: 'connected'
+      client: Client
+      version: string
+      webApiVersion: string
+      /** Host and port, for the top bar. */
+      label: string
+    }
   | { status: 'failed'; reason: string }
 
 /**
@@ -30,6 +53,16 @@ export type ConnectionState =
  * connection that 403s on the next call.
  */
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** `http://127.0.0.1:8080/` to `127.0.0.1:8080`. Falls back to the input. */
+function hostOf(baseUrl: string): string {
+  if (!baseUrl) return 'this origin'
+  try {
+    return new URL(baseUrl).host
+  } catch {
+    return baseUrl
+  }
+}
 
 export interface ConnectOptions {
   /**
@@ -81,6 +114,7 @@ export async function connect(
       client: createClient(transport, capabilitiesFor(webApiVersion)),
       version,
       webApiVersion,
+      label: target.label ?? hostOf(target.baseUrl),
     }
   } catch (error) {
     // Logged in but cannot be asked what it is, which is stranger than being

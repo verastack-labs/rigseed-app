@@ -35,7 +35,8 @@ async function findTarget(): Promise<DaemonTarget | null> {
   if (tauri) {
     try {
       const { invoke } = await import('@tauri-apps/api/core')
-      return await invoke<DaemonTarget>('bundled_connection')
+      const target = await invoke<DaemonTarget>('bundled_connection')
+      return { ...target, spawned: true }
     } catch {
       // The sidecar may not have started, or may not be bundled yet. The mock
       // covers it, and the reason is reported rather than swallowed.
@@ -49,12 +50,16 @@ async function findTarget(): Promise<DaemonTarget | null> {
   // the identifier survived into the served module and read as undefined.
   const { VITE_QBT_URL, VITE_QBT_USER, VITE_QBT_PASS } = import.meta.env
   if (VITE_QBT_URL) {
+    // The label comes from the env rather than from baseUrl, which is empty
+    // here on purpose. Only this side of the proxy knows where it points.
+    const label = VITE_QBT_URL.replace(/^https?:\/\//, '').replace(/\/$/, '')
     // baseUrl is empty on purpose: the dev server proxies `/api`, so the
     // request is same-origin and the SID cookie is ours to keep.
     return {
       baseUrl: '',
       username: VITE_QBT_USER ?? 'admin',
       password: VITE_QBT_PASS ?? '',
+      label,
     }
   }
 
@@ -93,11 +98,10 @@ export function ApiProvider({ target, children }: ApiProviderProps) {
       const found = target ?? (await findTarget())
       if (!found) return mockConnection('No daemon configured. Showing sample data.')
 
-      // The bundled daemon is spawned by Rust as the window opens, so on a
-      // cold start the app asks before the port is bound. A daemon somebody
-      // configured themselves is either up or it is not, and waiting ten
-      // seconds to say so helps nobody.
-      const result = await connect(found, { waitMs: target ? 0 : 10_000 })
+      // Only our own daemon is worth waiting for. It is spawned as the window
+      // opens and has not bound its port yet; anything else is already running
+      // or it is not.
+      const result = await connect(found, { waitMs: found.spawned ? 10_000 : 0 })
       return result.status === 'failed'
         ? mockConnection(`${result.reason} Showing sample data.`)
         : result

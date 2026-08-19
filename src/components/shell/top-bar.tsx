@@ -2,9 +2,10 @@ import { ChevronLeft } from 'lucide-react'
 import { useNavigate } from 'react-router'
 
 import { Appearance } from '@/components/ui/appearance'
+import { ConnectionChip } from '@/components/shell/connection-chip'
 import { IconButton } from '@/components/ui/icon-button'
-import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
+import { useConnection } from '@/services/api-context'
 import { useThemeStore } from '@/state/theme-store'
 
 export interface TopBarProps {
@@ -18,6 +19,7 @@ export interface TopBarProps {
 export function TopBar({ breadcrumb, isHome, className }: TopBarProps) {
   const navigate = useNavigate()
   const { mode, accent, setMode, setAccent, reopenSetup } = useThemeStore()
+  const connection = useConnection()
 
   return (
     <header
@@ -27,13 +29,7 @@ export function TopBar({ breadcrumb, isHome, className }: TopBarProps) {
       )}
     >
       {isHome ? (
-        <button
-          type="button"
-          className="bg-surface2 hover:bg-accent-soft flex items-center gap-2 rounded-lg px-2.5 py-1.5 transition-colors duration-quick"
-        >
-          <icons.connections className="text-accent2 size-[15px]" strokeWidth={2} />
-          <span className="text-text font-mono text-[11.5px]">127.0.0.1:8080</span>
-        </button>
+        <ConnectionChip state={connection} />
       ) : (
         <>
           <IconButton title="Back" onClick={() => void navigate('/')}>
