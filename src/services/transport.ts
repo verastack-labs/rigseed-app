@@ -12,6 +12,15 @@ export interface Transport {
   get<T>(path: string, params?: Record<string, string | number | boolean>): Promise<T>
   /** POST as application/x-www-form-urlencoded, which is what the API expects. */
   post<T>(path: string, body?: Record<string, string | number | boolean>): Promise<T>
+  /**
+   * POST as multipart/form-data.
+   *
+   * `torrents/add` is the only endpoint that needs it, because it carries the
+   * `.torrent` files themselves. Kept separate from `post` rather than making
+   * `post` polymorphic, so the encoding a call uses is visible at the call
+   * site instead of depending on the shape of its argument.
+   */
+  postForm<T>(path: string, form: FormData): Promise<T>
 }
 
 export class ApiError extends Error {
@@ -87,6 +96,15 @@ export function createHttpTransport({
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         ...(body ? { body: encode(body) } : {}),
       })
+      await check(response, path)
+      return readBody<T>(response)
+    },
+
+    async postForm<T>(path: string, form: FormData): Promise<T> {
+      // No Content-Type header on purpose. multipart/form-data carries a
+      // boundary token that only the runtime knows, and setting the header by
+      // hand omits it, which the daemon rejects as a malformed body.
+      const response = await fetchImpl(url(path), { method: 'POST', credentials, body: form })
       await check(response, path)
       return readBody<T>(response)
     },

@@ -108,6 +108,39 @@ export interface GlobalTransferInfo {
   dht_nodes: number
   connection_status: 'connected' | 'firewalled' | 'disconnected'
   use_alt_speed_limits: boolean
+  /**
+   * Bytes free where torrents are saved.
+   *
+   * There is no free-space endpoint in the Web API; this ride-along on the
+   * sync payload is the only source, which is why the Add Torrent save-path
+   * hint reads it from the torrent store rather than fetching it.
+   */
+  free_space_on_disk: number
+}
+
+/**
+ * One `torrents/add` submission.
+ *
+ * Files and links go in the same request: a user can drop a `.torrent` and
+ * paste a magnet before hitting add, and the daemon accepts both together.
+ */
+export interface AddTorrentOptions {
+  /** Magnet links or http(s) URLs. Sent newline separated. */
+  urls?: readonly string[]
+  /** `.torrent` files, as picked or dropped. */
+  files?: readonly File[]
+  savepath?: string
+  category?: string
+  tags?: readonly string[]
+  /**
+   * The API's own polarity, kept rather than flipped to `start`. The UI shows
+   * a "Start torrent" switch and inverts it at the call site, so the parameter
+   * shown in mono next to that switch is the one actually sent.
+   */
+  paused?: boolean
+  skip_checking?: boolean
+  sequentialDownload?: boolean
+  autoTMM?: boolean
 }
 
 /**
