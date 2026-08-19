@@ -1,0 +1,231 @@
+name: Build sidecar
+
+# Builds qbittorrent-nox for every platform we ship, once per qBittorrent
+# version, and publishes the binaries to a release keyed by that version.
+#
+# This does NOT run on ordinary commits or pull requests. It runs when the pin
+# in sidecar.json changes, or when dispatched by hand. Everything downstream
+# downloads the published binary, so a normal CI run stays a few seconds rather
+# than half an hour.
+#
+# We build it ourselves rather than vendoring a third party's binary. Upstream
+# supports the headless target directly via -DGUI=OFF, so this is a supported
+# configuration, and building it means nothing we ship was compiled by someone
+# outside this repo.
+#
+# See src-tauri/binaries/README.md and licenses/README.md. Shipping this binary
+# obliges us to ship its corresponding source on the same release.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sidecar.json'
+      - '.github/workflows/build-sidecar.yml'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Rebuild even if a release for this version already exists'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  pin:
+    name: Read the pinned version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag: ${{ steps.read.outputs.tag }}
+      release: ${{ steps.read.outputs.release }}
+      exists: ${{ steps.check.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read sidecar.json
+        id: read
+        run: |
+          set -euo pipefail
+          version=$(jq -r .version sidecar.json)
+          tag=$(jq -r .tag sidecar.json)
+          echo "version=$version"        >> "$GITHUB_OUTPUT"
+          echo "tag=$tag"                >> "$GITHUB_OUTPUT"
+          echo "release=sidecar-$version" >> "$GITHUB_OUTPUT"
+          echo "Building qbittorrent-nox $version from $tag"
+
+      - name: Has this version already been built?
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "${{ steps.read.outputs.release }}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::${{ steps.read.outputs.release }} already exists. Dispatch with force to rebuild."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: ${{ matrix.label }}
+    needs: pin
+    if: needs.pin.outputs.exists == 'false' || inputs.force
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x86_64
+            triple: x86_64-unknown-linux-gnu
+            binary: qbittorrent-nox
+          - os: windows-latest
+            label: windows-x86_64
+            triple: x86_64-pc-windows-msvc
+            binary: qbittorrent-nox.exe
+          - os: macos-latest
+            label: macos-aarch64
+            triple: aarch64-apple-darwin
+            binary: qbittorrent-nox
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out qBittorrent at the pinned tag
+        uses: actions/checkout@v4
+        with:
+          repository: qbittorrent/qBittorrent
+          ref: ${{ needs.pin.outputs.tag }}
+          path: qbittorrent
+
+      # Qt is the slowest dependency to build from source by a wide margin, so
+      # it comes prebuilt. Everything else is cheap enough to take from the
+      # platform's own package manager.
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.*'
+          cache: true
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config \
+            libboost-dev libssl-dev zlib1g-dev libtorrent-rasterbar-dev
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake ninja boost openssl@3 zlib libtorrent-rasterbar
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          vcpkg install boost-circular-buffer:x64-windows-static-md `
+                        boost-system:x64-windows-static-md `
+                        openssl:x64-windows-static-md `
+                        zlib:x64-windows-static-md `
+                        libtorrent:x64-windows-static-md
+          echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
+
+      # -DGUI=OFF is the headless target. WEBUI stays on, since it is the only
+      # interface rigseed uses. STACKTRACE off keeps the binary smaller and
+      # avoids a dependency we have no use for.
+      - name: Configure
+        working-directory: qbittorrent
+        shell: bash
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGUI=OFF \
+            -DWEBUI=ON \
+            -DSTACKTRACE=OFF \
+            ${CMAKE_TOOLCHAIN_FILE:+-DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN_FILE"} \
+            ${VCPKG_TARGET_TRIPLET:+-DVCPKG_TARGET_TRIPLET="$VCPKG_TARGET_TRIPLET"}
+
+      - name: Build
+        working-directory: qbittorrent
+        run: cmake --build build --config Release
+
+      - name: Stage the binary under its target triple
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          found=$(find qbittorrent/build -name '${{ matrix.binary }}' -type f | head -1)
+          if [ -z "$found" ]; then
+            echo "::error::no ${{ matrix.binary }} produced. Build layout may have changed."
+            find qbittorrent/build -maxdepth 3 -type f -name 'qbittorrent*' || true
+            exit 1
+          fi
+          # Tauri resolves sidecars by target triple, so the published name is
+          # the name the app will look for.
+          ext=""
+          case "${{ matrix.binary }}" in *.exe) ext=".exe";; esac
+          cp "$found" "out/qbittorrent-nox-${{ matrix.triple }}$ext"
+          ls -la out
+
+      - name: Checksum
+        shell: bash
+        working-directory: out
+        run: |
+          for f in *; do
+            if command -v sha256sum >/dev/null; then sha256sum "$f" > "$f.sha256";
+            else shasum -a 256 "$f" > "$f.sha256"; fi
+          done
+          cat ./*.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sidecar-${{ matrix.label }}
+          path: out/*
+          retention-days: 7
+
+  publish:
+    name: Publish the release
+    needs: [pin, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: staged
+          merge-multiple: true
+
+      # The GPL obligation from licenses/README.md. The binary and its
+      # corresponding source have to be reachable from the same place, so the
+      # source archive is attached to this release rather than linked.
+      - name: Fetch the corresponding source
+        run: scripts/fetch-sidecar-source.sh staged
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE: ${{ needs.pin.outputs.release }}
+          VERSION: ${{ needs.pin.outputs.version }}
+          TAG: ${{ needs.pin.outputs.tag }}
+        run: |
+          set -euo pipefail
+          ls -la staged
+
+          # A heredoc rather than an inline --notes string: every line inside a
+          # YAML block scalar has to stay indented, and release notes are the
+          # one place that is easy to forget.
+          cat > notes.md <<EOF
+          Built from \`$TAG\` with \`-DGUI=OFF\`.
+
+          Consumed by the release workflow, which downloads these rather than
+          rebuilding. The corresponding source archive is attached here to
+          satisfy GPLv3 section 6(d): the binary and its source are offered
+          from the same place.
+          EOF
+
+          if gh release view "$RELEASE" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE" staged/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$RELEASE"               --repo "$GITHUB_REPOSITORY"               --title "qbittorrent-nox $VERSION"               --notes-file notes.md               staged/*
+          fi
