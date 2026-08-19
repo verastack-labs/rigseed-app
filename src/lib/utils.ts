@@ -18,7 +18,7 @@ const twMerge = extendTailwindMerge({
     classGroups: {
       rounded: [{ rounded: ['chip', 'round'] }],
       ease: [{ ease: ['spring', 'rail-slide', 'panel-reveal'] }],
-      duration: [{ duration: ['fast', 'quick', 'base', 'spring'] }],
+      duration: [{ duration: ['fast', 'quick', 'base', 'spring', 'rail', 'panel', 'slow'] }],
     },
   },
 })

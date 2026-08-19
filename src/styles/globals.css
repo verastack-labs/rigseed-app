@@ -79,12 +79,18 @@
   --radius-chip: var(--radius-pill);
   --radius-round: var(--radius-full);
 
-  /* Durations. The token names are --dur-*, so there is no collision with
-     Tailwind's --duration-* namespace and these can be mapped directly. */
-  --duration-fast: var(--dur-fast);
-  --duration-quick: var(--dur-quick);
-  --duration-base: var(--dur-base);
-  --duration-spring: var(--dur-spring);
+  /* Durations.
+     The namespace is --transition-duration-*, not --duration-*. A key under
+     --duration-* is accepted silently and generates no utility at all, so
+     `duration-fast` becomes an inert class and the transition falls back to
+     Tailwind's default 150ms. Verified in the built CSS. */
+  --transition-duration-fast: var(--dur-fast);
+  --transition-duration-quick: var(--dur-quick);
+  --transition-duration-base: var(--dur-base);
+  --transition-duration-spring: var(--dur-spring);
+  --transition-duration-rail: var(--dur-rail);
+  --transition-duration-panel: var(--dur-panel);
+  --transition-duration-slow: var(--dur-slow);
 
   --ease-spring: var(--ease-overshoot);
   --ease-rail-slide: var(--ease-rail);
