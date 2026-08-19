@@ -1,39 +1,53 @@
 # Sidecar binaries
 
-**Nothing here yet, and that is a live decision rather than an oversight.**
+Empty by design. `qbittorrent-nox` is downloaded here at build time, never
+committed.
 
-`architecture.md` says rigseed bundles `qbittorrent-nox` as a sidecar. Upstream
-publishes no such binary. Every qBittorrent release asset is the GUI build:
-`.dmg` for macOS, `.AppImage` for Linux, `_setup.exe` for Windows, plus source.
-`qbittorrent-nox` is the headless build that distributions compile and package
-themselves, so there is nothing to download.
+## How it gets here
 
-That leaves three ways forward, and it is a product call:
+    scripts/fetch-sidecar-binary.sh
 
-1. **Build it from source per platform in CI.** Heaviest option: needs Qt,
-   libtorrent-rasterbar, Boost and OpenSSL toolchains on three targets. It does
-   neatly satisfy the GPL corresponding-source obligation, since the exact
-   source that produced the binary is already in hand.
-2. **Do not bundle.** rigseed becomes a front end for an install the user
-   already has, or for a remote instance. Remote connections work this way
-   already, so this is the smallest change and it removes the GPL
-   redistribution obligation entirely.
-3. **Bundle per platform where a package exists.** Linux distributions ship
-   `qbittorrent-nox`; macOS and Windows would still need option 1 or 2.
+That downloads the prebuilt binary for this machine's target triple from the
+release named `sidecar-<version>`, where `<version>` is the pin in
+`sidecar.json`. It compiles nothing.
 
-Until that is decided, the app runs without a sidecar. `lib.rs` logs a warning
-and carries on, and the frontend uses the mock transport.
+The binaries in that release are produced by `.github/workflows/build-sidecar.yml`,
+which builds qbittorrent-nox for Linux, Windows and macOS from the pinned upstream
+tag with `-DGUI=OFF`. **That workflow does not run on commits or pull requests.**
+It runs when the pin in `sidecar.json` changes, or when dispatched by hand, which
+is a handful of times a year.
 
-## If a binary is vendored
+If the release does not exist yet for the pinned version:
+
+    gh workflow run build-sidecar.yml --repo verastack-labs/rigseed-app
+
+## Why we build it rather than vendor someone else's
+
+Upstream publishes no `qbittorrent-nox` for any platform. Every qBittorrent
+release asset is the GUI build. Third parties do publish Linux builds, but they
+are unaffiliated with upstream and unendorsed by it, and vendoring one would mean
+shipping a binary compiled by a stranger under our name.
+
+Upstream's own CMake supports the headless target directly, via
+`feature_option(GUI "Build GUI application" ON)`. Building it ourselves is a
+supported configuration, not a workaround, and it is the only option that covers
+Windows and macOS anyway, since nobody publishes those.
+
+## Declaring it
 
 Tauri resolves sidecars by target triple, so on Windows the file is:
 
     qbittorrent-nox-x86_64-pc-windows-msvc.exe
 
-Re-add it to `tauri.conf.json` under `bundle.externalBin` as
-`binaries/qbittorrent-nox`. The build script requires the file to exist, so the
-declaration and the binary have to land together.
+Once a binary is present, declare it in `tauri.conf.json` under
+`bundle.externalBin` as `binaries/qbittorrent-nox`. The build script requires the
+file to exist, so the declaration and the binary have to land together.
 
-Redistributing it carries GPL obligations. See `../../licenses/README.md`: every
-release that ships it must carry the matching source archive on the same release
-page.
+The app runs without it: `lib.rs` logs a warning and carries on, and the frontend
+falls back to the mock transport.
+
+## Licensing
+
+Shipping this binary carries GPL obligations. See `../../licenses/README.md`.
+Every release that ships it must carry the matching source archive on the same
+release page, which `build-sidecar.yml` already does by attaching it alongside.
