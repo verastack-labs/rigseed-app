@@ -665,13 +665,35 @@ jobs:
 
           # The MSVC runtime is the one thing windeployqt is told not to fetch,
           # because --compiler-runtime drags in the whole redistributable
-          # installer. These three files are the redistributable part.
-          redist=$(find "/c/Program Files/Microsoft Visual Studio" -type d -name 'Microsoft.VC*.CRT' 2>/dev/null | grep -i x64 | head -1)
+          # installer rather than the DLLs.
+          #
+          # Chosen rather than taken. The first version of this said
+          # `find ... | grep -i x64 | head -1` and got the onecore variant of
+          # the 2019 runtime out of a 2022 install, for a binary compiled with
+          # the 2022 toolset. onecore is for a different Windows edition, and
+          # nothing here could have noticed: the runner has the real runtime in
+          # System32, so the standalone check passed on a machine that was
+          # never going to need what we shipped.
+          #
+          # Desktop rather than onecore, highest version rather than first
+          # found, and the choice is printed because it is the kind of thing
+          # that goes wrong silently.
+          redist=$(find "/c/Program Files/Microsoft Visual Studio" -type d -path '*/VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT' 2>/dev/null \
+            | grep -v onecore | sort -V | tail -1)
           if [ -z "$redist" ]; then
-            echo "::error::no MSVC redistributable CRT directory found. The image layout may have changed."
+            echo "::error::no desktop x64 MSVC redistributable found. The image layout may have changed."
+            find "/c/Program Files/Microsoft Visual Studio" -type d -name 'Microsoft.VC*.CRT' 2>/dev/null | head -20
             exit 1
           fi
           echo "CRT from: $redist"
+
+          # VC143 is the 2022 toolset, which is what qt_arch names and what the
+          # binary is built with. Anything older means the selection drifted.
+          case "$redist" in
+            *Microsoft.VC14[3-9].CRT) ;;
+            *) echo "::error::$redist is older than the toolset this binary was built with"; exit 1 ;;
+          esac
+
           cp -v "$redist"/msvcp140*.dll "$redist"/vcruntime140*.dll bundle/
 
           ls -la bundle
