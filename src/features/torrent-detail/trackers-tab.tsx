@@ -6,6 +6,7 @@ import { SectionHeader } from '@/components/ui/section-header'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusDot } from '@/components/ui/status-dot'
 import { Textarea } from '@/components/ui/textarea'
+import { isSynthetic } from '@/features/torrent-detail/tracker-status'
 import { cn } from '@/lib/utils'
 import type { Tracker } from '@/types/qbittorrent'
 
@@ -23,15 +24,6 @@ const STATUS: Record<number, { label: string; tone: 'accent' | 'accent2' | 'mute
   3: { label: 'updating', tone: 'accent' },
   4: { label: 'error', tone: 'danger' },
 }
-
-/**
- * DHT, PeX and LSD are reported as trackers but are not ones.
- *
- * qBittorrent sends them in the same list and the stock client shows them, so
- * they stay. They are excluded from the tracker count and cannot be removed,
- * because neither is true of them.
- */
-export const isSynthetic = (url: string) => url.startsWith('** [')
 
 export interface TrackersTabProps {
   /** Null until `torrents/trackers` answers. */

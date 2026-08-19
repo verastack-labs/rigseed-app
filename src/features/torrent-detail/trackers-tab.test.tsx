@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { TrackersTab, isSynthetic } from '@/features/torrent-detail/trackers-tab'
+import { isSynthetic } from '@/features/torrent-detail/tracker-status'
+import { TrackersTab } from '@/features/torrent-detail/trackers-tab'
 import type { Tracker } from '@/types/qbittorrent'
 
 const trackers: Tracker[] = [
