@@ -8,7 +8,15 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
   /** The API endpoint this card exercises, shown in mono on the right. */
   api?: string
   action?: ReactNode
-  padded?: boolean
+  /**
+   * Body padding, from the 13 to 18px range the design system allows.
+   *
+   * A named scale rather than a boolean, because passing padding through
+   * `className` silently stacks on top of the built-in value: the two land on
+   * different elements, so `cn` cannot resolve the conflict. A torrent card
+   * asking for `p-3.5` that way ended up at 32px.
+   */
+  padding?: 'none' | 'row' | 'card' | 'section'
   /** Raises the border to the accent on hover. Used by torrent cards. */
   hoverable?: boolean
 }
@@ -19,11 +27,18 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
  * Depth comes from layering surfaces, not from elevation: no shadow at rest.
  * Shadows are reserved for things that genuinely float.
  */
+const PADDING = {
+  none: undefined,
+  row: 'p-[13px]',
+  card: 'p-[14px]',
+  section: 'p-[18px]',
+} as const
+
 export function Card({
   title,
   api,
   action,
-  padded = true,
+  padding = 'section',
   hoverable,
   className,
   children,
@@ -47,7 +62,7 @@ export function Card({
           {action}
         </div>
       ) : null}
-      <div className={padded ? 'p-[18px]' : undefined}>{children}</div>
+      <div className={PADDING[padding]}>{children}</div>
     </div>
   )
 }
