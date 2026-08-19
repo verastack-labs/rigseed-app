@@ -64,7 +64,13 @@ export function Appearance({
         className={cn(
           'ease-panel-reveal flex items-center gap-2.5 overflow-hidden',
           'transition-[max-width,opacity] duration-panel',
-          open ? 'max-w-[340px] opacity-100' : 'max-w-0 opacity-0',
+          // The panel sizes to its content. max-width is only an animatable
+          // bound, since fit-content cannot be interpolated. It has to stay
+          // above the real content width or the last control gets clipped:
+          // the spec's original 340px was sized for seven accents and the
+          // eighth pushed the content to 369px. Re-measure if the accent list
+          // or the labels change.
+          open ? 'max-w-[400px] opacity-100' : 'max-w-0 opacity-0',
         )}
       >
         {onSetup ? (
@@ -73,7 +79,7 @@ export function Appearance({
           </Button>
         ) : null}
 
-        <div className="flex items-center gap-1.5" role="radiogroup" aria-label="Theme colour">
+        <div className="flex shrink-0 items-center gap-1.5" role="radiogroup" aria-label="Theme colour">
           {ACCENTS.map((a) => {
             const selected = a.key === accent
             return (
