@@ -508,88 +508,105 @@ jobs:
           mkdir -p bundle/lib
           cp "out/$bin" "bundle/$bin"
 
-          # macdeployqt is the tool Qt ships for exactly this, and upstream's
-          # own macOS CI already uses it. Run against a throwaway copy of the
-          # .app so the frameworks land somewhere we can lift them out of.
-          app=$(find qbittorrent/build -maxdepth 2 -name 'qbittorrent-nox.app' -type d | head -1)
-          rm -rf deploy && mkdir deploy
-          cp -R "$app" deploy/
-          "$QT_ROOT_DIR/bin/macdeployqt" deploy/qbittorrent-nox.app -verbose=1
-
-          cp -R deploy/qbittorrent-nox.app/Contents/Frameworks/. bundle/lib/
-
-          # One policy, applied to the binary and to everything in lib, because
-          # the first attempt had three copies of it that disagreed.
+          # The closure of what the binary actually names, the same way the
+          # Linux step works, rather than whatever macdeployqt decided to copy.
           #
-          # System libraries stay. @rpath and @loader_path are already relative
-          # and correct. Everything else becomes @rpath and is brought along:
-          # an absolute path into the build machine's Homebrew prefix would
-          # fail even on a Mac that has OpenSSL, and macdeployqt's
-          # @executable_path/../Frameworks assumes the .app layout we are
-          # deliberately not shipping.
+          # macdeployqt was the first approach and it over-collected badly: it
+          # deploys plugins as well as libraries, and the plugins drag in QtGui
+          # and QtWidgets, which is 30 MB of desktop toolkit in a build
+          # configured -DGUI=OFF. It also left every framework duplicated as a
+          # loose file beside its own .framework directory, because a framework
+          # install name looks like an ordinary path to anything that only
+          # calls basename on it.
           #
-          # That last case is what the first run got wrong. It was skipped as
-          # "already relative", so libssl kept pointing at a Frameworks
-          # directory beside the executable that does not exist here, and the
-          # binary died on launch with the bundle otherwise complete.
+          # Walking the references costs a few lines and gets exactly the four
+          # frameworks the binary links, plus the OpenSSL pair.
+
+          # An install name to the thing on disk it refers to, or nothing.
+          resolve() {
+            case "$1" in
+              @rpath/*) echo "$QT_ROOT_DIR/lib/${1#@rpath/}" ;;
+              /*) echo "$1" ;;
+              *) echo "" ;;
+            esac
+          }
+
+          # Copy a dependency into lib, keeping a framework a framework, and
+          # print the install name it should be referred to by from now on.
+          bring_in() {
+            local ref="$1" src
+            src=$(resolve "$ref")
+            [ -n "$src" ] || return 1
+
+            case "$ref" in
+              *.framework/*)
+                local rest="${ref#*.framework/}"
+                local stem="${ref%%.framework/*}"
+                local fw="${stem##*/}"
+                if [ ! -d "bundle/lib/$fw.framework" ]; then
+                  local srcstem="${src%%.framework/*}"
+                  cp -R "$srcstem.framework" bundle/lib/ || return 1
+                  echo "collected $fw.framework" >&2
+                fi
+                echo "@rpath/$fw.framework/$rest"
+                ;;
+              *)
+                local base="${ref##*/}"
+                if [ ! -e "bundle/lib/$base" ]; then
+                  cp -L "$src" "bundle/lib/$base" || return 1
+                  echo "collected $base" >&2
+                fi
+                echo "@rpath/$base"
+                ;;
+            esac
+          }
+
+          # Rewrite one Mach-O so every non-system reference is @rpath, bringing
+          # in whatever it names. System libraries stay: they are on every Mac
+          # and shipping copies would be worse than pointless.
           relink() {
-            local target="$1"
+            local target="$1" ref new
             chmod u+w "$target"
             for ref in $(otool -L "$target" | tail -n +2 | awk '{print $1}'); do
               case "$ref" in
-                /usr/lib/*|/System/*|@rpath/*|@loader_path/*) continue ;;
-                @executable_path/../Frameworks/*)
-                  install_name_tool -change "$ref" "@rpath/${ref#@executable_path/../Frameworks/}" "$target"
-                  ;;
-                *)
-                  dep=$(basename "$ref")
-                  [ -e "bundle/lib/$dep" ] || cp -L "$ref" "bundle/lib/$dep"
-                  chmod u+w "bundle/lib/$dep"
-                  install_name_tool -change "$ref" "@rpath/$dep" "$target"
-                  echo "brought in $ref"
-                  ;;
+                /usr/lib/*|/System/*|@loader_path/*) continue ;;
               esac
+              if new=$(bring_in "$ref"); then
+                [ "$new" = "$ref" ] || install_name_tool -change "$ref" "$new" "$target"
+              fi
             done
           }
 
           relink "bundle/$bin"
 
-          # Repeat until nothing new arrives: a library pulled in on one pass
-          # can name another that is not here yet. Two rounds is one more than
-          # OpenSSL needs, and the loop is cheap.
+          # Until nothing new arrives: a framework brought in on one round names
+          # others that are not here yet. Qt is two deep, so three rounds is one
+          # spare and the loop is cheap.
           for round in 1 2 3; do
             for lib in bundle/lib/*.dylib; do
               [ -e "$lib" ] || continue
-              install_name_tool -id "@rpath/$(basename "$lib")" "$lib" 2>/dev/null || true
+              install_name_tool -id "@rpath/${lib##*/}" "$lib" 2>/dev/null || true
               relink "$lib"
+            done
+            for fw in bundle/lib/*.framework; do
+              [ -d "$fw" ] || continue
+              name=$(basename "$fw" .framework)
+              inner="$fw/Versions/A/$name"
+              [ -f "$inner" ] || continue
+              chmod u+w "$inner"
+              install_name_tool -id "@rpath/$name.framework/Versions/A/$name" "$inner"
+              # From lib/X.framework/Versions/A, three levels up is lib, so a
+              # framework can find its siblings by the same @rpath the binary
+              # uses.
+              install_name_tool -add_rpath "@loader_path/../../.." "$inner" 2>/dev/null || true
+              relink "$inner"
             done
           done
 
-          # The frameworks have to find each other, not just be findable from
-          # the binary. Four levels up from
-          # lib/QtCore.framework/Versions/A/QtCore is lib itself.
-          for fw in bundle/lib/*.framework; do
-            [ -d "$fw" ] || continue
-            name=$(basename "$fw" .framework)
-            inner="$fw/Versions/A/$name"
-            [ -f "$inner" ] || inner=$(find "$fw" -type f -name "$name" | head -1)
-            [ -f "$inner" ] || continue
-
-            chmod u+w "$inner"
-            install_name_tool -id "@rpath/$name.framework/Versions/A/$name" "$inner"
-            install_name_tool -add_rpath "@loader_path/../../.." "$inner" 2>/dev/null || true
-            relink "$inner"
-          done
-
-          # macdeployqt writes rpaths for the .app layout. One pointing at the
-          # directory beside the binary replaces all of them.
-          for old in $(otool -l "bundle/$bin" | grep -A2 LC_RPATH | awk '/path /{print $2}'); do
-            install_name_tool -delete_rpath "$old" "bundle/$bin" 2>/dev/null || true
-          done
           install_name_tool -add_rpath "@executable_path/lib" "bundle/$bin"
           # The .app case: externalBin lands in Contents/MacOS and resources in
-          # Contents/Resources. Searched in order, so the sibling wins when
-          # both exist and the packaged layout still resolves when it does not.
+          # Contents/Resources. Searched in order, so the sibling wins when both
+          # exist and the packaged layout still resolves when it does not.
           install_name_tool -add_rpath "@executable_path/../Resources/lib" "bundle/$bin"
 
           # Stripping invalidated whatever signature the binary carried, and an
@@ -602,9 +619,9 @@ jobs:
             codesign --force --sign - --timestamp=none "$lib"
           done
 
-          # Anything still absolute or still assuming the .app layout is a
-          # failure now rather than a crash in the next step, because here we
-          # can say which file it was.
+          # Anything still absolute, or still assuming a layout we are not
+          # shipping, fails here where we can name the file rather than two
+          # steps later as Abort trap: 6.
           bad=0
           for target in "bundle/$bin" bundle/lib/*.dylib; do
             [ -e "$target" ] || continue
@@ -614,6 +631,15 @@ jobs:
                 *) echo "::error::$target still references $ref"; bad=1 ;;
               esac
             done
+          done
+
+          # A GUI framework in a -DGUI=OFF build means the collection widened
+          # again, which is worth failing over rather than shipping quietly.
+          for unwanted in QtGui QtWidgets QtQml QtQuick; do
+            if [ -e "bundle/lib/$unwanted.framework" ]; then
+              echo "::error::$unwanted was collected into a headless build"
+              bad=1
+            fi
           done
           [ "$bad" = 0 ] || exit 1
 
