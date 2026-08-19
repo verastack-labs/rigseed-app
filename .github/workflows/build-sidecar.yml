@@ -99,6 +99,11 @@ jobs:
             triple: x86_64-unknown-linux-gnu
             binary: qbittorrent-nox
             qt_arch: ''
+            # Qt's Linux binaries link against ICU and aqtinstall ships it as a
+            # separate archive. Without it lupdate dies on a missing
+            # libicui18n.so at the first translation target. The archive only
+            # exists for the Linux build, so it cannot go in the shared list.
+            qt_archives: icu qtbase qtdeclarative qttools
           - os: windows-latest
             label: windows-x86_64
             triple: x86_64-pc-windows-msvc
@@ -106,12 +111,14 @@ jobs:
             # Named explicitly because install-qt-action still defaults to the
             # msvc2019 build, and Qt stopped publishing that from 6.8.
             qt_arch: win64_msvc2022_64
+            qt_archives: qtbase qtdeclarative qttools
           - os: macos-latest
             label: macos-aarch64
             triple: aarch64-apple-darwin
             binary: qbittorrent-nox
             # The default clang_64 build is universal, so it covers arm64.
             qt_arch: ''
+            qt_archives: qtbase qtdeclarative qttools
 
     env:
       # Kept beside the workspace rather than inside it, so the `find` over the
@@ -300,7 +307,7 @@ jobs:
         with:
           version: ${{ needs.pin.outputs.qt }}
           arch: ${{ matrix.qt_arch }}
-          archives: qtbase qtdeclarative qttools
+          archives: ${{ matrix.qt_archives }}
           cache: true
 
       # ----------------------------------------------------------- libtorrent
