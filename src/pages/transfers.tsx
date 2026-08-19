@@ -1,5 +1,8 @@
-import { Button } from '@/components/ui/button'
+import { useState } from 'react'
+
+import { TransfersToolbar } from '@/components/shell/transfers-toolbar'
 import { Card } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { DataValue } from '@/components/ui/data-value'
 import { ProgressBar } from '@/components/ui/progress-bar'
 import { SectionHeader } from '@/components/ui/section-header'
@@ -40,6 +43,11 @@ const TORRENTS = [
  * its three layouts, filters and toolbar arrives with M3.
  */
 export function Transfers() {
+  const [selected, setSelected] = useState<readonly string[]>([])
+
+  const toggle = (name: string) =>
+    setSelected((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]))
+
   return (
     <div className="flex h-full">
       <aside className="flex w-[236px] shrink-0 flex-col gap-4 overflow-auto border-r border-line bg-sidebar px-3 py-3.5">
@@ -64,7 +72,7 @@ export function Transfers() {
 
         <span className="flex-1" />
 
-        <Card padded={false} className="p-3">
+        <Card padding="row">
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-2">
               <icons.download className="size-[13px] text-accent" strokeWidth={2} />
@@ -84,21 +92,29 @@ export function Transfers() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line px-6">
-          <Button size="sm">Resume</Button>
-          <Button size="sm">Pause</Button>
-          <Button size="sm" variant="danger">
-            Remove
-          </Button>
-          <span className="flex-1" />
-          <SectionHeader>View</SectionHeader>
-        </div>
+        <TransfersToolbar
+          selectedCount={selected.length}
+          totalCount={TORRENTS.length}
+          onClearSelection={() => setSelected([])}
+          onResume={() => {}}
+          onPause={() => {}}
+          onRemove={() => {}}
+        />
 
         <div className="grid grid-cols-2 gap-3.5 overflow-auto p-6 xl:grid-cols-3">
           {TORRENTS.map((t) => (
-            <Card key={t.name} hoverable className="p-3.5">
+            <Card key={t.name} hoverable padding="card">
               <div className="flex flex-col gap-2.5">
-                <span className="truncate text-[12.5px] font-semibold text-text">{t.name}</span>
+                <div className="flex items-center gap-2.5">
+                  <Checkbox
+                    checked={selected.includes(t.name)}
+                    onChange={() => toggle(t.name)}
+                    label={`Select ${t.name}`}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-text">
+                    {t.name}
+                  </span>
+                </div>
                 <StatusDot
                   tone={
                     t.state === 'downloading'
