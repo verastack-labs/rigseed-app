@@ -22,5 +22,8 @@
     "types": ["node", "vitest/globals", "@testing-library/jest-dom"],
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test"]
+  // vite-env.d.ts is listed because the tests compile the modules under test,
+  // and one of them reads import.meta.env. The app project picks it up from
+  // its own include; this project's is narrower, so it has to be named.
+  "include": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test", "src/vite-env.d.ts"]
 }

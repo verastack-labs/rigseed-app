@@ -23,7 +23,7 @@ import {
   tagCounts,
 } from '@/features/transfers/filter'
 import { icons } from '@/lib/icons'
-import { useApi } from '@/services/context'
+import { useApi } from '@/services/api-context'
 import { useThemeStore, type Layout } from '@/state/theme-store'
 import { selectTorrentList, useTorrentStore } from '@/state/torrent-store'
 import { hasActiveFilters, useTransfersStore } from '@/state/transfers-store'

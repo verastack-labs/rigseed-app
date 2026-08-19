@@ -1,35 +1,118 @@
-import { createContext, useContext, useMemo } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
-import { createClient, type Client } from '@/services/client'
-import { createMockTransport } from '@/services/mock-transport'
-import { createHttpTransport } from '@/services/transport'
-
-const ClientContext = createContext<Client | null>(null)
+import { ClientContext, ConnectionContext } from '@/services/api-context'
+import {
+  connect,
+  mockConnection,
+  type ConnectionState,
+  type DaemonTarget,
+} from '@/services/connect'
 
 export interface ApiProviderProps {
-  /** Omit to use the mock daemon. */
-  baseUrl?: string
+  /**
+   * Where to connect, or omitted to work it out.
+   *
+   * Passed explicitly by tests and by anything that already knows. Left off,
+   * the provider asks the environment: the Tauri side for the bundled
+   * instance's credentials, or the dev proxy if one was configured.
+   */
+  target?: DaemonTarget
   children: ReactNode
+}
+
+/**
+ * Where the daemon is, if anywhere.
+ *
+ * Two ways in, and neither is a fallback for the other. Inside Tauri the
+ * bundled instance's credentials come from Rust, which holds them in the OS
+ * keychain and never puts them in a file the frontend can read. In a browser
+ * the dev proxy is the only route, since the page cannot hold a session cookie
+ * for another origin without the daemon relaxing its own CSRF checks.
+ */
+async function findTarget(): Promise<DaemonTarget | null> {
+  const tauri = (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+  if (tauri) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      return await invoke<DaemonTarget>('bundled_connection')
+    } catch {
+      // The sidecar may not have started, or may not be bundled yet. The mock
+      // covers it, and the reason is reported rather than swallowed.
+      return null
+    }
+  }
+
+  // `import.meta.env` rather than a `define`, which was the first attempt and
+  // silently did nothing: an ambient `declare const` for the injected name is
+  // enough for esbuild to treat it as declared and skip the substitution, so
+  // the identifier survived into the served module and read as undefined.
+  const { VITE_QBT_URL, VITE_QBT_USER, VITE_QBT_PASS } = import.meta.env
+  if (VITE_QBT_URL) {
+    // baseUrl is empty on purpose: the dev server proxies `/api`, so the
+    // request is same-origin and the SID cookie is ours to keep.
+    return {
+      baseUrl: '',
+      username: VITE_QBT_USER ?? 'admin',
+      password: VITE_QBT_PASS ?? '',
+    }
+  }
+
+  return null
 }
 
 /**
  * Supplies the API client.
  *
- * With no base URL it wires the mock, which is what lets every screen be built
- * and reviewed before a real daemon is reachable. Swapping to the real one is
- * a prop, not a rewrite, because both sides implement the same transport.
+ * Starts on the mock rather than on nothing, so no screen has to render a
+ * null client and every one of them works before a daemon exists. If a real
+ * daemon answers, the client is swapped and the screens do not notice: both
+ * sides implement the same transport.
  */
-export function ApiProvider({ baseUrl, children }: ApiProviderProps) {
-  const client = useMemo(
-    () => createClient(baseUrl ? createHttpTransport({ baseUrl }) : createMockTransport()),
-    [baseUrl],
-  )
-  return <ClientContext.Provider value={client}>{children}</ClientContext.Provider>
-}
+export function ApiProvider({ target, children }: ApiProviderProps) {
+  const [state, setState] = useState<ConnectionState>(() => mockConnection('Looking for a daemon.'))
+  /**
+   * The connection attempt itself, not a "have we started" flag.
+   *
+   * A boolean was the first attempt and it lost the result entirely under
+   * StrictMode, which mounts, runs the effect, tears it down, and runs it
+   * again. The first run started the login and its cleanup marked the answer
+   * stale; the second run saw the flag already set and returned. The
+   * connection completed and was thrown away, so the app sat on the mock with
+   * a healthy daemon on the other end and nothing in the console to say so.
+   *
+   * Holding the promise means the second run awaits the same work rather than
+   * skipping it or logging in twice.
+   */
+  const attempt = useRef<Promise<ConnectionState> | null>(null)
 
-export function useApi(): Client {
-  const client = useContext(ClientContext)
-  if (!client) throw new Error('useApi must be used inside an ApiProvider')
-  return client
+  useEffect(() => {
+    let live = true
+
+    attempt.current ??= (async () => {
+      const found = target ?? (await findTarget())
+      if (!found) return mockConnection('No daemon configured. Showing sample data.')
+
+      const result = await connect(found)
+      return result.status === 'failed'
+        ? mockConnection(`${result.reason} Showing sample data.`)
+        : result
+    })()
+
+    void attempt.current.then((result) => {
+      if (live) setState(result)
+    })
+
+    return () => {
+      live = false
+    }
+  }, [target])
+
+  return (
+    <ConnectionContext.Provider value={state}>
+      <ClientContext.Provider value={'client' in state ? state.client : null}>
+        {children}
+      </ClientContext.Provider>
+    </ConnectionContext.Provider>
+  )
 }
