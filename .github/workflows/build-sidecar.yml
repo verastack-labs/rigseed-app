@@ -144,18 +144,47 @@ jobs:
           if ((Get-Command "ninja.exe" -ErrorAction SilentlyContinue) -eq $null) { choco install ninja }
           ninja --version
 
-      # The lock timeout is not decoration. The runner's own unattended-upgrades
-      # holds the dpkg lock for the first minutes after boot and apt waits on it
-      # indefinitely by default, which is how this step sat for eight minutes
-      # showing no output at all.
+      # Nothing is installed unless it is actually missing, and apt-get update
+      # is a last resort rather than the first line.
+      #
+      # An unconditional update sat here for twelve minutes producing no output
+      # at all: the Azure mirror answered Ign for every index, apt fell back to
+      # archive.ubuntu.com, and the fetch then stalled with no timeout to end
+      # it. The acquire timeouts below exist so that a repeat is a failure
+      # rather than a hang.
+      #
+      # build-essential, cmake, libssl-dev and zlib1g-dev ship on the image, so
+      # in practice this step installs ninja and nothing else.
       - name: Install build tools (Linux)
         if: runner.os == 'Linux'
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update -o DPkg::Lock::Timeout=300
-          sudo apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=300 \
-            build-essential cmake ninja-build libssl-dev zlib1g-dev
+          set -euo pipefail
+
+          APT_OPTS=(
+            -o Acquire::Retries=3
+            -o Acquire::http::Timeout=20
+            -o Acquire::https::Timeout=20
+            -o DPkg::Lock::Timeout=300
+          )
+
+          missing=()
+          for pkg in build-essential cmake ninja-build libssl-dev zlib1g-dev; do
+            dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
+          done
+
+          if [ ${#missing[@]} -eq 0 ]; then
+            echo "Every build tool is already on the image."
+            exit 0
+          fi
+
+          echo "Installing: ${missing[*]}"
+          if ! sudo apt-get install -y --no-install-recommends "${APT_OPTS[@]}" "${missing[@]}"; then
+            echo "::warning::Install failed against the image's package lists, refreshing them"
+            sudo apt-get update "${APT_OPTS[@]}"
+            sudo apt-get install -y --no-install-recommends "${APT_OPTS[@]}" "${missing[@]}"
+          fi
 
       # cmake and ninja are preinstalled on the image. Notably absent:
       # libtorrent-rasterbar. Homebrew's is 2.1.x and qBittorrent 5.2.3
@@ -225,12 +254,22 @@ jobs:
           name="boost_${{ needs.pin.outputs.boost_underscored }}"
           primary="https://archives.boost.io/release/${{ needs.pin.outputs.boost }}/source/$name.tar.gz"
           mirror="https://sourceforge.net/projects/boost/files/boost/${{ needs.pin.outputs.boost }}/$name.tar.gz"
-          if ! (curl -fLo "$RUNNER_TEMP/boost.tar.gz" "$primary" && tar -xf "$RUNNER_TEMP/boost.tar.gz" -C "$GITHUB_WORKSPACE/.."); then
+
+          # Every path here is relative on purpose. GNU tar reads an argument
+          # containing a colon as host:path, so handing it a Windows path like
+          # D:\a\_temp\boost.tar.gz sends it off trying to open an rsync
+          # connection to a host named D, which is what "Cannot connect to D:
+          # resolve failed" means. Relative names carry no drive letter.
+          cd ..
+
+          if ! curl -fLo boost.tar.gz "$primary"; then
             echo "::warning::archives.boost.io failed, falling back to the SourceForge mirror"
-            curl -fLo "$RUNNER_TEMP/boost.tar.gz" "$mirror"
-            tar -xf "$RUNNER_TEMP/boost.tar.gz" -C "$GITHUB_WORKSPACE/.."
+            curl -fLo boost.tar.gz "$mirror"
           fi
-          mv "$GITHUB_WORKSPACE/.."/boost_* "$BOOST_PATH"
+          tar -xf boost.tar.gz
+          rm -f boost.tar.gz
+          rm -rf boost
+          mv "$name" boost
 
       - name: Stage boost headers (Linux, macOS)
         if: runner.os != 'Windows'
