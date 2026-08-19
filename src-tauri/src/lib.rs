@@ -72,6 +72,12 @@ fn fit_within_screen(window: &tauri::WebviewWindow) {
     let _ = window.set_position(LogicalPosition::new(x.max(0.0), y.max(0.0)));
 }
 
+/// The WebUI account rigseed creates for itself.
+///
+/// Written into the daemon's config and handed to the frontend, so the two
+/// have to be the same string or the login fails against a healthy daemon.
+const DAEMON_USER: &str = "rigseed";
+
 /// The sidecar handle, so the daemon can be stopped when the window closes.
 #[derive(Default)]
 struct Daemon(Mutex<Option<CommandChild>>);
@@ -84,6 +90,17 @@ struct Connection {
     password: String,
 }
 
+impl std::fmt::Debug for Connection {
+    /// Never print the password.
+    ///
+    /// Hand-written rather than derived, because this type ends up in log
+    /// lines and error context, and a generated secret in a log file is still
+    /// a leaked secret.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Connection({} @ {})", self.username, self.base_url)
+    }
+}
+
 /// Hands the frontend its credentials for the bundled instance.
 ///
 /// The password crosses this boundary once, into the API client, and is never
@@ -93,7 +110,7 @@ fn bundled_connection() -> Result<Connection, String> {
     let password = daemon::ensure_password().map_err(|e| e.to_string())?;
     Ok(Connection {
         base_url: format!("http://127.0.0.1:{WEBUI_PORT}"),
-        username: "rigseed".into(),
+        username: DAEMON_USER.into(),
         password,
     })
 }
@@ -118,15 +135,41 @@ pub fn run() {
                 fit_within_screen(&window);
             }
 
-            // Ensure the password exists before the daemon starts, so the
-            // config we hand it is already correct.
-            if let Err(error) = daemon::ensure_password() {
-                log::error!("could not prepare credentials: {error}");
+            // The config has to exist and hold our credentials before the
+            // daemon reads it. Without this the daemon generates its own WebUI
+            // password, `bundled_connection` hands the frontend ours, and every
+            // request 403s against a daemon that is running perfectly.
+            let profile = match app.path().app_data_dir() {
+                Ok(dir) => dir,
+                Err(error) => {
+                    log::error!("no app data directory: {error}");
+                    return Ok(());
+                }
+            };
+
+            match daemon::ensure_password() {
+                Ok(password) => {
+                    let hash = daemon::hash_password(&password);
+                    let config = daemon::config_path(&profile);
+                    if let Err(error) =
+                        daemon::write_config(&config, DAEMON_USER, &hash, WEBUI_PORT)
+                    {
+                        log::error!("could not write {}: {error}", config.display());
+                    } else {
+                        log::info!("daemon config at {}", config.display());
+                    }
+                }
+                Err(error) => log::error!("could not prepare credentials: {error}"),
             }
 
+            // Its own profile, so the bundled instance never touches settings
+            // or torrents belonging to a qBittorrent the user already runs.
             match app.shell().sidecar("qbittorrent-nox") {
                 Ok(command) => match command
-                    .args(["--webui-port", &WEBUI_PORT.to_string()])
+                    .args([
+                        format!("--profile={}", profile.display()),
+                        format!("--webui-port={WEBUI_PORT}"),
+                    ])
                     .spawn()
                 {
                     Ok((_rx, child)) => {

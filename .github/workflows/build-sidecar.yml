@@ -487,7 +487,12 @@ jobs:
           # Relative to the binary, so the bundle can be installed anywhere and
           # needs no LD_LIBRARY_PATH from whatever spawns it. Single-quoted:
           # $ORIGIN is read by the loader, not by this shell.
-          patchelf --set-rpath '$ORIGIN/lib' "bundle/$bin"
+          #
+          # Two candidates, because Tauri puts externalBin beside the app
+          # executable and resources somewhere else again, and only one of
+          # those is a directory we control the name of. Naming both costs
+          # nothing and removes a guess about a layout that does not exist yet.
+          patchelf --set-rpath '$ORIGIN/lib:$ORIGIN/../lib/rigseed/lib' "bundle/$bin"
           for lib in bundle/lib/*.so*; do
             patchelf --set-rpath '$ORIGIN' "$lib"
           done
@@ -582,6 +587,10 @@ jobs:
             install_name_tool -delete_rpath "$old" "bundle/$bin" 2>/dev/null || true
           done
           install_name_tool -add_rpath "@executable_path/lib" "bundle/$bin"
+          # The .app case: externalBin lands in Contents/MacOS and resources in
+          # Contents/Resources. Searched in order, so the sibling wins when
+          # both exist and the packaged layout still resolves when it does not.
+          install_name_tool -add_rpath "@executable_path/../Resources/lib" "bundle/$bin"
 
           # Stripping invalidated whatever signature the binary carried, and an
           # arm64 Mach-O with a modified load command and no signature will not

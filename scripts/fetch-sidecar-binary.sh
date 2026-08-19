@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Downloads the prebuilt qbittorrent-nox for this machine's target triple and
-# puts it where Tauri expects it.
+# Downloads the prebuilt qbittorrent-nox for this machine's target triple,
+# along with the Qt libraries it needs, and puts both where Tauri expects them.
 #
 # The binary is built once per qBittorrent version by .github/workflows/
 # build-sidecar.yml and published to a release named sidecar-<version>. Nothing
@@ -47,6 +47,12 @@ EXT=""
 case "$TRIPLE" in *windows*) EXT=".exe" ;; esac
 ASSET="qbittorrent-nox-$TRIPLE$EXT"
 
+# The binary cannot run alone. -DGUI=OFF still links Qt Core, Network, Sql and
+# Xml, none of which are on an end user's machine, and Linux needs ICU beside
+# them while Windows needs the MSVC runtime. Collected per platform by the
+# build workflow and published as a second asset.
+RUNTIME="runtime-$TRIPLE.tar.gz"
+
 echo "version : $VERSION"
 echo "triple  : $TRIPLE"
 echo "release : $RELEASE"
@@ -56,8 +62,11 @@ echo
 mkdir -p "$DEST"
 TARGET="$DEST/$ASSET"
 
-if [ -f "$TARGET" ]; then
-  echo "Already present at $TARGET"
+# Both, or neither. A binary present without its libraries looks fine to every
+# check up to the moment it is launched, which is the failure this whole
+# arrangement exists to avoid.
+if [ -f "$TARGET" ] && [ -d "$DEST/lib" ]; then
+  echo "Already present at $TARGET, with its runtime libraries"
   exit 0
 fi
 
@@ -83,16 +92,44 @@ EOF
   exit 1
 fi
 
-echo "Downloading..."
-gh release download "$RELEASE" --repo "$REPO" --pattern "$ASSET" --dir "$DEST" --clobber
-gh release download "$RELEASE" --repo "$REPO" --pattern "$ASSET.sha256" --dir "$DEST" --clobber || true
+verify() {
+  local asset="$1"
+  gh release download "$RELEASE" --repo "$REPO" --pattern "$asset.sha256" --dir "$DEST" --clobber || return 0
+  echo "Verifying $asset..."
+  ( cd "$DEST" && { sha256sum -c "$asset.sha256" 2>/dev/null || shasum -a 256 -c "$asset.sha256"; } )
+}
 
-if [ -f "$TARGET.sha256" ]; then
-  echo "Verifying checksum..."
-  ( cd "$DEST" && { sha256sum -c "$ASSET.sha256" 2>/dev/null || shasum -a 256 -c "$ASSET.sha256"; } )
+echo "Downloading the binary..."
+gh release download "$RELEASE" --repo "$REPO" --pattern "$ASSET" --dir "$DEST" --clobber
+verify "$ASSET"
+chmod +x "$TARGET" 2>/dev/null || true
+
+echo "Downloading the runtime libraries..."
+if gh release download "$RELEASE" --repo "$REPO" --pattern "$RUNTIME" --dir "$DEST" --clobber; then
+  verify "$RUNTIME"
+  # Extracted in place: on Linux and macOS the binary's RPATH names
+  # $ORIGIN/lib, and on Windows the loader searches the executable's own
+  # directory first, which is why that tarball has no lib subdirectory.
+  tar -xzf "$DEST/$RUNTIME" -C "$DEST"
+  rm -f "$DEST/$RUNTIME" "$DEST/$RUNTIME.sha256"
+else
+  cat >&2 <<EOF
+
+error: $RELEASE has no $RUNTIME
+
+The binary was published before the runtime libraries were collected, or the
+build for this platform failed. qbittorrent-nox will not start without them.
+Rebuild with:
+
+    gh workflow run build-sidecar.yml --repo $REPO -f force=true
+EOF
+  exit 1
 fi
 
-chmod +x "$TARGET" 2>/dev/null || true
 echo
 echo "Ready: $TARGET"
-echo "Declare it in tauri.conf.json under bundle.externalBin as binaries/qbittorrent-nox"
+if [ -d "$DEST/lib" ]; then
+  echo "Runtime: $DEST/lib ($(find "$DEST/lib" -maxdepth 1 -mindepth 1 | wc -l | tr -d " ") entries)"
+else
+  echo "Runtime: alongside the binary in $DEST"
+fi
