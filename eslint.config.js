@@ -32,7 +32,21 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      // cva variant objects are exported beside their component by convention,
+      // and shadcn generates them that way. They are constants, not components.
+      'react-refresh/only-export-components': [
+        'warn',
+        {
+          allowConstantExport: true,
+          allowExportNames: [
+            'buttonVariants',
+            'badgeVariants',
+            'iconButtonVariants',
+            'dataValueVariants',
+            'statCardValueVariants',
+          ],
+        },
+      ],
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
