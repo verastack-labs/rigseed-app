@@ -4,4 +4,9 @@
 /gen/schemas
 
 # Vendored at build time, never committed. See binaries/README.md.
-binaries/qbittorrent-nox*
+#
+# The runtime libraries come down with the binary and are just as much not
+# ours to commit: they are Qt's and Microsoft's, they are tens of megabytes,
+# and the release they come from is the record of which build they belong to.
+binaries/*
+!binaries/README.md
