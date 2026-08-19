@@ -1,12 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-import {
-  ContentsTable,
-  PRIORITY,
-  selectedSize,
-  type Priority,
-} from '@/features/add-torrent/contents-table'
+import { ContentsTable } from '@/features/add-torrent/contents-table'
+import { PRIORITY, selectedSize, type Priority } from '@/features/add-torrent/priority'
 import type { TorrentEntry } from '@/utils/torrent-file'
 
 const entries: TorrentEntry[] = [
