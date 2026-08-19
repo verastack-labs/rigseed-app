@@ -513,58 +513,56 @@ jobs:
 
           cp -R deploy/qbittorrent-nox.app/Contents/Frameworks/. bundle/lib/
 
-          # The two absolute paths into the build machine's Homebrew prefix.
-          # These are worse than the @rpath references: the binary fails even
-          # on a Mac that has OpenSSL, unless it happens to be a Homebrew
-          # install at the same prefix.
-          for ref in $(otool -L "bundle/$bin" | tail -n +2 | awk '{print $1}'); do
-            case "$ref" in
-              /usr/lib/*|/System/*|@rpath/*|@executable_path/*|@loader_path/*) continue ;;
-            esac
-            name=$(basename "$ref")
-            [ -e "bundle/lib/$name" ] || cp -L "$ref" "bundle/lib/$name"
-            chmod u+w "bundle/lib/$name"
-            install_name_tool -change "$ref" "@rpath/$name" "bundle/$bin"
-            echo "rewrote $ref"
-          done
-
-          # libssl reaches for libcrypto by the same absolute path.
-          for lib in bundle/lib/*.dylib; do
-            [ -e "$lib" ] || continue
-            chmod u+w "$lib"
-            install_name_tool -id "@rpath/$(basename "$lib")" "$lib"
-            for ref in $(otool -L "$lib" | tail -n +2 | awk '{print $1}'); do
+          # One policy, applied to the binary and to everything in lib, because
+          # the first attempt had three copies of it that disagreed.
+          #
+          # System libraries stay. @rpath and @loader_path are already relative
+          # and correct. Everything else becomes @rpath and is brought along:
+          # an absolute path into the build machine's Homebrew prefix would
+          # fail even on a Mac that has OpenSSL, and macdeployqt's
+          # @executable_path/../Frameworks assumes the .app layout we are
+          # deliberately not shipping.
+          #
+          # That last case is what the first run got wrong. It was skipped as
+          # "already relative", so libssl kept pointing at a Frameworks
+          # directory beside the executable that does not exist here, and the
+          # binary died on launch with the bundle otherwise complete.
+          relink() {
+            local target="$1"
+            chmod u+w "$target"
+            for ref in $(otool -L "$target" | tail -n +2 | awk '{print $1}'); do
               case "$ref" in
-                /usr/lib/*|/System/*|@rpath/*|@executable_path/*|@loader_path/*) continue ;;
+                /usr/lib/*|/System/*|@rpath/*|@loader_path/*) continue ;;
+                @executable_path/../Frameworks/*)
+                  install_name_tool -change "$ref" "@rpath/${ref#@executable_path/../Frameworks/}" "$target"
+                  ;;
+                *)
+                  dep=$(basename "$ref")
+                  [ -e "bundle/lib/$dep" ] || cp -L "$ref" "bundle/lib/$dep"
+                  chmod u+w "bundle/lib/$dep"
+                  install_name_tool -change "$ref" "@rpath/$dep" "$target"
+                  echo "brought in $ref"
+                  ;;
               esac
-              install_name_tool -change "$ref" "@rpath/$(basename "$ref")" "$lib"
+            done
+          }
+
+          relink "bundle/$bin"
+
+          # Repeat until nothing new arrives: a library pulled in on one pass
+          # can name another that is not here yet. Two rounds is one more than
+          # OpenSSL needs, and the loop is cheap.
+          for round in 1 2 3; do
+            for lib in bundle/lib/*.dylib; do
+              [ -e "$lib" ] || continue
+              install_name_tool -id "@rpath/$(basename "$lib")" "$lib" 2>/dev/null || true
+              relink "$lib"
             done
           done
 
-          # macdeployqt writes @executable_path/../Frameworks, which assumes
-          # the .app layout we are deliberately not shipping. One rpath
-          # pointing at the directory beside the binary replaces it.
-          for old in $(otool -l "bundle/$bin" | grep -A2 LC_RPATH | awk '/path /{print $2}'); do
-            install_name_tool -delete_rpath "$old" "bundle/$bin" 2>/dev/null || true
-          done
-          install_name_tool -add_rpath "@executable_path/lib" "bundle/$bin"
-
-          for ref in $(otool -L "bundle/$bin" | tail -n +2 | awk '{print $1}'); do
-            case "$ref" in
-              @executable_path/../Frameworks/*)
-                install_name_tool -change "$ref" "@rpath/${ref#@executable_path/../Frameworks/}" "bundle/$bin"
-                ;;
-            esac
-          done
-
           # The frameworks have to find each other, not just be findable from
-          # the binary. macdeployqt writes them for the .app layout it assumes,
-          # where Frameworks sits beside MacOS; we ship them in a plain lib
-          # directory instead, so each one gets an rpath pointing back at that
-          # directory and its sibling references normalised to @rpath.
-          #
-          # Four levels up from lib/Qt6Core.framework/Versions/A/Qt6Core is
-          # lib itself.
+          # the binary. Four levels up from
+          # lib/QtCore.framework/Versions/A/QtCore is lib itself.
           for fw in bundle/lib/*.framework; do
             [ -d "$fw" ] || continue
             name=$(basename "$fw" .framework)
@@ -575,25 +573,19 @@ jobs:
             chmod u+w "$inner"
             install_name_tool -id "@rpath/$name.framework/Versions/A/$name" "$inner"
             install_name_tool -add_rpath "@loader_path/../../.." "$inner" 2>/dev/null || true
-
-            for ref in $(otool -L "$inner" | tail -n +2 | awk '{print $1}'); do
-              case "$ref" in
-                @executable_path/../Frameworks/*)
-                  install_name_tool -change "$ref" "@rpath/${ref#@executable_path/../Frameworks/}" "$inner"
-                  ;;
-                /usr/lib/*|/System/*|@rpath/*|@loader_path/*) ;;
-                *)
-                  dep=$(basename "$ref")
-                  [ -e "bundle/lib/$dep" ] || cp -L "$ref" "bundle/lib/$dep" 2>/dev/null || true
-                  install_name_tool -change "$ref" "@rpath/$dep" "$inner"
-                  ;;
-              esac
-            done
+            relink "$inner"
           done
 
+          # macdeployqt writes rpaths for the .app layout. One pointing at the
+          # directory beside the binary replaces all of them.
+          for old in $(otool -l "bundle/$bin" | grep -A2 LC_RPATH | awk '/path /{print $2}'); do
+            install_name_tool -delete_rpath "$old" "bundle/$bin" 2>/dev/null || true
+          done
+          install_name_tool -add_rpath "@executable_path/lib" "bundle/$bin"
+
           # Stripping invalidated whatever signature the binary carried, and an
-          # unsigned Mach-O with a modified load command will not launch on
-          # arm64 at all. Ad-hoc is enough here; real signing happens when the
+          # arm64 Mach-O with a modified load command and no signature will not
+          # launch at all. Ad-hoc is enough here; real signing happens when the
           # app itself is signed, and has to come after this.
           codesign --force --sign - --timestamp=none "bundle/$bin"
           for lib in bundle/lib/*.dylib bundle/lib/*.framework; do
@@ -601,13 +593,22 @@ jobs:
             codesign --force --sign - --timestamp=none "$lib"
           done
 
-          echo "--- binary ---"; otool -L "bundle/$bin"
-          first=$(find bundle/lib -name '*.framework' -maxdepth 1 | head -1)
-          if [ -n "$first" ]; then
-            echo "--- $(basename "$first") ---"
-            otool -L "$first/Versions/A/$(basename "$first" .framework)" || true
-          fi
+          # Anything still absolute or still assuming the .app layout is a
+          # failure now rather than a crash in the next step, because here we
+          # can say which file it was.
+          bad=0
+          for target in "bundle/$bin" bundle/lib/*.dylib; do
+            [ -e "$target" ] || continue
+            for ref in $(otool -L "$target" | tail -n +2 | awk '{print $1}'); do
+              case "$ref" in
+                /usr/lib/*|/System/*|@rpath/*|@loader_path/*) ;;
+                *) echo "::error::$target still references $ref"; bad=1 ;;
+              esac
+            done
+          done
+          [ "$bad" = 0 ] || exit 1
 
+          echo "--- binary ---"; otool -L "bundle/$bin"
           ls -la bundle bundle/lib
 
       - name: Collect the runtime libraries (Windows)
