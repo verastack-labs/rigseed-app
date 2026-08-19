@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { Input } from '@/components/ui/input'
 import { SectionHeader } from '@/components/ui/section-header'
@@ -54,13 +54,35 @@ interface LimitFieldProps {
  * while the limit is unchanged, which is every poll but the one that matters.
  */
 function LimitField({ name, api, limit, onChange }: LimitFieldProps) {
-  const unlimited = limit === LIMIT_UNLIMITED || limit === 0
-  const [draft, setDraft] = useState(unlimited ? '' : String(Math.round(limit / KIB)))
+  const capped = limit !== LIMIT_UNLIMITED && limit !== 0
+
+  /**
+   * Whether the field is open for typing, which is not the same question as
+   * whether a limit is currently set.
+   *
+   * Deriving the disabled state from `limit` alone was the first attempt and
+   * it deadlocked: unlimited disabled the box, a disabled box could not be
+   * typed into, an empty box committed as unlimited, and the switch snapped
+   * back on. There was no path from unlimited to any limit at all. Turning
+   * the switch off has to open the field before there is a number in it.
+   */
+  const [live, setLive] = useState(capped)
+  const [draft, setDraft] = useState(capped ? String(Math.round(limit / KIB)) : '')
+  const field = useRef<HTMLInputElement>(null)
+
+  /** Back to unlimited, with the switch saying so rather than drifting. */
+  const clear = () => {
+    setLive(false)
+    setDraft('')
+    onChange(LIMIT_UNLIMITED)
+  }
 
   const commit = () => {
     const value = Number(draft)
+    // An emptied box means unlimited, not zero. A zero limit would stop the
+    // torrent dead, which is nobody's reading of clearing a field.
     if (!draft.trim() || !Number.isFinite(value) || value <= 0) {
-      onChange(LIMIT_UNLIMITED)
+      clear()
       return
     }
     onChange(Math.round(value * KIB))
@@ -71,16 +93,17 @@ function LimitField({ name, api, limit, onChange }: LimitFieldProps) {
       <SectionHeader>Limit</SectionHeader>
       <Input
         mono
+        ref={field}
         size="sm"
         value={draft}
-        disabled={unlimited}
+        disabled={!live}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === 'Enter') commit()
         }}
         aria-label={`${name} limit`}
-        placeholder="unlimited"
+        placeholder={live ? 'e.g. 500' : 'unlimited'}
         className="w-[92px]"
       />
       <span className="font-mono text-[10.5px] text-text-dimmer">KiB/s</span>
@@ -89,11 +112,18 @@ function LimitField({ name, api, limit, onChange }: LimitFieldProps) {
 
       <Switch
         label={`${name} unlimited`}
-        checked={unlimited}
-        // Off means "apply what is in the box", and an empty box is still
-        // unlimited, so this cannot leave the torrent in a state the field
-        // does not describe.
-        onChange={(next) => (next ? onChange(LIMIT_UNLIMITED) : commit())}
+        checked={!live}
+        onChange={(next) => {
+          if (next) {
+            clear()
+            return
+          }
+          setLive(true)
+          // The switch just handed the decision to the field, so put the
+          // cursor there. After a frame, because the field is still disabled
+          // in the DOM this render and focus on a disabled input does nothing.
+          requestAnimationFrame(() => field.current?.focus())
+        }}
       />
       <span className="text-[11.5px] text-text-dim">Unlimited</span>
       <span className="font-mono text-[10.5px] text-text-dimmer">{api}</span>
