@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ContentsTable } from '@/features/add-torrent/contents-table'
-import { PRIORITY, selectedSize, type Priority } from '@/features/add-torrent/priority'
+import { PRIORITY, selectedSize, type Priority } from '@/lib/priority'
 import type { TorrentEntry } from '@/utils/torrent-file'
 
 const entries: TorrentEntry[] = [
@@ -93,8 +93,10 @@ describe('ContentsTable', () => {
 
   it('uses the daemon’s own priority numbers', () => {
     // torrents/filePrio takes these literally. A parallel enum here would only
-    // need a mapping table to undo itself.
-    expect(PRIORITY).toEqual({ skip: 0, normal: 1, max: 7 })
+    // need a mapping table to undo itself. High is in the shared vocabulary
+    // because the detail screen offers it; this dialog deliberately does not,
+    // since a torrent nobody has started has no ordering to influence.
+    expect(PRIORITY).toEqual({ skip: 0, normal: 1, high: 6, max: 7 })
   })
 
   it('shows a skipped file as skipped and disables its priority', () => {

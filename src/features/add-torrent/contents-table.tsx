@@ -2,12 +2,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { SectionHeader } from '@/components/ui/section-header'
 import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
-import {
-  PRIORITY,
-  PRIORITY_LABEL,
-  selectedSize,
-  type Priority,
-} from '@/features/add-torrent/priority'
+import { PRIORITY, PRIORITY_LABEL, selectedSize, type Priority } from '@/lib/priority'
 import { formatBytes } from '@/utils/format'
 import type { TorrentEntry } from '@/utils/torrent-file'
 

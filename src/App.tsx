@@ -3,6 +3,7 @@ import { HashRouter, Route, Routes } from 'react-router'
 import { AppShell } from '@/components/shell/app-shell'
 import { ApiProvider } from '@/services/context'
 import { Placeholder } from '@/pages/placeholder'
+import { TorrentDetail } from '@/pages/torrent-detail'
 import { Transfers } from '@/pages/transfers'
 
 /**
@@ -20,6 +21,9 @@ export function App() {
         <Routes>
           <Route element={<AppShell />}>
             <Route index element={<Transfers />} />
+            {/* Hash rather than an index, because the daemon identifies a
+                torrent by hash and nothing else survives a reorder. */}
+            <Route path="torrent/:hash" element={<TorrentDetail />} />
             <Route
               path="search"
               element={<Placeholder title="Search" tier="V2" api="search/start" />}

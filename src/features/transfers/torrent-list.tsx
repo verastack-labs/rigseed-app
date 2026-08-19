@@ -4,6 +4,7 @@ import { ProgressBar } from '@/components/ui/progress-bar'
 import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { RowMenu, type LayoutProps } from '@/features/transfers/row-menu'
+import { TorrentLink } from '@/features/transfers/torrent-link'
 import { formatBytes, formatSpeed, isPaused } from '@/utils/format'
 
 /**
@@ -46,9 +47,11 @@ export function TorrentList({ torrents, selected, onToggle, ...actions }: Layout
                 label={`Select ${torrent.name}`}
               />
               <icons.folder className="size-[15px] shrink-0 text-text-dim" strokeWidth={2} />
-              <span title={torrent.name} className="truncate text-[12.5px] text-text">
-                {torrent.name}
-              </span>
+              <TorrentLink
+                hash={torrent.hash}
+                name={torrent.name}
+                className="truncate text-[12.5px]"
+              />
             </div>
 
             <DataValue size="xs" tone="dim" className="text-right">

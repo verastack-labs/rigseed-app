@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode } from 'react'
+import type { InputHTMLAttributes, ReactNode, Ref } from 'react'
 
 import { cn } from '@/lib/utils'
 
@@ -11,6 +11,14 @@ export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 
   /** Leading icon inside the field. */
   icon?: ReactNode
   invalid?: boolean
+  /**
+   * Forwarded to the inner field rather than to the bordered wrapper.
+   *
+   * React 19 passes `ref` through as an ordinary prop, so this already worked
+   * by accident of the spread. Naming it says which of the two elements a
+   * caller gets, which is the part that was guesswork.
+   */
+  ref?: Ref<HTMLInputElement>
   className?: string
 }
 

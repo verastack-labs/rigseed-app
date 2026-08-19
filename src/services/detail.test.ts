@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { createClient } from '@/services/client'
+import { PRIORITY } from '@/lib/priority'
 import { createMockTransport } from '@/services/mock-transport'
 
 /** The first torrent's hash, which the fixture names deterministically. */
@@ -148,5 +149,88 @@ describe('the write-backs the Speed tab makes', () => {
     await client.torrents.setAutoManagement([FIRST], true)
     await client.torrents.setAutoManagement([FIRST], true)
     expect((await client.torrents.info()).find((t) => t.hash === FIRST)!.auto_tmm).toBe(true)
+  })
+})
+
+describe('the write-backs the Files, Trackers and Peers tabs make', () => {
+  // These four were accepted and dropped until the screen was driven by hand
+  // against the mock. Every unit test passed the whole time, because each one
+  // checked that the request was well formed and none of them checked that
+  // anything happened. What follows is the loop, not the request.
+
+  it('remembers a file priority', async () => {
+    const client = api()
+    await client.torrents.filePrio(FIRST, [2, 3], PRIORITY.max)
+
+    const files = await client.torrents.files(FIRST)
+    expect(files.map((f) => f.priority)).toEqual([7, 1, 7, 7, 1])
+  })
+
+  it('declines a priority the daemon would reject', async () => {
+    // qBittorrent answers 400 for anything outside its four. Rounding to
+    // normal here would make the mock more forgiving than the thing it stands
+    // in for, which is the one way a mock is allowed to be wrong.
+    const client = api()
+    const before = (await client.torrents.files(FIRST)).map((f) => f.priority)
+    await client.torrents.filePrio(FIRST, [0], 4)
+    expect((await client.torrents.files(FIRST)).map((f) => f.priority)).toEqual(before)
+  })
+
+  it('adds a tracker as not-yet-contacted rather than as working', async () => {
+    const client = api()
+    await client.torrents.addTrackers(FIRST, ['https://tracker.example.test/announce'])
+
+    const added = (await client.torrents.trackers(FIRST)).find(
+      (t) => t.url === 'https://tracker.example.test/announce',
+    )
+    expect(added).toBeDefined()
+    expect(added!.status).toBe(1)
+  })
+
+  it('removes a tracker and leaves the rest alone', async () => {
+    const client = api()
+    const before = await client.torrents.trackers(FIRST)
+    await client.torrents.removeTrackers(FIRST, ['https://torrent.ubuntu.com/announce'])
+
+    const after = await client.torrents.trackers(FIRST)
+    expect(after).toHaveLength(before.length - 1)
+    expect(after.some((t) => t.url === 'https://torrent.ubuntu.com/announce')).toBe(false)
+  })
+
+  it('keeps one torrent’s trackers out of another’s', async () => {
+    // They were a shared literal before, so a removal appeared to work and
+    // then reappeared, or worse, took a row off a torrent nobody touched.
+    const client = api()
+    await client.torrents.removeTrackers(FIRST, ['https://torrent.ubuntu.com/announce'])
+
+    const other = await client.torrents.trackers('hash01')
+    expect(other.some((t) => t.url === 'https://torrent.ubuntu.com/announce')).toBe(true)
+  })
+
+  it('answers reads with copies, so a caller cannot edit the daemon', async () => {
+    // Found by a test that read the tracker list, removed a tracker, and then
+    // compared the two lengths: both readings were the same array, so the
+    // "before" had already shrunk. A real transport parses fresh JSON and
+    // shares nothing, and the mock has to be wrong in the same direction.
+    const client = api()
+    const first = await client.torrents.trackers(FIRST)
+    const before = first.length
+
+    await client.torrents.removeTrackers(FIRST, ['https://torrent.ubuntu.com/announce'])
+    expect(first).toHaveLength(before)
+    expect(await client.torrents.trackers(FIRST)).toHaveLength(before - 1)
+  })
+
+  it('bans a peer everywhere, not just where the row was clicked', async () => {
+    // app/banPeers is session-wide. A mock that scoped it per torrent would
+    // teach the wrong thing about what the button does.
+    const client = api()
+    await client.sync.torrentPeers(FIRST, 0)
+    await client.sync.torrentPeers('hash01', 0)
+
+    const victim = Object.keys((await client.sync.torrentPeers(FIRST, 0)).peers ?? {})[0]!
+    await client.app.banPeers([victim])
+
+    expect((await client.sync.torrentPeers(FIRST, 0)).peers).not.toHaveProperty(victim)
   })
 })
