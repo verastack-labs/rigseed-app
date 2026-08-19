@@ -3,12 +3,16 @@ import {
   FileText,
   Folder,
   Palette,
+  Pause,
+  Play,
   Rss,
   Search,
   Settings,
   Signal,
   Tags,
+  Trash2,
   Waves,
+  X,
 } from 'lucide-react'
 
 /**
@@ -27,24 +31,8 @@ export const icons = {
   folder: Folder,
   download: ArrowDownToLine,
   palette: Palette,
+  resume: Play,
+  pause: Pause,
+  remove: Trash2,
+  clear: X,
 } as const
-
-/** The cleat. A horizontal bar with flared horns and a rope loop at -38deg. */
-export function BrandMark({ size = 20 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M6.5 12h11M6.5 12 4 9.3M6.5 12 4 14.7M17.5 12 20 9.3M17.5 12 20 14.7" />
-      <ellipse cx="12" cy="12" rx="5.2" ry="3.1" transform="rotate(-38 12 12)" strokeWidth="1.7" />
-    </svg>
-  )
-}

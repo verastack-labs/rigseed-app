@@ -7,7 +7,8 @@ import { SetupModal } from '@/components/shell/setup-modal'
 import { TopBar } from '@/components/shell/top-bar'
 import { NavRail } from '@/components/ui/nav-rail'
 import { RailItem } from '@/components/ui/rail-item'
-import { BrandMark, icons } from '@/lib/icons'
+import { BrandMark } from '@/components/brand-mark'
+import { icons } from '@/lib/icons'
 import { useThemeAttributes } from '@/state/use-theme-attributes'
 
 const DESTINATIONS = [
