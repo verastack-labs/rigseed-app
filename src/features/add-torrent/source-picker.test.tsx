@@ -34,6 +34,7 @@ describe('SourcePicker', () => {
           { path: 'a', size: 1 },
           { path: 'b', size: 2 },
         ],
+        infoBytes: new Uint8Array(),
       },
     })
 
@@ -46,7 +47,12 @@ describe('SourcePicker', () => {
   it('says entry, not entries, for a single-file torrent', () => {
     setup({
       file: new File([''], 'debian.torrent'),
-      meta: { name: 'debian', totalSize: 660_000_000, entries: [{ path: 'debian', size: 1 }] },
+      meta: {
+        name: 'debian',
+        totalSize: 660_000_000,
+        entries: [{ path: 'debian', size: 1 }],
+        infoBytes: new Uint8Array(),
+      },
     })
     expect(screen.getByText(/· 1 entry ·/)).toBeInTheDocument()
   })
