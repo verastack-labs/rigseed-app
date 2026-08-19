@@ -25,6 +25,15 @@ describe('formatBytes', () => {
     expect(formatBytes(250_000_000_000)).toBe('250.0 GB')
   })
 
+  it('treats decimals as a ceiling, not a target', () => {
+    // The large-number rule used to override an explicit request for none, so
+    // the save-path hint could not say "412 GB free" without saying "412.0".
+    expect(formatBytes(412_000_000_000, 0)).toBe('412 GB')
+    expect(formatBytes(5_700_000_000, 1)).toBe('5.7 GB')
+    // And the default is unchanged either way.
+    expect(formatBytes(412_000_000_000)).toBe('412.0 GB')
+  })
+
   it('survives nonsense rather than printing NaN', () => {
     expect(formatBytes(Number.NaN)).toBe('0 B')
     expect(formatBytes(-1)).toBe('0 B')
