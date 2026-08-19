@@ -1,4 +1,4 @@
-import type { MainData } from '@/types/qbittorrent'
+import type { MainData, TorrentPeers } from '@/types/qbittorrent'
 import type { Transport } from '@/services/transport'
 
 /**
@@ -12,8 +12,15 @@ import type { Transport } from '@/services/transport'
 export function createSyncApi(transport: Transport) {
   return {
     maindata: (rid = 0) => transport.get<MainData>('sync/maindata', { rid }),
+    /**
+     * The same diff contract, scoped to one torrent.
+     *
+     * Peers are keyed by `ip:port` rather than by ip, because one address can
+     * hold several connections and merging them by ip would make the count in
+     * the tab header disagree with the rows under it.
+     */
     torrentPeers: (hash: string, rid = 0) =>
-      transport.get<unknown>('sync/torrentPeers', { hash, rid }),
+      transport.get<TorrentPeers>('sync/torrentPeers', { hash, rid }),
   }
 }
 
