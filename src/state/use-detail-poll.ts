@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { useApi } from '@/services/context'
+import { useApi } from '@/services/api-context'
 import type { Peer, TorrentFile, TorrentProperties, Tracker } from '@/types/qbittorrent'
 
 export type DetailTabKey = 'general' | 'files' | 'trackers' | 'peers' | 'speed'
@@ -35,6 +35,14 @@ export function useDetailPoll(hash: string, tab: DetailTabKey, intervalMs = 2000
   const [trackers, setTrackers] = useState<readonly Tracker[] | null>(null)
   const [peers, setPeers] = useState<Record<string, Peer> | null>(null)
 
+  /**
+   * Whether the *current* run is still wanted.
+   *
+   * Read through a ref so `fetchFor` does not have to be rebuilt for it, and
+   * reset by each effect run rather than shared: the sync loop had the shared
+   * version and a superseded generation's response was waved through by the
+   * generation that replaced it.
+   */
   const stopped = useRef(false)
 
   const fetchFor = useCallback(
