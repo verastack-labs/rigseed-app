@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 
+import { IconButton } from '@/components/ui/icon-button'
+import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 
 const FOCUSABLE =
@@ -18,6 +20,14 @@ export interface DialogProps {
   /** Icon tile in the header, tinted by tone. */
   icon?: ReactNode
   tone?: 'accent' | 'danger'
+  /**
+   * Adds an X to the header.
+   *
+   * Off by default. A confirmation with three ways out reads as three
+   * different decisions, so the small dialogs deliberately offer only Cancel.
+   * The large ones, where the footer can be scrolled away from, need it.
+   */
+  showClose?: boolean
   className?: string
 }
 
@@ -41,6 +51,7 @@ export function Dialog({
   width = 440,
   icon,
   tone = 'accent',
+  showClose,
   className,
 }: DialogProps) {
   const cardRef = useRef<HTMLDivElement>(null)
@@ -54,7 +65,15 @@ export function Dialog({
   useEffect(() => {
     if (!open) return
     returnFocusTo.current = document.activeElement as HTMLElement | null
-    focusables()[0]?.focus()
+
+    // The close button is first in the DOM but must not take opening focus:
+    // landing there means Enter dismisses the dialog the user just opened. It
+    // stays in the tab cycle, it is only skipped for the initial placement,
+    // and it is still the fallback when there is nothing else to focus.
+    const items = focusables()
+    const first = items.find((el) => el.dataset.dialogClose === undefined) ?? items[0]
+    first?.focus()
+
     return () => returnFocusTo.current?.focus?.()
   }, [open, focusables])
 
@@ -120,6 +139,14 @@ export function Dialog({
               <div className="text-text-dim text-[12.5px] leading-[1.55]">{description}</div>
             ) : null}
           </div>
+          {showClose ? (
+            <>
+              <span className="flex-1" />
+              <IconButton title="Close" size="sm" data-dialog-close="" onClick={onClose}>
+                <icons.clear className="size-[15px]" strokeWidth={2.2} />
+              </IconButton>
+            </>
+          ) : null}
         </div>
 
         {children ? <div className="min-h-0 overflow-auto px-[22px] pb-1">{children}</div> : null}

@@ -33,6 +33,23 @@ const CATEGORIES: Record<string, Category> = {
 
 const TAGS = ['iso', 'verified', 'seed-forever']
 
+/** Roughly 412 GB, the figure the Add Torrent save-path hint was drawn with. */
+const FREE_SPACE = 412 * 1000 ** 3
+
+/**
+ * The display name out of a magnet link.
+ *
+ * `dn` is a hint rather than a guarantee: a bare `magnet:?xt=urn:btih:...` is
+ * perfectly valid and carries no name at all, which is exactly the case where
+ * a real daemon shows the info hash until metadata arrives. Reproducing that
+ * here keeps the truncation in the torrent list honest.
+ */
+function magnetName(link: string): { hash: string; name: string } {
+  const hash = /btih:([a-z0-9]+)/i.exec(link)?.[1]?.toLowerCase() ?? ''
+  const dn = /[?&]dn=([^&]*)/.exec(link)?.[1]
+  return { hash, name: dn ? decodeURIComponent(dn.replace(/\+/g, ' ')) : hash || link }
+}
+
 /**
  * Deterministic pseudo-random.
  *
@@ -101,9 +118,29 @@ export function createMockTransport({
     torrents.set(t.hash, t)
   }
 
+  // Copied rather than mutated in place, so two mock transports in the same
+  // test file cannot see each other's created categories.
+  const categories: Record<string, Category> = { ...CATEGORIES }
+  const tags = [...TAGS]
+
   let rid = 0
   let sessionDown = 0
   let sessionUp = 0
+
+  // Things created since the last poll. The sync contract sends diffs, and a
+  // torrent appearing for the first time has to arrive whole: `tick` reports
+  // only the fields that moved, which for a brand new hash would be a torrent
+  // with a progress and no name.
+  const pendingTorrents = new Set<string>()
+  const pendingCategories = new Set<string>()
+  const pendingTags = new Set<string>()
+
+  function drain<T>(set: Set<string>, pick: (key: string) => T): Record<string, T> | undefined {
+    if (set.size === 0) return undefined
+    const out = Object.fromEntries([...set].map((key) => [key, pick(key)]))
+    set.clear()
+    return out
+  }
 
   const wait = <T>(value: T): Promise<T> =>
     latency > 0 ? new Promise((r) => setTimeout(() => r(value), latency)) : Promise.resolve(value)
@@ -171,8 +208,8 @@ export function createMockTransport({
             rid,
             full_update: true,
             torrents: Object.fromEntries(torrents),
-            categories: CATEGORIES,
-            tags: TAGS,
+            categories,
+            tags,
             server_state: {
               dl_info_speed: 0,
               up_info_speed: 0,
@@ -181,15 +218,24 @@ export function createMockTransport({
               dht_nodes: 312,
               connection_status: 'connected',
               use_alt_speed_limits: false,
+              free_space_on_disk: FREE_SPACE,
             },
           } as MainData as T)
         }
 
         const changed = tick()
+        for (const hash of pendingTorrents) changed[hash] = torrents.get(hash) ?? {}
+        pendingTorrents.clear()
+
+        const newTags = pendingTags.size ? [...pendingTags] : undefined
+        pendingTags.clear()
+
         const totals = [...torrents.values()]
         return wait({
           rid,
           torrents: changed,
+          categories: drain(pendingCategories, (name) => categories[name]!),
+          tags: newTags,
           server_state: {
             dl_info_speed: totals.reduce((a, t) => a + t.dlspeed, 0),
             up_info_speed: totals.reduce((a, t) => a + t.upspeed, 0),
@@ -200,8 +246,8 @@ export function createMockTransport({
       }
 
       if (path === 'torrents/info') return wait([...torrents.values()] as T)
-      if (path === 'torrents/categories') return wait(CATEGORIES as T)
-      if (path === 'torrents/tags') return wait(TAGS as T)
+      if (path === 'torrents/categories') return wait(categories as T)
+      if (path === 'torrents/tags') return wait(tags as T)
       if (path === 'app/version') return wait('v5.2.3' as T)
       if (path === 'app/webapiVersion') return wait('2.11.2' as T)
       if (path === 'app/defaultSavePath') return wait('/downloads' as T)
@@ -228,6 +274,84 @@ export function createMockTransport({
       }
       if (path === 'torrents/delete') {
         for (const h of hashes) torrents.delete(h)
+      }
+
+      // The inline creators in Add Torrent create and select in one step, so
+      // the created thing has to be usable on the very next render rather than
+      // after a refresh.
+      if (path === 'torrents/createCategory') {
+        const name = String(body?.category ?? '')
+        if (name) {
+          categories[name] = { name, savePath: String(body?.savePath ?? '') }
+          pendingCategories.add(name)
+        }
+      }
+      if (path === 'torrents/createTags') {
+        for (const tag of String(body?.tags ?? '')
+          .split(',')
+          .filter(Boolean)) {
+          if (!tags.includes(tag)) tags.push(tag)
+          pendingTags.add(tag)
+        }
+      }
+
+      return wait(undefined as T)
+    },
+
+    postForm<T>(path: string, form: FormData): Promise<T> {
+      if (path !== 'torrents/add') return wait(undefined as T)
+
+      const text = (key: string) => {
+        const value = form.get(key)
+        return typeof value === 'string' ? value : ''
+      }
+      const flag = (key: string) => text(key) === 'true'
+
+      const links = text('urls')
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean)
+      const files = form.getAll('torrents').filter((f): f is File => typeof f !== 'string')
+
+      const sources: { hash: string; name: string }[] = [
+        ...links.map(magnetName),
+        // A `.torrent` carries its real name inside the bencoded metadata,
+        // which is not something worth parsing here. The filename without its
+        // extension is what a user recognises anyway.
+        ...files.map((file, i) => ({
+          hash: `added${(torrents.size + i).toString().padStart(2, '0')}`,
+          name: file.name.replace(/\.torrent$/i, ''),
+        })),
+      ]
+
+      const paused = flag('paused')
+      for (const [i, source] of sources.entries()) {
+        const hash = source.hash || `added${(torrents.size + i).toString().padStart(2, '0')}`
+        if (torrents.has(hash)) continue
+
+        const seed = makeTorrent(torrents.size + i, rand)
+        torrents.set(hash, {
+          ...seed,
+          hash,
+          name: source.name,
+          progress: 0,
+          downloaded: 0,
+          uploaded: 0,
+          ratio: 0,
+          completion_on: 0,
+          // Straight from the form, so what the modal collected is what shows
+          // up in the list a tick later. That round trip is the whole point of
+          // the mock.
+          state: paused ? 'pausedDL' : 'downloading',
+          dlspeed: paused ? 0 : seed.dlspeed,
+          upspeed: 0,
+          category: text('category'),
+          tags: text('tags'),
+          save_path: text('savepath') || '/downloads',
+          auto_tmm: flag('autoTMM'),
+          sequential_download: flag('sequentialDownload'),
+        })
+        pendingTorrents.add(hash)
       }
 
       return wait(undefined as T)
