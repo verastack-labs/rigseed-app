@@ -177,7 +177,9 @@ jobs:
           )
 
           missing=()
-          for pkg in build-essential cmake ninja-build libssl-dev zlib1g-dev; do
+          # patchelf rewrites the sidecar's RPATH so it finds the Qt
+          # libraries shipped beside it rather than the build machine's.
+          for pkg in build-essential cmake ninja-build libssl-dev zlib1g-dev patchelf; do
             dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
           done
 
@@ -432,6 +434,255 @@ jobs:
             echo "::error::$staged is $after bytes after stripping, which is far outside the expected range."
             exit 1
           fi
+          ls -la out
+
+      # ------------------------------------------------------- runtime bundle
+
+      # The sidecar cannot ship as a lone executable. `-DGUI=OFF` still links
+      # Qt Core, Network, Sql and Xml, and none of those are on an end user's
+      # machine; what else has to travel differs per platform. Each is
+      # collected with the tool that exists for it, laid out as the app will
+      # ship it, and then proved by running the binary with the build
+      # machine's own Qt taken off the search path.
+      #
+      # That last part is the whole point. A bundle that is missing a library
+      # still runs perfectly on the machine that built it.
+
+      - name: Collect the runtime libraries (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="qbittorrent-nox-${{ matrix.triple }}"
+          mkdir -p bundle/lib
+          cp "out/$bin" "bundle/$bin"
+
+          # Derived from what the binary actually resolves rather than from a
+          # list written down once. A Qt version that adds a dependency would
+          # otherwise ship a bundle that is quietly incomplete.
+          collect() {
+            ldd "$1" 2>/dev/null | awk '{print $3}' | grep -v '^$' || true
+          }
+
+          for dep in $(collect "bundle/$bin"); do
+            case "$dep" in "$QT_ROOT_DIR"/*) cp -Lv "$dep" bundle/lib/ ;; esac
+          done
+
+          # Qt's libraries resolve each other, and ICU is pulled in by Qt
+          # rather than by nox, so it never appears in the binary's own list.
+          # Three passes is one more than the depth Qt actually has.
+          for pass in 1 2 3; do
+            for lib in bundle/lib/*.so*; do
+              for dep in $(collect "$lib"); do
+                case "$dep" in
+                  "$QT_ROOT_DIR"/*)
+                    name=$(basename "$dep")
+                    [ -e "bundle/lib/$name" ] || cp -Lv "$dep" "bundle/lib/$name"
+                    ;;
+                esac
+              done
+            done
+          done
+
+          # Relative to the binary, so the bundle can be installed anywhere and
+          # needs no LD_LIBRARY_PATH from whatever spawns it. Single-quoted:
+          # $ORIGIN is read by the loader, not by this shell.
+          patchelf --set-rpath '$ORIGIN/lib' "bundle/$bin"
+          for lib in bundle/lib/*.so*; do
+            patchelf --set-rpath '$ORIGIN' "$lib"
+          done
+
+          ls -la bundle bundle/lib
+
+      - name: Collect the runtime libraries (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="qbittorrent-nox-${{ matrix.triple }}"
+          mkdir -p bundle/lib
+          cp "out/$bin" "bundle/$bin"
+
+          # macdeployqt is the tool Qt ships for exactly this, and upstream's
+          # own macOS CI already uses it. Run against a throwaway copy of the
+          # .app so the frameworks land somewhere we can lift them out of.
+          app=$(find qbittorrent/build -maxdepth 2 -name 'qbittorrent-nox.app' -type d | head -1)
+          rm -rf deploy && mkdir deploy
+          cp -R "$app" deploy/
+          "$QT_ROOT_DIR/bin/macdeployqt" deploy/qbittorrent-nox.app -verbose=1
+
+          cp -R deploy/qbittorrent-nox.app/Contents/Frameworks/. bundle/lib/
+
+          # The two absolute paths into the build machine's Homebrew prefix.
+          # These are worse than the @rpath references: the binary fails even
+          # on a Mac that has OpenSSL, unless it happens to be a Homebrew
+          # install at the same prefix.
+          for ref in $(otool -L "bundle/$bin" | tail -n +2 | awk '{print $1}'); do
+            case "$ref" in
+              /usr/lib/*|/System/*|@rpath/*|@executable_path/*|@loader_path/*) continue ;;
+            esac
+            name=$(basename "$ref")
+            [ -e "bundle/lib/$name" ] || cp -L "$ref" "bundle/lib/$name"
+            chmod u+w "bundle/lib/$name"
+            install_name_tool -change "$ref" "@rpath/$name" "bundle/$bin"
+            echo "rewrote $ref"
+          done
+
+          # libssl reaches for libcrypto by the same absolute path.
+          for lib in bundle/lib/*.dylib; do
+            [ -e "$lib" ] || continue
+            chmod u+w "$lib"
+            install_name_tool -id "@rpath/$(basename "$lib")" "$lib"
+            for ref in $(otool -L "$lib" | tail -n +2 | awk '{print $1}'); do
+              case "$ref" in
+                /usr/lib/*|/System/*|@rpath/*|@executable_path/*|@loader_path/*) continue ;;
+              esac
+              install_name_tool -change "$ref" "@rpath/$(basename "$ref")" "$lib"
+            done
+          done
+
+          # macdeployqt writes @executable_path/../Frameworks, which assumes
+          # the .app layout we are deliberately not shipping. One rpath
+          # pointing at the directory beside the binary replaces it.
+          for old in $(otool -l "bundle/$bin" | grep -A2 LC_RPATH | awk '/path /{print $2}'); do
+            install_name_tool -delete_rpath "$old" "bundle/$bin" 2>/dev/null || true
+          done
+          install_name_tool -add_rpath "@executable_path/lib" "bundle/$bin"
+
+          for ref in $(otool -L "bundle/$bin" | tail -n +2 | awk '{print $1}'); do
+            case "$ref" in
+              @executable_path/../Frameworks/*)
+                install_name_tool -change "$ref" "@rpath/${ref#@executable_path/../Frameworks/}" "bundle/$bin"
+                ;;
+            esac
+          done
+
+          # The frameworks have to find each other, not just be findable from
+          # the binary. macdeployqt writes them for the .app layout it assumes,
+          # where Frameworks sits beside MacOS; we ship them in a plain lib
+          # directory instead, so each one gets an rpath pointing back at that
+          # directory and its sibling references normalised to @rpath.
+          #
+          # Four levels up from lib/Qt6Core.framework/Versions/A/Qt6Core is
+          # lib itself.
+          for fw in bundle/lib/*.framework; do
+            [ -d "$fw" ] || continue
+            name=$(basename "$fw" .framework)
+            inner="$fw/Versions/A/$name"
+            [ -f "$inner" ] || inner=$(find "$fw" -type f -name "$name" | head -1)
+            [ -f "$inner" ] || continue
+
+            chmod u+w "$inner"
+            install_name_tool -id "@rpath/$name.framework/Versions/A/$name" "$inner"
+            install_name_tool -add_rpath "@loader_path/../../.." "$inner" 2>/dev/null || true
+
+            for ref in $(otool -L "$inner" | tail -n +2 | awk '{print $1}'); do
+              case "$ref" in
+                @executable_path/../Frameworks/*)
+                  install_name_tool -change "$ref" "@rpath/${ref#@executable_path/../Frameworks/}" "$inner"
+                  ;;
+                /usr/lib/*|/System/*|@rpath/*|@loader_path/*) ;;
+                *)
+                  dep=$(basename "$ref")
+                  [ -e "bundle/lib/$dep" ] || cp -L "$ref" "bundle/lib/$dep" 2>/dev/null || true
+                  install_name_tool -change "$ref" "@rpath/$dep" "$inner"
+                  ;;
+              esac
+            done
+          done
+
+          # Stripping invalidated whatever signature the binary carried, and an
+          # unsigned Mach-O with a modified load command will not launch on
+          # arm64 at all. Ad-hoc is enough here; real signing happens when the
+          # app itself is signed, and has to come after this.
+          codesign --force --sign - --timestamp=none "bundle/$bin"
+          for lib in bundle/lib/*.dylib bundle/lib/*.framework; do
+            [ -e "$lib" ] || continue
+            codesign --force --sign - --timestamp=none "$lib"
+          done
+
+          echo "--- binary ---"; otool -L "bundle/$bin"
+          first=$(find bundle/lib -name '*.framework' -maxdepth 1 | head -1)
+          if [ -n "$first" ]; then
+            echo "--- $(basename "$first") ---"
+            otool -L "$first/Versions/A/$(basename "$first" .framework)" || true
+          fi
+
+          ls -la bundle bundle/lib
+
+      - name: Collect the runtime libraries (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="qbittorrent-nox-${{ matrix.triple }}.exe"
+          mkdir -p bundle
+          cp "out/$bin" "bundle/$bin"
+
+          # windeployqt reads the import table and copies what it finds, which
+          # on a GUI-less build is the four Qt DLLs and nothing else. Windows
+          # resolves imports from the executable's own directory first, so
+          # there is no path to rewrite and no lib subdirectory to justify.
+          "$QT_ROOT_DIR/bin/windeployqt.exe" --release --no-translations \
+            --no-system-d3d-compiler --no-opengl-sw --no-compiler-runtime \
+            --dir bundle "bundle/$bin"
+
+          # The MSVC runtime is the one thing windeployqt is told not to fetch,
+          # because --compiler-runtime drags in the whole redistributable
+          # installer. These three files are the redistributable part.
+          redist=$(find "/c/Program Files/Microsoft Visual Studio" -type d -name 'Microsoft.VC*.CRT' 2>/dev/null | grep -i x64 | head -1)
+          if [ -z "$redist" ]; then
+            echo "::error::no MSVC redistributable CRT directory found. The image layout may have changed."
+            exit 1
+          fi
+          echo "CRT from: $redist"
+          cp -v "$redist"/msvcp140*.dll "$redist"/vcruntime140*.dll bundle/
+
+          ls -la bundle
+
+      # A bundle missing a library still runs on the machine that built it,
+      # because the build machine has Qt installed. Moving Qt out of the way
+      # is what turns "it started" into evidence.
+      - name: Prove the bundle stands alone
+        shell: bash
+        run: |
+          set -euo pipefail
+          ext=""
+          [ "$RUNNER_OS" = "Windows" ] && ext=".exe"
+          bin="bundle/qbittorrent-nox-${{ matrix.triple }}$ext"
+
+          # Hide the build machine's Qt for the duration. On Linux and macOS
+          # the rewritten RPATH already makes this meaningful, since the
+          # original Qt prefix is no longer named in the binary at all. On
+          # Windows it is the whole test: the loader searches PATH, and
+          # install-qt-action puts Qt's bin on it.
+          hidden="$RUNNER_TEMP/qt-hidden"
+          moved=0
+          if mv "$QT_ROOT_DIR" "$hidden" 2>/dev/null; then
+            moved=1
+            trap 'mv "$hidden" "$QT_ROOT_DIR" || true' EXIT
+          else
+            echo "::warning::could not move $QT_ROOT_DIR aside, so this check is weaker than intended"
+          fi
+
+          env -u LD_LIBRARY_PATH -u DYLD_LIBRARY_PATH -u DYLD_FRAMEWORK_PATH "$bin" -v
+
+          if [ "$moved" = 1 ]; then
+            echo "Ran with the build machine's Qt moved out of the way."
+          fi
+
+      - name: Stage the runtime bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RUNNER_OS" in
+            Windows) name="qbittorrent-nox-${{ matrix.triple }}.exe" ;;
+            *) name="qbittorrent-nox-${{ matrix.triple }}" ;;
+          esac
+
+          # The executable is published on its own as well, so it is excluded
+          # here rather than shipped twice in a release that is already large.
+          tar -C bundle --exclude "$name" -czf "out/runtime-${{ matrix.triple }}.tar.gz" .
           ls -la out
 
       # Which shared libraries the binary still expects decides how it has to
