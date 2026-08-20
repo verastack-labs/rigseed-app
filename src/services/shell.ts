@@ -11,7 +11,25 @@
  * during development and against the mock, where there is no desktop to hand
  * anything to, and a dead menu item is better than a thrown exception from a
  * click on a screen that is otherwise working.
+ *
+ * What they are *not* is silent. An earlier version swallowed every failure
+ * without a word, and `opener:default` turned out not to grant `open_path` at
+ * all, so double-clicking a file did nothing and said nothing. A missing
+ * capability is our bug, not the user's, and it has to be visible to whoever
+ * is looking at the console.
  */
+
+/**
+ * Report a failed handoff without interrupting the click.
+ *
+ * Not a dialog: the common cause is a path this machine does not have, which
+ * happens the moment somebody points rigseed at a remote instance, and that
+ * does not deserve a modal. The console is enough to tell a broken permission
+ * apart from an absent file.
+ */
+function complain(what: string, path: string, error: unknown): void {
+  console.error(`rigseed: could not ${what} ${path}`, error)
+}
 
 async function opener() {
   if (!(globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return null
@@ -40,10 +58,8 @@ export async function revealInFolder(path: string): Promise<void> {
   if (!mod || !path) return
   try {
     await mod.revealItemInDir(path)
-  } catch {
-    // A path the daemon knows about but this machine does not, which happens
-    // the moment somebody points rigseed at a remote instance. Not worth an
-    // error dialog on a click that was a convenience.
+  } catch (error) {
+    complain('reveal', path, error)
   }
 }
 
@@ -53,7 +69,7 @@ export async function openPath(path: string): Promise<void> {
   if (!mod || !path) return
   try {
     await mod.openPath(path)
-  } catch {
-    // Same as above: unopenable, or not on this machine.
+  } catch (error) {
+    complain('open', path, error)
   }
 }
