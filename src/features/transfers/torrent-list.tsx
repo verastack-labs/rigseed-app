@@ -18,7 +18,7 @@ export function TorrentList({ torrents, selected, onToggle, ...actions }: Layout
   return (
     <div className="flex flex-col px-6 py-3">
       <div
-        className="grid items-center gap-3 px-2 pb-2 text-[9.5px] font-bold tracking-[0.07em] text-text-dimmer uppercase"
+        className="grid items-center gap-3 px-2 pb-2 text-[10.5px] font-bold tracking-[0.07em] text-text-dimmer uppercase"
         style={{ gridTemplateColumns: '1fr 90px 150px 90px 90px 28px' }}
       >
         <span>Name</span>
@@ -55,11 +55,11 @@ export function TorrentList({ torrents, selected, onToggle, ...actions }: Layout
                 stretch
                 hash={torrent.hash}
                 name={torrent.name}
-                className="truncate text-[12.5px]"
+                className="truncate text-[13.5px]"
               />
             </div>
 
-            <DataValue size="xs" tone="dim" className="text-right">
+            <DataValue size="sm" tone="dim" className="text-right">
               {formatBytes(torrent.size)}
             </DataValue>
 
@@ -71,10 +71,10 @@ export function TorrentList({ torrents, selected, onToggle, ...actions }: Layout
               label={torrent.name}
             />
 
-            <DataValue size="xs" tone={paused ? 'dimmer' : 'accent'} className="text-right">
+            <DataValue size="sm" tone={paused ? 'dimmer' : 'accent'} className="text-right">
               {formatSpeed(torrent.dlspeed)}
             </DataValue>
-            <DataValue size="xs" tone={paused ? 'dimmer' : 'accent2'} className="text-right">
+            <DataValue size="sm" tone={paused ? 'dimmer' : 'accent2'} className="text-right">
               {formatSpeed(torrent.upspeed)}
             </DataValue>
 

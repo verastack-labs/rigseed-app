@@ -37,7 +37,7 @@ export function TorrentGrid({ torrents, selected, onToggle, ...actions }: Layout
                 stretch
                 hash={torrent.hash}
                 name={torrent.name}
-                className="min-w-0 flex-1 truncate pt-1 text-[12.5px] font-semibold"
+                className="min-w-0 flex-1 truncate pt-1 text-[14px] font-semibold"
               />
               <RowMenu torrent={torrent} actions={actions} />
             </div>
@@ -51,14 +51,14 @@ export function TorrentGrid({ torrents, selected, onToggle, ...actions }: Layout
             />
 
             <div className="flex items-center gap-3">
-              <DataValue size="xs" tone={isPaused(torrent.state) ? 'dimmer' : 'accent'}>
+              <DataValue size="sm" tone={isPaused(torrent.state) ? 'dimmer' : 'accent'}>
                 {formatSpeed(torrent.dlspeed)}
               </DataValue>
-              <DataValue size="xs" tone={isPaused(torrent.state) ? 'dimmer' : 'accent2'}>
+              <DataValue size="sm" tone={isPaused(torrent.state) ? 'dimmer' : 'accent2'}>
                 {formatSpeed(torrent.upspeed)}
               </DataValue>
               <span className="flex-1" />
-              <DataValue size="xs" tone="dim">
+              <DataValue size="sm" tone="dim">
                 {formatPercent(torrent.progress)}
               </DataValue>
             </div>
