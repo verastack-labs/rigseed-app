@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { connect } from '@/services/connect'
 import { capabilitiesFor } from '@/services/torrents'
+import { ApiError } from '@/services/transport'
 import * as transportModule from '@/services/transport'
 import type { Transport } from '@/services/transport'
 
@@ -79,8 +80,45 @@ describe('connect', () => {
 
     const result = await connect(target)
     expect(result.status).toBe('connected')
-    expect(calls[0]).toBe('auth/login')
+    // The probe comes first now, and it is unauthenticated on purpose. Login
+    // is still ahead of the version calls that build the client.
+    expect(calls[0]).toBe('app/version')
+    expect(calls.indexOf('auth/login')).toBeLessThan(calls.indexOf('app/webapiVersion'))
     expect(calls).toContain('app/webapiVersion')
+  })
+
+  it('does not hand a password to something that is not qBittorrent', async () => {
+    // A port can be taken by anything. On Windows a wildcard bind coexists
+    // with a specific one and the specific one wins, so a daemon can report
+    // "Now listening" while another process serves every request. Sending
+    // credentials to whatever answered is the part that must not happen.
+    const { transport, calls } = fakeTransport({
+      // 404 rather than 403: a web server, not a daemon demanding auth.
+      'app/version': new ApiError(404, 'app/version', 'app/version responded 404'),
+      'auth/login': 'Ok.',
+    })
+    vi.spyOn(transportModule, 'createHttpTransport').mockReturnValue(transport)
+
+    const result = await connect(target)
+    expect(result.status).toBe('failed')
+    expect(result.status === 'failed' && result.reason).toMatch(/not qBittorrent/i)
+    expect(calls).not.toContain('auth/login')
+  })
+
+  it('reads 403 as a daemon demanding authentication', () => {
+    // qBittorrent answers an unauthenticated app/version with 403, which is
+    // what separates it from a server that simply has no such route.
+    const { transport } = fakeTransport({
+      'app/version': new ApiError(403, 'app/version', 'app/version responded 403'),
+      'auth/login': 'Fails.',
+    })
+    vi.spyOn(transportModule, 'createHttpTransport').mockReturnValue(transport)
+
+    return connect(target).then((result) => {
+      // Reached the login, so the probe let it through; the rejection is the
+      // password being wrong, which is a different thing entirely.
+      expect(result.status === 'failed' && result.reason).toMatch(/rejected/i)
+    })
   })
 
   it('separates unreachable from unauthenticated', async () => {
