@@ -76,7 +76,6 @@ export function ContextMenu({
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
   const [measuredFlip, setMeasuredFlip] = useState(false)
-  const [placed, setPlaced] = useState<Point | null>(null)
   const flipped = above ?? measuredFlip
 
   // Measure before paint so the menu never renders in the wrong place first.
@@ -91,18 +90,21 @@ export function ContextMenu({
   // The pointer-anchored case, which needs both axes rather than a flip.
   // Clamping rather than flipping on x, because a menu that jumps to the left
   // of the cursor near the edge of a window reads as a misclick.
+  //
+  // Written straight onto the node rather than into state. The correction
+  // depends on the height the browser just laid out, so a state round trip
+  // would be a second render to reach a value this pass already knows, and
+  // setting state from a layout effect is the pattern the lint rule exists to
+  // stop. A layout effect runs before paint, so nothing is ever visible at the
+  // uncorrected position.
   useLayoutEffect(() => {
-    if (!open || !at) {
-      setPlaced(null)
-      return
-    }
-    const height = menuRef.current?.getBoundingClientRect().height ?? 0
+    const el = menuRef.current
+    if (!open || !at || !el) return
+    const height = el.getBoundingClientRect().height
     const edge = 8
     const room = window.innerHeight - edge
-    setPlaced({
-      x: Math.max(edge, Math.min(at.x, window.innerWidth - width - edge)),
-      y: at.y + height > room ? Math.max(edge, at.y - height) : at.y,
-    })
+    el.style.left = `${Math.max(edge, Math.min(at.x, window.innerWidth - width - edge))}px`
+    el.style.top = `${at.y + height > room ? Math.max(edge, at.y - height) : at.y}px`
   }, [open, at, width, items])
 
   // Added after the opening click has finished propagating, so it does not
@@ -191,7 +193,7 @@ export function ContextMenu({
         !at && (flipped ? 'bottom-[calc(100%+8px)]' : 'top-[calc(100%+8px)]'),
         className,
       )}
-      style={at ? { width, left: placed?.x ?? at.x, top: placed?.y ?? at.y } : { width }}
+      style={at ? { width, left: at.x, top: at.y } : { width }}
     >
       {items.map((item, i) =>
         isAction(item) ? (
