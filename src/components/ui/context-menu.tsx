@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { ReactNode, RefObject } from 'react'
 
 import { cn } from '@/lib/utils'
 
@@ -46,6 +46,14 @@ export interface ContextMenuProps {
    */
   above?: boolean
   width?: number
+  /**
+   * The element that owns the menu, trigger included.
+   *
+   * A press inside it is not an outside press. Without this the outside
+   * handler fires on the trigger, closes the menu, and the trigger's own
+   * toggle then reopens it, so the button appears to do nothing.
+   */
+  anchorRef?: RefObject<HTMLElement | null>
   /** Accessible name, usually the torrent the menu acts on. */
   label?: string
   className?: string
@@ -69,6 +77,7 @@ export function ContextMenu({
   open,
   onClose,
   at,
+  anchorRef,
   above,
   width = 224,
   label,
@@ -107,16 +116,32 @@ export function ContextMenu({
     el.style.top = `${at.y + height > room ? Math.max(edge, at.y - height) : at.y}px`
   }, [open, at, width, items])
 
-  // Added after the opening click has finished propagating, so it does not
-  // immediately close the menu it just opened.
+  // `pointerdown`, not `click`, and the reason is the whole bug.
+  //
+  // React flushes this effect while the click that opened the menu is still
+  // bubbling towards the window, so a `click` listener registered here
+  // received that very click and closed the menu it had just opened. The
+  // button looked dead. A scripted `.click()` did not reproduce it, which is
+  // how it survived being checked in a browser: only real pointer input
+  // orders the phases that way.
+  //
+  // A pointerdown for the opening press has already happened by the time this
+  // runs, so the listener cannot hear it. Outside presses still close the
+  // menu, one event earlier than before, which is the behaviour people expect
+  // from a menu anyway.
   useEffect(() => {
     if (!open) return
-    const onDocumentClick = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) onClose()
+    const onOutside = (event: Event) => {
+      const target = event.target as Node
+      if (menuRef.current?.contains(target)) return
+      // The trigger toggles the menu itself. Closing here as well would make
+      // the two cancel out.
+      if (anchorRef?.current?.contains(target)) return
+      onClose()
     }
-    window.addEventListener('click', onDocumentClick)
-    return () => window.removeEventListener('click', onDocumentClick)
-  }, [open, onClose])
+    window.addEventListener('pointerdown', onOutside)
+    return () => window.removeEventListener('pointerdown', onOutside)
+  }, [open, onClose, anchorRef])
 
   const actionIndexes = items.reduce<number[]>((acc, item, i) => {
     if (isAction(item) && !item.disabled) acc.push(i)

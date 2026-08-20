@@ -50,6 +50,6 @@ export function usePointerMenu() {
       setOpen((v) => !v)
     },
     close,
-    menuProps: { open, onClose: close, ...(at ? { at } : {}) },
+    menuProps: { open, onClose: close, anchorRef: anchor, ...(at ? { at } : {}) },
   }
 }

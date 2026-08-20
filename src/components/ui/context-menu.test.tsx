@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -46,6 +46,34 @@ describe('ContextMenu', () => {
       </div>,
     )
     await userEvent.click(screen.getByRole('button', { name: 'elsewhere' }))
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('survives the press that opened it', async () => {
+    // The bug this exists for. React flushed the effect that registers the
+    // outside listener while the opening click was still bubbling, so a
+    // `click` listener heard that click and closed the menu immediately. The
+    // three-dot button looked dead in the real app while a scripted .click()
+    // in a browser worked, because only real pointer input orders the phases
+    // that way. Listening for `pointerdown` means the opening press is
+    // already over by the time anything is listening.
+    const onClose = vi.fn()
+    const anchor = { current: document.createElement('div') }
+    document.body.appendChild(anchor.current)
+    render(<ContextMenu items={items} open onClose={onClose} anchorRef={anchor} />)
+
+    // The press that a trigger inside the anchor would have produced.
+    fireEvent.pointerDown(anchor.current)
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('closes on a press outside the anchor', () => {
+    const onClose = vi.fn()
+    const anchor = { current: document.createElement('div') }
+    document.body.appendChild(anchor.current)
+    render(<ContextMenu items={items} open onClose={onClose} anchorRef={anchor} />)
+
+    fireEvent.pointerDown(document.body)
     expect(onClose).toHaveBeenCalled()
   })
 
