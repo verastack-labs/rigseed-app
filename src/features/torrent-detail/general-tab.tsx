@@ -157,17 +157,23 @@ export function GeneralTab({ torrent, properties }: GeneralTabProps) {
                   <span className="w-[132px] shrink-0 text-[11.5px] text-text-dim">
                     {row.label}
                   </span>
-                  <span className="min-w-0 flex-1 font-mono text-[11.5px] break-all text-text">
-                    {row.value}
+                  {/* The button hugs the path rather than sitting at the end
+                      of the row. Given a full-width card it was landing 800px
+                      to the right of the text it belonged to, which is a
+                      button nobody finds. */}
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
+                    <span className="min-w-0 font-mono text-[11.5px] break-all text-text">
+                      {row.value}
+                    </span>
+                    {row.reveal && canReachDesktop() ? (
+                      <IconButton
+                        title="Open containing folder"
+                        onClick={() => void revealInFolder(row.reveal ?? '')}
+                      >
+                        <icons.folderOpen className="size-[15px]" strokeWidth={2} />
+                      </IconButton>
+                    ) : null}
                   </span>
-                  {row.reveal && canReachDesktop() ? (
-                    <IconButton
-                      title="Open containing folder"
-                      onClick={() => void revealInFolder(row.reveal ?? '')}
-                    >
-                      <icons.folderOpen className="size-[15px]" strokeWidth={2} />
-                    </IconButton>
-                  ) : null}
                 </div>
               ))
             ) : (
