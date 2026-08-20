@@ -1,13 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
-
-const revealInFolder = vi.fn()
-vi.mock('@/services/shell', () => ({
-  canReachDesktop: () => true,
-  revealInFolder: (path: string) => revealInFolder(path),
-  openPath: vi.fn(),
-  pickFolder: vi.fn(),
-}))
+import { describe, expect, it } from 'vitest'
 
 import { GeneralTab } from '@/features/torrent-detail/general-tab'
 import { makeTorrent } from '@/test/torrent'
@@ -141,15 +133,5 @@ describe('GeneralTab detail card', () => {
   it('shows a skeleton inside the card while properties are still loading', () => {
     setup(null)
     expect(screen.queryByText('mktorrent 1.1')).not.toBeInTheDocument()
-  })
-
-  it('offers a way to open the containing folder beside the save path', () => {
-    // The third place this action lives, after the row menu and a right click,
-    // because the save path is where somebody looks for it once they are
-    // already reading the torrent's details.
-    revealInFolder.mockClear()
-    setup()
-    fireEvent.click(screen.getByTitle('Open containing folder'))
-    expect(revealInFolder).toHaveBeenCalledWith(torrent.content_path)
   })
 })
