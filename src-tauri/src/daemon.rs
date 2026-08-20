@@ -11,8 +11,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine as _;
 use hmac::Hmac;
 use rand::Rng;
 use sha2::Sha512;
@@ -142,6 +142,7 @@ pub fn write_config(
     username: &str,
     password_hash: &str,
     port: u16,
+    save_path: Option<&Path>,
 ) -> Result<(), DaemonError> {
     // Loopback only, which is two fixes rather than one.
     //
@@ -187,6 +188,31 @@ pub fn write_config(
         ("Preferences", webui("CSRFProtection"), "true".into()),
     ];
 
+    // Written once and never again, unlike everything above.
+    //
+    // qBittorrent's own default is the system Downloads folder, but only when
+    // it runs on the default profile. Given `--profile` it resolves the same
+    // name against the profile instead, so rigseed's torrents landed in a
+    // directory inside its application data that nobody would think to look
+    // in. Naming the real folder puts them where the rest of the machine's
+    // downloads are.
+    //
+    // Only when the key is absent, because the save path is the user's after
+    // the first launch. Every WebUI key above is ours and is restated on each
+    // start; stating this one would quietly undo a change they made in
+    // Settings the next time the app opened.
+    let defaults: Vec<(&str, String, String)> = save_path
+        .map(|path| {
+            vec![(
+                "Preferences",
+                "Downloads\\SavePath".to_string(),
+                // qBittorrent writes paths with forward slashes on every
+                // platform and compares them that way.
+                path.to_string_lossy().replace('\\', "/"),
+            )]
+        })
+        .unwrap_or_default();
+
     let existing = fs::read_to_string(path).unwrap_or_default();
     let mut lines: Vec<String> = existing.lines().map(str::to_string).collect();
 
@@ -208,6 +234,22 @@ pub fn write_config(
                 lines.insert(at + 1, line);
             }
         }
+    }
+
+    for (section, key, value) in defaults {
+        if lines.iter().any(|l| l.starts_with(&format!("{key}="))) {
+            continue;
+        }
+        let line = format!("{key}={value}");
+        let header = format!("[{section}]");
+        let at = match lines.iter().position(|l| l.trim() == header) {
+            Some(at) => at,
+            None => {
+                lines.push(header);
+                lines.len() - 1
+            }
+        };
+        lines.insert(at + 1, line);
     }
 
     fs::write(path, lines.join("\n") + "\n")?;
@@ -243,7 +285,7 @@ mod tests {
         let path = dir.join("qBittorrent.conf");
         let _ = fs::remove_dir_all(&dir);
 
-        write_config(&path, "rigseed", "hash", 8080).unwrap();
+        write_config(&path, "rigseed", "hash", 8080, None).unwrap();
         let written = fs::read_to_string(&path).unwrap();
 
         assert!(written.contains("[Preferences]"));
@@ -264,7 +306,7 @@ mod tests {
         )
         .unwrap();
 
-        write_config(&path, "rigseed", "hash", 8080).unwrap();
+        write_config(&path, "rigseed", "hash", 8080, None).unwrap();
         let written = fs::read_to_string(&path).unwrap();
 
         assert!(written.contains("WebUI\\Port=8080"), "our key is updated");
@@ -273,6 +315,50 @@ mod tests {
             written.contains("Downloads\\SavePath=/media/archive"),
             "a setting the user changed by hand survives"
         );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn names_the_save_path_on_a_fresh_config() {
+        // Without this key qBittorrent resolves its own default against the
+        // profile it was given, so rigseed's torrents landed inside its
+        // application data rather than in the user's Downloads folder.
+        let dir = std::env::temp_dir().join(format!("rigseed-test-save-{}", std::process::id()));
+        let path = dir.join("qBittorrent.conf");
+        let _ = fs::remove_dir_all(&dir);
+
+        let chosen = Path::new(r"C:\Users\someone\Downloads");
+        write_config(&path, "rigseed", "hash", 8080, Some(chosen)).unwrap();
+        let written = fs::read_to_string(&path).unwrap();
+
+        assert!(
+            written.contains(r"Downloads\SavePath=C:/Users/someone/Downloads"),
+            "forward slashes, which is how qBittorrent writes and compares paths: {written}"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn never_moves_a_save_path_the_user_chose() {
+        // The WebUI keys above are ours and are restated on every launch. This
+        // one is theirs the moment the app has started once, and restating it
+        // would undo a change made in Settings the next time rigseed opened.
+        let dir =
+            std::env::temp_dir().join(format!("rigseed-test-keep-save-{}", std::process::id()));
+        let path = dir.join("qBittorrent.conf");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(&path, "[Preferences]\nDownloads\\SavePath=D:/media\n").unwrap();
+
+        let chosen = Path::new(r"C:\Downloads");
+        write_config(&path, "rigseed", "hash", 8080, Some(chosen)).unwrap();
+        let written = fs::read_to_string(&path).unwrap();
+
+        assert!(
+            written.contains(r"Downloads\SavePath=D:/media"),
+            "{written}"
+        );
+        assert!(!written.contains("C:/Downloads"), "{written}");
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -304,7 +390,7 @@ mod tests {
         let path = dir.join("qBittorrent.conf");
         let _ = fs::remove_dir_all(&dir);
 
-        write_config(&path, "rigseed", "hash", 8080).unwrap();
+        write_config(&path, "rigseed", "hash", 8080, None).unwrap();
         let written = fs::read_to_string(&path).unwrap();
 
         let notice = written.find("[LegalNotice]").expect("its own section");
@@ -321,7 +407,7 @@ mod tests {
         let path = dir.join("qBittorrent.conf");
         let _ = fs::remove_dir_all(&dir);
 
-        write_config(&path, "rigseed", "SALT:KEY", 8080).unwrap();
+        write_config(&path, "rigseed", "SALT:KEY", 8080, None).unwrap();
         let written = fs::read_to_string(&path).unwrap();
 
         assert!(
@@ -338,8 +424,11 @@ mod tests {
         // generated password rather than ours.
         let path = config_path(Path::new("/app-data"));
         let text = path.to_string_lossy().replace('\\', "/");
-        assert!(text.ends_with("/qBittorrent/config/qBittorrent.ini")
-            || text.ends_with("/qBittorrent/config/qBittorrent.conf"), "got {text}");
+        assert!(
+            text.ends_with("/qBittorrent/config/qBittorrent.ini")
+                || text.ends_with("/qBittorrent/config/qBittorrent.conf"),
+            "got {text}"
+        );
     }
 
     #[test]
@@ -358,7 +447,7 @@ mod tests {
         let path = dir.join("qBittorrent.conf");
         let _ = fs::remove_dir_all(&dir);
 
-        write_config(&path, "rigseed", "hash", 43880).unwrap();
+        write_config(&path, "rigseed", "hash", 43880, None).unwrap();
         let written = fs::read_to_string(&path).unwrap();
 
         assert!(

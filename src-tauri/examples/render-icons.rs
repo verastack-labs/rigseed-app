@@ -28,10 +28,7 @@ const ACCENTS: [&str; 8] = [
 ];
 
 fn main() {
-    let out: PathBuf = std::env::args()
-        .nth(1)
-        .unwrap_or_else(|| ".".into())
-        .into();
+    let out: PathBuf = std::env::args().nth(1).unwrap_or_else(|| ".".into()).into();
 
     if let Err(error) = fs::create_dir_all(&out) {
         eprintln!("could not create {}: {error}", out.display());

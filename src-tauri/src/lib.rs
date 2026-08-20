@@ -306,7 +306,10 @@ mod tests {
         let port = pick_port();
         // Bindable at the moment it is handed back. The window between here
         // and the daemon binding is what the frontend's probe covers.
-        assert!(TcpListener::bind(("127.0.0.1", port)).is_ok(), "port {port} was not free");
+        assert!(
+            TcpListener::bind(("127.0.0.1", port)).is_ok(),
+            "port {port} was not free"
+        );
     }
 }
 
@@ -358,7 +361,8 @@ pub fn run() {
             // immediately and the app would sit next to a working daemon
             // reporting that it cannot find one. Adopt it instead.
             let config = daemon::config_path(&profile);
-            let adopted = daemon::configured_port(&config).filter(|p| daemon::something_listening(*p));
+            let adopted =
+                daemon::configured_port(&config).filter(|p| daemon::something_listening(*p));
 
             let port = adopted.unwrap_or_else(pick_port);
             if let Ok(mut slot) = app.state::<WebUiPort>().0.lock() {
@@ -373,9 +377,19 @@ pub fn run() {
             match daemon::ensure_password() {
                 Ok(password) => {
                     let hash = daemon::hash_password(&password);
-                    if let Err(error) =
-                        daemon::write_config(&config, DAEMON_USER, &hash, port)
-                    {
+                    // The machine's own Downloads folder, resolved by the
+                    // platform rather than guessed from $HOME. None on a
+                    // system that has no such folder, which leaves
+                    // qBittorrent to its own default rather than inventing a
+                    // directory nobody asked for.
+                    let downloads = app.path().download_dir().ok();
+                    if let Err(error) = daemon::write_config(
+                        &config,
+                        DAEMON_USER,
+                        &hash,
+                        port,
+                        downloads.as_deref(),
+                    ) {
                         log::error!("could not write {}: {error}", config.display());
                     } else {
                         log::info!("daemon config at {}", config.display());
