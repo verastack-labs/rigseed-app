@@ -42,7 +42,13 @@ function formatDateTime(seconds: number): string {
  * block look like it is updating when most of it never will.
  */
 export function GeneralTab({ torrent, properties }: GeneralTabProps) {
-  const [open, setOpen] = useState(false)
+  // Open by default. It was collapsed while it held nothing but reference
+  // values, which was defensible; it now also holds the only Open containing
+  // folder button on this screen, and an accordion that hides an action is a
+  // different thing from one that hides a piece of trivia. Somebody looking
+  // for the save path has already opened the torrent's details, so there is
+  // nothing left to protect them from.
+  const [open, setOpen] = useState(true)
   const done = isComplete(torrent.progress)
 
   const cards = [
