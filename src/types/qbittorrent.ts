@@ -272,3 +272,83 @@ export const ETA_INFINITE = 8640000
 
 /** -1 means unlimited for both rate limits. */
 export const LIMIT_UNLIMITED = -1
+
+/**
+ * The preference keys Settings reads and writes.
+ *
+ * Not all 223 of them. `app/preferences` returns everything qBittorrent has,
+ * and typing the lot would be a second copy of its source to keep in step for
+ * no gain: the screen edits these, and `app/setPreferences` takes only the
+ * keys that changed, so the rest are never touched.
+ *
+ * Every name and type here was read off a running qBittorrent 5.2.3 rather
+ * than from the docs, which are behind in at least one place: `start_paused_enabled`
+ * is `add_stopped_enabled` now.
+ */
+export interface Preferences {
+  // Downloads
+  save_path: string
+  temp_path_enabled: boolean
+  temp_path: string
+  incomplete_files_ext: boolean
+  preallocate_all: boolean
+  auto_tmm_enabled: boolean
+  add_stopped_enabled: boolean
+  queueing_enabled: boolean
+  max_active_downloads: number
+  max_active_torrents: number
+  max_active_uploads: number
+
+  // Connection
+  listen_port: number
+  upnp: boolean
+  max_connec: number
+  max_connec_per_torrent: number
+  max_uploads: number
+  max_uploads_per_torrent: number
+  proxy_type: string
+  proxy_ip: string
+  proxy_port: number
+  proxy_peer_connections: boolean
+
+  // Speed
+  dl_limit: number
+  up_limit: number
+  alt_dl_limit: number
+  alt_up_limit: number
+  limit_utp_rate: boolean
+  limit_tcp_overhead: boolean
+  /**
+   * One window, not a grid.
+   *
+   * The design asks for a paintable 7x24 schedule. The API has a single
+   * from/to time and `scheduler_days`, an enum of every day, weekdays,
+   * weekends or one named day. A grid cannot be represented, so the screen
+   * does not draw one it could not save.
+   */
+  scheduler_enabled: boolean
+  scheduler_days: number
+  schedule_from_hour: number
+  schedule_from_min: number
+  schedule_to_hour: number
+  schedule_to_min: number
+
+  // BitTorrent
+  dht: boolean
+  pex: boolean
+  lsd: boolean
+  /** 0 prefer, 1 require, 2 disable. */
+  encryption: number
+  anonymous_mode: boolean
+  max_ratio_enabled: boolean
+  max_ratio: number
+
+  // Web UI
+  web_ui_port: number
+  web_ui_csrf_protection_enabled: boolean
+  web_ui_clickjacking_protection_enabled: boolean
+  web_ui_host_header_validation_enabled: boolean
+}
+
+/** What can be written back. Every key optional, since only changes are sent. */
+export type PreferenceChanges = Partial<Preferences>

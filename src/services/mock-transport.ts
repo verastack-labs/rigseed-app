@@ -2,6 +2,7 @@ import { PRIORITY, type Priority } from '@/lib/priority'
 import type { Transport } from '@/services/transport'
 import type {
   Category,
+  Preferences,
   MainData,
   Peer,
   Torrent,
@@ -34,6 +35,63 @@ const NAMES = [
   'The-Internet-Archive-Pulp-Magazines',
   'openSUSE-Leap-15.6-DVD-x86_64.iso',
 ]
+
+/**
+ * Preference defaults, copied from a running qBittorrent 5.2.3.
+ *
+ * Values rather than invented ones, so a Settings screen driven by the mock
+ * shows the same numbers a real daemon would and the shapes cannot drift.
+ */
+const PREFERENCES: Preferences = {
+  save_path: '/downloads',
+  temp_path_enabled: false,
+  temp_path: '/downloads/temp',
+  incomplete_files_ext: false,
+  preallocate_all: false,
+  auto_tmm_enabled: false,
+  add_stopped_enabled: false,
+  queueing_enabled: true,
+  max_active_downloads: 3,
+  max_active_torrents: 5,
+  max_active_uploads: 3,
+
+  listen_port: 2791,
+  upnp: true,
+  max_connec: 500,
+  max_connec_per_torrent: 100,
+  max_uploads: 20,
+  max_uploads_per_torrent: 4,
+  proxy_type: 'None',
+  proxy_ip: '',
+  proxy_port: 8080,
+  proxy_peer_connections: false,
+
+  dl_limit: 0,
+  up_limit: 0,
+  alt_dl_limit: 10_240,
+  alt_up_limit: 10_240,
+  limit_utp_rate: true,
+  limit_tcp_overhead: false,
+  scheduler_enabled: false,
+  scheduler_days: 0,
+  schedule_from_hour: 8,
+  schedule_from_min: 0,
+  schedule_to_hour: 20,
+  schedule_to_min: 0,
+
+  dht: true,
+  pex: true,
+  lsd: true,
+  encryption: 0,
+  anonymous_mode: false,
+  max_ratio_enabled: false,
+  max_ratio: -1,
+
+  web_ui_port: 8080,
+  web_ui_csrf_protection_enabled: true,
+  web_ui_clickjacking_protection_enabled: true,
+  web_ui_host_header_validation_enabled: true,
+}
 
 const CATEGORIES: Record<string, Category> = {
   Linux: { name: 'Linux', savePath: '/downloads/linux' },
@@ -149,6 +207,7 @@ export function createMockTransport({
   // Copied rather than mutated in place, so two mock transports in the same
   // test file cannot see each other's created categories.
   const categories: Record<string, Category> = { ...CATEGORIES }
+  const preferences: Preferences = { ...PREFERENCES }
   const tags = [...TAGS]
 
   let rid = 0
@@ -470,6 +529,7 @@ export function createMockTransport({
       if (path === 'torrents/categories') return wait(categories as T)
       if (path === 'torrents/tags') return wait(tags as T)
       if (path === 'app/version') return wait('v5.2.3' as T)
+      if (path === 'app/preferences') return wait(preferences as T)
       if (path === 'app/webapiVersion') return wait('2.11.2' as T)
       if (path === 'app/defaultSavePath') return wait('/downloads' as T)
 
@@ -524,6 +584,13 @@ export function createMockTransport({
           categories[name] = { name, savePath: String(body?.savePath ?? '') }
           pendingCategories.add(name)
         }
+      }
+      if (path === 'app/setPreferences') {
+        // One JSON blob under `json`, not a flat form. Merged rather than
+        // replaced: the caller sends only what changed, which is the whole
+        // point of the save bar.
+        const changed = JSON.parse(String(body?.json ?? '{}')) as Record<string, unknown>
+        Object.assign(preferences, changed)
       }
       if (path === 'torrents/editCategory') {
         const name = String(body?.category ?? '')

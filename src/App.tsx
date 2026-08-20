@@ -5,6 +5,7 @@ import { ApiProvider } from '@/services/context'
 import { Placeholder } from '@/pages/placeholder'
 import { TorrentDetail } from '@/pages/torrent-detail'
 import { Categories } from '@/pages/categories'
+import { Settings } from '@/pages/settings'
 import { Transfers } from '@/pages/transfers'
 
 /**
@@ -36,10 +37,7 @@ export function App() {
               path="connections"
               element={<Placeholder title="Connections" tier="V2" api="auth/login" />}
             />
-            <Route
-              path="settings"
-              element={<Placeholder title="Settings" tier="MVP" api="app/preferences" />}
-            />
+            <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>
       </HashRouter>
