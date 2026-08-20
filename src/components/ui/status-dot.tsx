@@ -40,7 +40,7 @@ export function StatusDot({ tone = 'muted', label, pulse, mono, className }: Sta
         aria-hidden="true"
         className={cn('size-[7px] shrink-0 rounded-full', DOT[tone], pulse && 'animate-pulse')}
       />
-      <span className={cn('text-[10.5px] font-semibold', mono ? 'font-mono' : 'font-sans', TEXT[tone])}>
+      <span className={cn('text-[11.5px] font-semibold', mono ? 'font-mono' : 'font-sans', TEXT[tone])}>
         {label}
       </span>
     </span>

@@ -36,14 +36,19 @@ export function AddFab({ onSelect, className }: AddFabProps) {
           everything else, dismissed by clicking it or by Escape. The options
           are a menu, and a menu that leaves the page fully lit does not look
           like it is waiting for an answer. */}
-      {open ? (
-        <div
-          role="presentation"
-          onClick={() => setOpen(false)}
-          className="fixed inset-0 z-30 backdrop-blur-[3px]"
-          style={{ background: 'var(--scrim)' }}
-        />
-      ) : null}
+      {/* Always mounted, faded rather than switched. A conditionally
+          rendered element has no previous state to transition from, so the
+          scrim appeared at full strength in one frame while the menu it
+          belongs to animated in behind it. */}
+      <div
+        role="presentation"
+        onClick={() => setOpen(false)}
+        className={cn(
+          'fixed inset-0 z-30 backdrop-blur-[3px] transition-opacity duration-base',
+          open ? 'opacity-100' : 'pointer-events-none opacity-0',
+        )}
+        style={{ background: 'var(--scrim)' }}
+      />
 
       <div
         onKeyDown={(e) => {

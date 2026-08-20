@@ -45,6 +45,28 @@ export function useDetailPoll(hash: string, tab: DetailTabKey, intervalMs = 2000
    */
   const stopped = useRef(false)
 
+  /**
+   * Which torrent the data in state belongs to.
+   *
+   * Without this, opening a second torrent showed the first one's save path,
+   * hash and file list until each request came back. Stale values that look
+   * plausible are worse than a skeleton, because nothing about them says they
+   * are the wrong torrent's.
+   *
+   * Adjusted during render rather than from an effect. React re-runs this
+   * component immediately with the new state and never commits the stale
+   * frame, which an effect cannot promise and which the
+   * set-state-in-effect rule exists to keep people away from.
+   */
+  const [loadedFor, setLoadedFor] = useState(hash)
+  if (loadedFor !== hash) {
+    setLoadedFor(hash)
+    setProperties(null)
+    setFiles(null)
+    setTrackers(null)
+    setPeers(null)
+  }
+
   const fetchFor = useCallback(
     async (which: DetailTabKey) => {
       if (!hash) return

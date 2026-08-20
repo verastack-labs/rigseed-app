@@ -35,9 +35,12 @@ describe('AddFab', () => {
     const { container } = render(<AddFab onSelect={vi.fn()} />)
     const scrim = () => container.querySelector('[role="presentation"]')
 
-    expect(scrim()).toBeNull()
+    // Always mounted, faded rather than switched: a conditionally rendered
+    // element has no previous state to transition from, so it appeared at
+    // full strength in one frame.
+    expect(scrim()?.className).toContain('opacity-0')
     fireEvent.click(button())
-    expect(scrim()).not.toBeNull()
+    expect(scrim()?.className).toContain('opacity-100')
   })
 
   it('closes when the dimmed area is clicked', () => {
