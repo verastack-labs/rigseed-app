@@ -165,3 +165,51 @@ describe('adding against the mock', () => {
     expect(await two.torrents.categories()).not.toHaveProperty('Only Here')
   })
 })
+
+describe('labels through the mock', () => {
+  const api = () => createTorrentsApi(createMockTransport())
+
+  it('creates a category with its save path', async () => {
+    const torrents = api()
+    await torrents.createCategory('Documentaries', '/media/docs')
+    const all = await torrents.categories()
+    expect(all['Documentaries']).toEqual({ name: 'Documentaries', savePath: '/media/docs' })
+  })
+
+  it('edits the save path without touching the name', async () => {
+    // editCategory is not a rename. The name is the key of what to change,
+    // so a rename has to be create, move, remove, done explicitly.
+    const torrents = api()
+    await torrents.createCategory('Docs', '/old')
+    await torrents.editCategory('Docs', '/new')
+    const all = await torrents.categories()
+    expect(all['Docs']?.savePath).toBe('/new')
+    expect(Object.keys(all)).toContain('Docs')
+  })
+
+  it('removing a category leaves its torrents behind, uncategorised', async () => {
+    const torrents = api()
+    await torrents.createCategory('Temporary', '/tmp')
+    await torrents.removeCategories(['Temporary'])
+    expect(Object.keys(await torrents.categories())).not.toContain('Temporary')
+  })
+
+  it('creates and deletes tags', async () => {
+    const torrents = api()
+    await torrents.createTags(['archive'])
+    expect(await torrents.tags()).toContain('archive')
+    await torrents.deleteTags(['archive'])
+    expect(await torrents.tags()).not.toContain('archive')
+  })
+
+  it('a deleted tag comes off the torrents that carried it', async () => {
+    const torrents = api()
+    const before = await torrents.info()
+    const carried = before.filter((t) => t.tags.split(',').includes('iso'))
+    expect(carried.length).toBeGreaterThan(0)
+
+    await torrents.deleteTags(['iso'])
+    const after = await torrents.info()
+    expect(after.every((t) => !t.tags.split(',').includes('iso'))).toBe(true)
+  })
+})

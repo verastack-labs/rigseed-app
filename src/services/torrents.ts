@@ -123,6 +123,16 @@ export function createTorrentsApi(transport: Transport, caps: Capabilities = DEF
     categories: () => transport.get<Record<string, Category>>('torrents/categories'),
     createCategory: (category: string, savePath: string) =>
       transport.post<void>('torrents/createCategory', { category, savePath }),
+    /**
+     * Changes a category's save path. It cannot rename one.
+     *
+     * The API has no rename: `editCategory` takes the name as the key of what
+     * to change. Renaming means create, move every member across, and remove
+     * the old one, which the screen does explicitly rather than pretending
+     * one call did it.
+     */
+    editCategory: (category: string, savePath: string) =>
+      transport.post<void>('torrents/editCategory', { category, savePath }),
     removeCategories: (list: readonly string[]) =>
       transport.post<void>('torrents/removeCategories', { categories: list.join('\n') }),
 

@@ -525,6 +525,37 @@ export function createMockTransport({
           pendingCategories.add(name)
         }
       }
+      if (path === 'torrents/editCategory') {
+        const name = String(body?.category ?? '')
+        const existing = categories[name]
+        if (existing) existing.savePath = String(body?.savePath ?? '')
+      }
+      if (path === 'torrents/removeCategories') {
+        // Newline separated, which is the one place the API does not use a
+        // comma. A category that goes away leaves its torrents uncategorised
+        // rather than taking them with it.
+        for (const name of String(body?.categories ?? '')
+          .split('\n')
+          .filter(Boolean)) {
+          delete categories[name]
+          for (const t of torrents.values()) if (t.category === name) t.category = ''
+        }
+      }
+      if (path === 'torrents/deleteTags') {
+        for (const name of String(body?.tags ?? '')
+          .split(',')
+          .filter(Boolean)) {
+          const at = tags.indexOf(name)
+          if (at !== -1) tags.splice(at, 1)
+          for (const t of torrents.values()) {
+            t.tags = t.tags
+              .split(',')
+              .map((x) => x.trim())
+              .filter((x) => x && x !== name)
+              .join(',')
+          }
+        }
+      }
       // The Speed tab writes back, and a control that reports success while
       // the value snaps back on the next poll is worse than one that fails.
       if (path === 'torrents/setDownloadLimit' || path === 'torrents/setUploadLimit') {
