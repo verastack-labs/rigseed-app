@@ -6,16 +6,19 @@ import { useDetailPoll } from '@/state/use-detail-poll'
 const properties = vi.fn()
 const files = vi.fn()
 
-vi.mock('@/services/api-context', () => ({
-  useApi: () => ({
-    torrents: {
-      properties: (hash: string) => properties(hash),
-      files: (hash: string) => files(hash),
-      trackers: () => Promise.resolve([]),
-    },
-    sync: { torrentPeers: () => Promise.resolve({ peers: {} }) },
-  }),
-}))
+const build = () => ({
+  torrents: {
+    properties: (hash: string) => properties(hash),
+    files: (hash: string) => files(hash),
+    trackers: () => Promise.resolve([]),
+  },
+  sync: { torrentPeers: () => Promise.resolve({ peers: {} }) },
+})
+
+// One object per connection, swappable. The provider hands out a mock client
+// while it looks for a daemon and replaces it when it finds one.
+const holder = { current: build() }
+vi.mock('@/services/api-context', () => ({ useApi: () => holder.current }))
 
 function Probe({ hash }: { hash: string }) {
   const { properties: props } = useDetailPoll(hash, 'general', 100_000)
@@ -57,5 +60,22 @@ describe('useDetailPoll', () => {
     for (let i = 0; i < 5; i++) {
       expect(screen.getByTestId('path')).toHaveTextContent('/downloads/steady')
     }
+  })
+
+  it('drops what it has when the connection changes, not only the hash', async () => {
+    // Same rule as the hash. This screen can be showing the sample torrent's
+    // properties at the moment the real connection arrives underneath it.
+    properties.mockResolvedValue({ save_path: '/sample' })
+    files.mockResolvedValue([])
+
+    const { rerender } = render(<Probe hash="aaa" />)
+    await waitFor(() => expect(screen.getByTestId('path')).toHaveTextContent('/sample'))
+
+    properties.mockResolvedValue({ save_path: '/real' })
+    holder.current = build()
+    rerender(<Probe hash="aaa" />)
+
+    expect(screen.getByTestId('path')).toHaveTextContent('none')
+    await waitFor(() => expect(screen.getByTestId('path')).toHaveTextContent('/real'))
   })
 })

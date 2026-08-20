@@ -58,9 +58,14 @@ export function useDetailPoll(hash: string, tab: DetailTabKey, intervalMs = 2000
    * frame, which an effect cannot promise and which the
    * set-state-in-effect rule exists to keep people away from.
    */
-  const [loadedFor, setLoadedFor] = useState(hash)
-  if (loadedFor !== hash) {
-    setLoadedFor(hash)
+  const [loadedFor, setLoadedFor] = useState({ hash, api })
+  if (loadedFor.hash !== hash || loadedFor.api !== api) {
+    // The api as well as the hash. The provider hands out a mock client while
+    // it looks for a daemon and swaps in the real one when it finds it, so
+    // this screen can be showing the sample torrent's properties when the
+    // connection underneath it changes. Same rule as the hash: state that
+    // belongs to one of them must not survive into another.
+    setLoadedFor({ hash, api })
     setProperties(null)
     setFiles(null)
     setTrackers(null)
