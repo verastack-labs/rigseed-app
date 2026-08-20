@@ -49,6 +49,7 @@ export function makeTorrent(overrides: Partial<Torrent> = {}): Torrent {
     amount_left: size - Math.round(size * progress),
     magnet_uri: 'magnet:?xt=urn:btih:a1b2c3&dn=ubuntu.iso',
     tracker: 'https://torrent.ubuntu.com/announce',
+    content_path: '/downloads/ubuntu.iso',
     ...overrides,
   }
 }

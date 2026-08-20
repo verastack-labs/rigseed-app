@@ -7,6 +7,7 @@ import {
   STATE_LABEL,
   formatBytes,
   formatEta,
+  isComplete,
   formatPercent,
   formatRatio,
   isPaused,
@@ -66,7 +67,16 @@ export function TitleBlock({ torrent, className }: TitleBlockProps) {
             {formatPercent(torrent.progress)}
           </span>
           <span className="font-mono text-[11px] text-text-dim">
-            {isPaused(torrent.state) ? 'paused' : `${formatEta(torrent.eta)} left`}
+            {/* A finished torrent has no time left. It used to say "infinity
+                left", because the daemon reports 0 or its infinite sentinel
+                once there is nothing to fetch and the formatter renders both
+                as an infinity sign. Correct for a stalled download, nonsense
+                for a completed one. */}
+            {isComplete(torrent.progress)
+              ? 'complete'
+              : isPaused(torrent.state)
+                ? 'paused'
+                : `${formatEta(torrent.eta)} left`}
           </span>
         </div>
       </div>

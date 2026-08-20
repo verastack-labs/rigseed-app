@@ -4,12 +4,16 @@ import { ChevronRight } from 'lucide-react'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatCard } from '@/components/ui/stat-card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { IconButton } from '@/components/ui/icon-button'
+import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
+import { canReachDesktop, revealInFolder } from '@/services/shell'
 import type { Torrent, TorrentProperties } from '@/types/qbittorrent'
 import {
   STATE_LABEL,
   formatBytes,
   formatEta,
+  isComplete,
   formatRatio,
   formatSpeed,
   isPaused,
@@ -39,6 +43,7 @@ function formatDateTime(seconds: number): string {
  */
 export function GeneralTab({ torrent, properties }: GeneralTabProps) {
   const [open, setOpen] = useState(false)
+  const done = isComplete(torrent.progress)
 
   const cards = [
     {
@@ -65,8 +70,10 @@ export function GeneralTab({ torrent, properties }: GeneralTabProps) {
     },
     {
       label: 'ETA',
-      value: isPaused(torrent.state) ? '—' : formatEta(torrent.eta),
-      sub: isPaused(torrent.state) ? 'paused' : 'at the current rate',
+      // Nothing to estimate once it is done, and an infinity sign there reads
+      // as "never finishes" rather than "already finished".
+      value: done ? '—' : isPaused(torrent.state) ? '—' : formatEta(torrent.eta),
+      sub: done ? 'complete' : isPaused(torrent.state) ? 'paused' : 'at the current rate',
     },
     {
       label: 'Ratio',
@@ -84,9 +91,12 @@ export function GeneralTab({ torrent, properties }: GeneralTabProps) {
     { label: 'Added on', value: formatDateTime(torrent.added_on), sub: 'local time' },
   ]
 
-  const rows: { label: string; value: string }[] = properties
+  const rows: { label: string; value: string; reveal?: string }[] = properties
     ? [
-        { label: 'Save path', value: properties.save_path },
+        // The reveal target is `content_path`, not the save path: for a
+        // single-file torrent that is the file itself, so the file manager
+        // highlights it rather than dumping the user in a folder of hundreds.
+        { label: 'Save path', value: properties.save_path, reveal: torrent.content_path },
         { label: 'Incomplete path', value: properties.download_path || 'same as save path' },
         { label: 'Hash', value: properties.infohash_v1 ?? torrent.hash },
         { label: 'Comment', value: properties.comment || 'none' },
@@ -144,6 +154,14 @@ export function GeneralTab({ torrent, properties }: GeneralTabProps) {
                   <span className="min-w-0 flex-1 font-mono text-[11.5px] break-all text-text">
                     {row.value}
                   </span>
+                  {row.reveal && canReachDesktop() ? (
+                    <IconButton
+                      title="Open containing folder"
+                      onClick={() => void revealInFolder(row.reveal ?? '')}
+                    >
+                      <icons.folderOpen className="size-[15px]" strokeWidth={2} />
+                    </IconButton>
+                  ) : null}
                 </div>
               ))
             ) : (

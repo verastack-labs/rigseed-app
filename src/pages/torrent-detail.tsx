@@ -115,6 +115,9 @@ export function TorrentDetail() {
         {tab === 'files' ? (
           <FilesTab
             files={files}
+            // Where the content actually landed, so a double click can open a
+            // file. The daemon's own path, not one rebuilt from the name.
+            {...(properties?.save_path ? { savePath: properties.save_path } : {})}
             selected={selectedFiles}
             onToggle={(index) =>
               setSelectedFiles((prev) =>

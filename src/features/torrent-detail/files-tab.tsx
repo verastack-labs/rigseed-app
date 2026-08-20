@@ -5,6 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { icons } from '@/lib/icons'
 import { PRIORITY_CHOICES, type Priority } from '@/lib/priority'
 import { cn } from '@/lib/utils'
+import { canReachDesktop, openPath } from '@/services/shell'
 import type { TorrentFile } from '@/types/qbittorrent'
 import { formatBytes, formatPercent } from '@/utils/format'
 
@@ -14,6 +15,13 @@ export interface FilesTabProps {
   selected: readonly number[]
   onToggle: (index: number) => void
   onPriority: (indices: readonly number[], priority: Priority) => void
+  /**
+   * Where the torrent's content lives, for opening a file on double click.
+   *
+   * Omitted when there is no desktop to hand a path to, which is what turns
+   * the behaviour off rather than a separate flag.
+   */
+  savePath?: string
 }
 
 /** The last path segment, which is what the row shows. */
@@ -22,7 +30,19 @@ const basename = (path: string) => path.split('/').pop() ?? path
 /** How deep the file sits, so nesting reads without a tree component. */
 const depth = (path: string) => path.split('/').length - 1
 
-export function FilesTab({ files, selected, onToggle, onPriority }: FilesTabProps) {
+/**
+ * Join a save path to a torrent-relative file path.
+ *
+ * The daemon reports both in its own separator, and Windows accepts forward
+ * slashes everywhere, so this does not try to normalise anything: it only
+ * avoids doubling or dropping the one character between them.
+ */
+function join(base: string, relative: string): string {
+  return `${base.replace(/[\\/]+$/, '')}/${relative.replace(/^[\\/]+/, '')}`
+}
+
+export function FilesTab({ files, selected, onToggle, onPriority, savePath }: FilesTabProps) {
+  const openable = Boolean(savePath) && canReachDesktop()
   if (!files) {
     return (
       <div className="p-6">
@@ -78,7 +98,19 @@ export function FilesTab({ files, selected, onToggle, onPriority }: FilesTabProp
           return (
             <div
               key={file.index}
-              className="grid grid-cols-[1fr_100px_150px_132px] items-center gap-2 border-t border-line px-3 py-2.5 transition-colors duration-fast first:border-t-0 hover:bg-surface2"
+              // Double click rather than single: a single click here already
+              // means "toggle the checkbox I am next to", and a row that both
+              // selects and launches on one click is a row that launches a
+              // video every time somebody meant to deselect it.
+              onDoubleClick={
+                openable && savePath ? () => void openPath(join(savePath, file.name)) : undefined
+              }
+              title={openable ? `Double click to open ${basename(file.name)}` : undefined}
+              className={cn(
+                'grid grid-cols-[1fr_100px_150px_132px] items-center gap-2 border-t border-line px-3 py-2.5',
+                'transition-colors duration-fast first:border-t-0 hover:bg-surface2',
+                openable && !skipped && 'cursor-pointer',
+              )}
             >
               <div
                 className="flex min-w-0 items-center gap-2"

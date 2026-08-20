@@ -35,19 +35,23 @@ export function TorrentList({ torrents, selected, onToggle, ...actions }: Layout
           <div
             key={torrent.hash}
             className={cn(
-              'grid items-center gap-3 rounded-md px-2 transition-colors duration-quick hover:bg-surface2',
+              'relative grid items-center gap-3 rounded-md px-2',
+              'transition-colors duration-quick hover:bg-surface2',
               'min-h-10',
             )}
             style={{ gridTemplateColumns: '1fr 90px 150px 90px 90px 28px' }}
           >
             <div className="flex min-w-0 items-center gap-2.5">
-              <Checkbox
-                checked={selected.includes(torrent.hash)}
-                onChange={() => onToggle(torrent.hash)}
-                label={`Select ${torrent.name}`}
-              />
+              <span className="relative z-10 flex">
+                <Checkbox
+                  checked={selected.includes(torrent.hash)}
+                  onChange={() => onToggle(torrent.hash)}
+                  label={`Select ${torrent.name}`}
+                />
+              </span>
               <icons.folder className="size-[15px] shrink-0 text-text-dim" strokeWidth={2} />
               <TorrentLink
+                stretch
                 hash={torrent.hash}
                 name={torrent.name}
                 className="truncate text-[12.5px]"

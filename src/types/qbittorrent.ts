@@ -91,6 +91,15 @@ export interface Torrent {
   num_incomplete: number
   /** The first working tracker's URL, empty while none is working. */
   tracker: string
+  /**
+   * What to reveal in the file manager.
+   *
+   * The file itself for a single-file torrent, the folder for a multi-file
+   * one, which is why this is not just `save_path` joined to `name`. Revealing
+   * handles both: the file manager opens the parent either way and highlights
+   * what was named.
+   */
+  content_path: string
 }
 
 export interface TorrentFile {

@@ -67,4 +67,20 @@ describe('TitleBlock', () => {
       screen.getByTitle('/mnt/storage/media/downloads/linux/distributions/ubuntu/releases'),
     ).toBeInTheDocument()
   })
+
+  it('does not claim an infinite wait on a finished torrent', () => {
+    // It said "∞ left" once a torrent completed. The daemon reports 0 or its
+    // infinite sentinel when there is nothing left to fetch, and the formatter
+    // renders both as an infinity sign, which is right for a stalled download
+    // and nonsense for a finished one.
+    render(<TitleBlock torrent={makeTorrent({ progress: 1, eta: 8640000, state: 'uploading' })} />)
+
+    expect(screen.queryByText(/∞/)).not.toBeInTheDocument()
+    expect(screen.getByText('complete')).toBeInTheDocument()
+  })
+
+  it('still shows a real estimate while downloading', () => {
+    render(<TitleBlock torrent={makeTorrent({ progress: 0.4, eta: 252 })} />)
+    expect(screen.getByText(/left$/)).toBeInTheDocument()
+  })
 })
