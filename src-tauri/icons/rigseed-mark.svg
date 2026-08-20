@@ -1,0 +1,76 @@
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="rigseed">
+  <!--
+    The app icon: the cleat mark from design-foundations.md, sized for a
+    taskbar rather than for a 20px slot in the nav rail.
+
+    The mark in the app is a line glyph drawn in the accent on its own dark
+    chrome. That inverts here on purpose. An icon sits on a wallpaper nobody
+    chose for us and shrinks to 16px in a tray, so it needs a field of its own
+    and the strongest contrast available: the accent becomes the field, and the
+    glyph becomes near-white.
+
+    Two things are deliberately not the canonical values, and both were
+    measured rather than judged by eye.
+
+    The field is the light mode dustblue accent and a darker extension of it,
+    not the dark mode one. Built on the lighter pair the white glyph came out
+    at 2.7:1 against the field, which is below the 3:1 floor for a graphical
+    object and looked like a plain blue square at 32px.
+
+    The strokes are thicker than the canonical 2 and 1.7. Those are correct at
+    the size the mark is drawn in the rail; scaled down to a 16px tray icon the
+    same proportion lands under one device pixel and simply disappears. The
+    proportions between the bar, the horns and the loop are unchanged.
+
+    The rope loop keeps accent2, the palette's paired warm. It is the one
+    detail that makes this recognisable at a glance rather than a blue square
+    with a line on it.
+  -->
+  <defs>
+    <linearGradient id="field" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#4E7C9B" />
+      <stop offset="1" stop-color="#294D69" />
+    </linearGradient>
+
+    <!-- A light top edge, the way a physical object catches the sky. -->
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22" />
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+
+  <!--
+    Inset rather than full bleed. macOS draws its own squircle and expects the
+    art to leave room; Windows crops nothing. 84 units of 1024 is the margin
+    that satisfies both.
+  -->
+  <rect x="84" y="84" width="856" height="856" rx="196" fill="url(#field)" />
+  <rect x="84" y="84" width="856" height="856" rx="196" fill="url(#rim)" />
+
+  <!--
+    The glyph itself, from the canonical 24-unit paths, scaled up rather than
+    redrawn so it stays the same mark. 1024/24 = 42.667; 26.45 keeps it clear
+    of the corner radius.
+  -->
+  <g
+    transform="translate(512 512) scale(26.45) translate(-12 -12)"
+    fill="none"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <path
+      d="M6.5 12h11M6.5 12 4 9.3M6.5 12 4 14.7M17.5 12 20 9.3M17.5 12 20 14.7"
+      stroke="#FBFCFD"
+      stroke-width="2.9"
+    />
+    <ellipse
+      cx="12"
+      cy="12"
+      rx="5.2"
+      ry="3.1"
+      transform="rotate(-38 12 12)"
+      stroke="#F4C4AB"
+      stroke-width="2.5"
+    />
+  </g>
+</svg>
