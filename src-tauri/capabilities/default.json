@@ -9,6 +9,10 @@
     "shell:allow-execute",
     "store:default",
     {
+      "identifier": "opener:allow-open-path",
+      "allow": [{ "path": "**" }]
+    },
+    {
       "identifier": "http:default",
       "allow": [
         {

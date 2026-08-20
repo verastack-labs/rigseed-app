@@ -225,6 +225,41 @@ mod tests {
     use super::*;
 
     #[test]
+    fn opening_a_file_is_actually_permitted() {
+        // Another contract nothing checks. `opener:default` grants open_url
+        // and reveal_item_in_dir but *not* open_path, so double-clicking a
+        // file in the detail pane was refused by the capability layer and the
+        // frontend's catch block ate the refusal. Nothing failed loudly, the
+        // feature simply did not exist.
+        //
+        // open_path is also scoped: the plugin requires at least one allow
+        // entry whose glob covers the path, and an empty scope denies
+        // everything. `**` because a save path is whatever the user chose,
+        // on whatever drive, and there is no narrower answer available at
+        // build time.
+        let raw = include_str!("../capabilities/default.json");
+        let capability: serde_json::Value = serde_json::from_str(raw).unwrap();
+        let permissions = capability["permissions"].as_array().unwrap();
+
+        let open_path = permissions
+            .iter()
+            .find(|p| p["identifier"] == "opener:allow-open-path")
+            .expect("opener:allow-open-path is missing, so open_path is refused");
+
+        let paths: Vec<&str> = open_path["allow"]
+            .as_array()
+            .expect("open_path needs a scope, an empty one denies every path")
+            .iter()
+            .filter_map(|entry| entry["path"].as_str())
+            .collect();
+
+        assert!(
+            paths.contains(&"**"),
+            "the scope has to reach any save path, got {paths:?}"
+        );
+    }
+
+    #[test]
     fn the_frontend_gets_the_names_it_reads() {
         // The one contract in this app that no compiler checks. TypeScript's
         // DaemonTarget asks for baseUrl; serde's default would send base_url;
