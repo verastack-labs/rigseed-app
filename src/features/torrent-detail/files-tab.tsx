@@ -31,6 +31,19 @@ const basename = (path: string) => path.split('/').pop() ?? path
 const depth = (path: string) => path.split('/').length - 1
 
 /**
+ * The shallowest level present, which is the one that should sit flush.
+ *
+ * Almost every torrent wraps its files in a single folder named after itself,
+ * so measuring depth from the root indented every row by one step against a
+ * parent that has no row of its own. It read as a column that failed to line
+ * up with its own header rather than as a hierarchy. Measuring from the
+ * shallowest file present puts the top level flush with Name and keeps the
+ * steps between real nesting intact.
+ */
+const shallowest = (files: readonly TorrentFile[]) =>
+  files.reduce((least, file) => Math.min(least, depth(file.name)), Infinity)
+
+/**
  * Join a save path to a torrent-relative file path.
  *
  * The daemon reports both in its own separator, and Windows accepts forward
@@ -43,6 +56,7 @@ function join(base: string, relative: string): string {
 
 export function FilesTab({ files, selected, onToggle, onPriority, savePath }: FilesTabProps) {
   const openable = Boolean(savePath) && canReachDesktop()
+  const base = files ? shallowest(files) : 0
   if (!files) {
     return (
       <div className="p-6">
@@ -125,7 +139,7 @@ export function FilesTab({ files, selected, onToggle, onPriority, savePath }: Fi
             >
               <div
                 className="flex min-w-0 items-center gap-2"
-                style={{ paddingLeft: depth(file.name) * 14 }}
+                style={{ paddingLeft: (depth(file.name) - base) * 14 }}
               >
                 <Checkbox
                   checked={selected.includes(file.index)}
