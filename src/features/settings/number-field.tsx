@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 
 import { Input } from '@/components/ui/input'
 
@@ -36,10 +36,19 @@ export function NumberField({
   disabled,
 }: NumberFieldProps) {
   const [text, setText] = useState(String(value))
+  const [lastValue, setLastValue] = useState(value)
 
-  useEffect(() => {
-    setText((current) => (Number(current) === value ? current : String(value)))
-  }, [value])
+  // Adjusted during render, not from an effect. This is the sanctioned way to
+  // follow a prop: React re-runs the component immediately and never commits
+  // the stale frame, where an effect would paint the old text first.
+  //
+  // Only when the text does not already parse to the new value. Without that
+  // guard, typing "1." into a ratio field reports 1, the value comes back as
+  // 1, and the decimal point is deleted under the cursor.
+  if (value !== lastValue) {
+    setLastValue(value)
+    if (Number(text) !== value) setText(String(value))
+  }
 
   return (
     <Input
