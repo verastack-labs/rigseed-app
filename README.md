@@ -1,209 +1,138 @@
-# rigseed - Cozy Terminal design system
+<div align="center">
 
-rigseed is a desktop client for **qBittorrent**. It is a Tauri shell that launches
-`qbittorrent-nox` as a sidecar and drives it entirely over the existing Web API v2.x.
-No C++/Qt is touched - the product is a frontend replacement for a dated GUI, plus a
-first-run experience and a theming layer the stock client does not have.
+<img src="src-tauri/icons/128x128.png" width="104" alt="rigseed">
 
-The design system is called **Cozy Terminal**. It is deliberately not Material: the
-dominant Android qBittorrent client is Material 3, and following M3 would make this
-read as the desktop port of that app.
+# rigseed
 
-## Sources
+**A desktop client for qBittorrent that brings its own daemon.**
 
-Everything here is derived from the hi-fi prototypes built in this project - the same
-files that ship in `docs/design-references/`:
+Install it, open it, add a torrent. No server to set up, no WebUI to configure,
+no separate qBittorrent install to keep in step.
 
-| Prototype | Screen |
+![version](https://img.shields.io/badge/version-0.1.0-4E7C9B?style=flat-square)
+![platform](https://img.shields.io/badge/platform-Windows%20·%20macOS%20·%20Linux-2E343D?style=flat-square)
+![tauri](https://img.shields.io/badge/Tauri-2.11-24C8DB?style=flat-square)
+![react](https://img.shields.io/badge/React-19.2-58C4DC?style=flat-square)
+![rust](https://img.shields.io/badge/Rust-1.77+-B7410E?style=flat-square)
+![tests](https://img.shields.io/badge/tests-430%20+%2021-5E8C63?style=flat-square)
+![licence](https://img.shields.io/badge/licence-Apache--2.0-8E5A42?style=flat-square)
+
+</div>
+
+---
+
+## What it is
+
+rigseed is a Tauri shell that ships `qbittorrent-nox` alongside it, starts it on
+launch, and drives it over the Web API. No C++ or Qt is touched: the daemon is
+upstream's own headless build, unmodified.
+
+So it is a **frontend replacement for a dated GUI**, plus the two things the
+stock client has never had: a first run that explains itself, and a theming
+layer.
+
+| | |
 |---|---|
-| `Dashboard Cozy.dc.html` | Transfers (main), first-run setup modal, add FAB |
-| `Torrent Detail.dc.html` | Detail view, five tabs |
-| `Add Torrent.dc.html` | Add modal, inline category/tag creators |
-| `Search.dc.html` | Search, engines, plugin manager, five states |
-| `Settings.dc.html` | Preferences, alt-speed schedule grid |
-| `Categories and Tags.dc.html` | Category and tag CRUD |
-| `Logs.dc.html` | Log viewer and ban list |
-| `RSS.dc.html` | Feeds, item table, auto-download rules |
-| `Connections.dc.html` | Saved instances, address and auth, test connection |
+| **Three layouts** | Easy, Grid and List. Easy drops speeds, sizes and ratios entirely, describes every state in plain language, and uses 44px targets. |
+| **Eight accents, two modes** | Every colour in the app is a token resolving through `[data-mode][data-accent]`. Switching reskins everything with no re-render, including the taskbar icon. |
+| **The API is visible** | Every screen prints the endpoints it exercises in mono. The audience is technical, and it doubles as living documentation. |
+| **Its own profile** | The bundled daemon runs under `--profile`, so it never touches a qBittorrent you already have. |
+| **Or point at your own** | Remote instances are a first-class mode, not an afterthought. |
 
-Six further prototypes are shared pieces the screens import: `Rail`, `Appearance`,
-`ConfirmDialog`, `FormDialog`, `EmptyState` and `Skeleton`, plus `rigseed-theme.css`
-(the `[data-mode][data-accent]` variable layer) and `keyboard.js`.
+## How the daemon works
 
-The written specification follows the Verastack Labs shape: `PRODUCT.md` and `DESIGN.md`
-at the root, detail in `docs/` (`docs/README.md` first). No Figma file, no external
-codebase and no brand book were provided; nothing in this system is inferred from a
-source I could not read.
+```
+rigseed.exe
+├── generates a 32-char password → OS keychain
+├── writes qBittorrent.ini       → PBKDF2-HMAC-SHA512, 100k iterations
+├── picks a free port            → prefers 43880, asks the OS if taken
+└── spawns qbittorrent-nox       → --profile=<app data>, loopback only
+```
 
-**No logo file was supplied.** The brand mark is a cleat glyph drawn as a line icon
-(see Iconography) and the wordmark is set in plain type. If a real mark exists, drop
-it into `assets/` and replace both.
+Four decisions in there are load-bearing, and each is written up in
+`rigseed-internal`:
 
-Agency: verastack-labs. Product owner: Rigan / Riggs.
+- **The WebUI binds to `127.0.0.1`.** Nothing but rigseed talks to it, so being
+  on the LAN is exposure with no upside, and it turns a taken port from a
+  silent hijack into an honest failure.
+- **The port is asked for, not assumed.** 8080 is qBittorrent's own default, so
+  a user who has enabled their existing WebUI would collide with us on launch.
+- **Credentials are never sent to a stranger.** The app checks that whatever
+  answered is really qBittorrent before authenticating.
+- **HTTP happens in Rust.** qBittorrent answers a foreign `Origin` with 401, and
+  a webview cannot send the right one. Requests come from a reqwest client with
+  a cookie jar, so they carry no origin at all, which is how every native
+  client talks to it, and it keeps CSRF protection switched on.
 
----
+## The sidecar
 
-## Content fundamentals
+Built from upstream's own source, not vendored from a stranger. Nobody publishes
+a `qbittorrent-nox` for any platform, so `.github/workflows/build-sidecar.yml`
+builds it for all three with `-DGUI=OFF`.
 
-**Voice.** Plain, factual, slightly technical. The app assumes the reader is capable
-but does not assume they know BitTorrent vocabulary. Sentences are complete and
-lowercase-after-the-first-word; no exclamation marks, no encouragement, no jokes.
+| | qbittorrent-nox | Runtime |
+|---|---|---|
+| Linux | 16.1 MB | 19.0 MB, 4 Qt and 3 ICU |
+| macOS | 15.6 MB | 10.2 MB, 4 Qt frameworks and OpenSSL |
+| Windows | 20.1 MB | 5.4 MB, 4 Qt DLLs and the MSVC runtime |
 
-**Person.** Second person, sparingly. "You can change all of this later in Settings."
-Never first person - the app does not have a personality that says "I".
+Pinned in [`sidecar.json`](sidecar.json): qBittorrent **5.2.3**, Qt **6.8.3**,
+libtorrent **2.0.11**. Every build runs the binary with the build machine's Qt
+moved out of the way, because a bundle missing a library runs perfectly on the
+machine that built it.
 
-**Casing.** Sentence case for every title, label, button and menu item. The only
-uppercase is the 10px section header (`ENGINES`, `CATEGORY`, `VIEW`) and table headers.
-The product name **rigseed** is lowercase always, including sentence-initial.
+## Getting started
 
-**Verbs.** Pause and Resume are the verbs for a running or paused torrent. Start and
-Stop are reserved for 0% and 100%. The two pairs are never mixed - that rule is worth
-more than it looks, because the stock client mixes them and users misread it.
+```bash
+pnpm install
+bash scripts/fetch-sidecar-binary.sh   # downloads the daemon + its Qt runtime
+pnpm tauri dev
+```
 
-**Explanations sit next to controls, not in help.** Every switch has a one-line hint
-under its label; every destructive action names its consequence inline
-("torrents are not deleted, they lose the label").
+Without the sidecar the app still opens and falls back to sample data, which is
+what makes every screen reviewable before a daemon exists. The connection chip
+in the top bar always says which it is.
 
-**Empty states explain the mechanism, not the feeling.** "Searching needs at least one
-plugin. Each plugin is a Python file that teaches the client how to query one site."
-Not "Nothing here yet!".
+```bash
+pnpm test          # 430 frontend tests
+cargo test         # 21, in src-tauri
+pnpm tauri build   # MSI + NSIS on Windows
+```
 
-**The API is visible.** Each screen prints the endpoints it exercises in mono
-(`torrents/add · app/preferences`). This is intentional: the audience is technical, it
-doubles as living documentation, and it makes the app feel like a real client rather
-than a skin.
+## Stack
 
-**Numbers are never dressed up.** `3.65 GB of 5.7 GB`, `4m 12s left`, `1.42`. In the
-Easy layout only, plain language replaces them: "4 minutes left".
+**Tauri 2** · **React 19** · **TypeScript** with `exactOptionalPropertyTypes` ·
+**Tailwind 4** CSS-first · **Zustand** · **Vitest** · **Rust 1.77+**
 
-**No emoji.** Anywhere. Status is a coloured dot plus a word.
+The design system is **Cozy Terminal**, and it is deliberately not Material: the
+dominant Android qBittorrent client is Material 3, and following it would make
+this read as that app's desktop port.
 
----
+## Documentation
 
-## Visual foundations
-
-**Palette.** Warm, low-contrast neutrals - no pure black, no pure white, no cool
-Material grey. Dark mode is warm charcoal (`#191A1C` base); light is paper
-(`#F6F6F5`). Dark is the default.
-
-**The accent tints everything.** Picking an accent does not just recolour buttons: a
-percentage of it is mixed into every neutral surface via `color-mix`, so bg, sidebar,
-surface, surface2 and line all shift. Switching accent reads as a reskin, not a
-highlight swap. Eight accents, each with a paired secondary: download/progress use
-`--accent`, upload/seeding use `--accent2`. Paused and stalled states are never
-accent-coloured - they drop to `--surface2` / `--text-dimmer`.
-
-**Type.** Inter for language, JetBrains Mono for data. Two families, no third. Body
-text is 12.5px, which is small by web standards and correct for a desktop client
-with dense tables. Titles are 30px/600 at −0.02em.
-
-**Backgrounds.** Flat colour only. No gradients, no imagery, no texture, no pattern.
-The only "graphic" surfaces in the whole app are the speed sparklines (a filled area
-at ~16% accent opacity under a 1.6–1.8px line) and the alt-speed schedule grid.
-
-**Cards.** `--surface` fill, 1px `--line` border, radius 11–12px, no shadow at rest.
-Depth comes from layering surfaces, not from elevation. Shadows appear only on things
-that genuinely float: menus, the FAB, modals, the expanded rail.
-
-**Corner radii** step from 4px (checkbox) through 7–9px (controls) to 11–14px (cards
-and modals), with 20px pills for chips and full circles for swatches and the FAB.
-
-**Transparency and blur** are rationed. Scrims (rail 80% + 3px blur, modal 72% + 6px
-blur) and the FAB option circles (8px backdrop blur) are the only uses. Hover on a
-floating element mixes the accent *into* the surface rather than using a translucent
-tint - a translucent hover let the page show through and looked broken.
-
-**Motion.** Overshoot for anything that expands (`cubic-bezier(0.34,1.56,0.64,1)`),
-a gentler curve for the rail, a long ease-out for the appearance panel, plain ease for
-colour. Nothing is linear. Progress bars animate between polls so a download reads as
-continuous; list rows animate in and out because `sync/maindata` changes them
-underneath the user. `prefers-reduced-motion` drops scale and overshoot, keeps fades.
-
-**Hover.** Rows take `--surface2`; cards raise their border to `--accent`; secondary
-buttons take `--accent-soft` with `--accent` text; primary buttons brighten 7%.
-**Press** scales to 0.96. **Focus** is a 2px `--accent` ring at 2px offset, on
-everything.
-
-**Selected** is always the same pair: `--accent-soft` background with `--accent` text
-or border. Learn it once, read it everywhere.
-
-**Layout.** Fixed left rail (60px, expanding to 212px as an overlay with no reflow),
-fixed sidebar and pane widths, everything else flexes. Designed at 1440×900; minimum
-supported 1100×700.
-
-**Density.** High but not cramped: 40px rows, 9px vertical padding, 12–18px gaps
-between cards. The Easy layout deliberately breaks this - bigger tiles, 44px targets,
-fewer numbers - and is the one recommended to newcomers.
-
----
-
-## Iconography
-
-**Feather-style line icons**, drawn inline in the prototypes: `viewBox="0 0 24 24"`,
-`fill: none`, `stroke: currentColor`, `stroke-width: 2` (2.2–2.6 for small or emphatic
-glyphs), round caps and joins. Sizes: 11–13px inline with text, 14–17px in buttons and
-rows, 20–24px for feature tiles.
-
-No icon font, no sprite sheet and no icon package existed in the sources - the
-prototypes hand-inline each path. For the real app, use **Lucide**, which is the same
-drawing convention at the same stroke weight. This system links it from CDN in the
-component cards and UI kit. *Flagged substitution: Lucide stands in for the
-hand-drawn paths; they match visually, but if you want the prototype paths exactly,
-they are in the `.dc.html` files.*
-
-The one glyph that is **not** Lucide is the brand mark, in `assets/mark.svg`: a cleat
-- a horizontal bar with flared horns at both ends and a rope loop rotated −38° across
-it. Always `--accent`, 19–20px, 1.7–2px stroke.
-
-Icons never carry meaning alone. Every status dot has a word beside it; every icon
-button has a `title`.
-
-No emoji, no unicode symbols as icons, no PNG icons anywhere.
-
----
-
-## Index
-
-| Path | What |
-|---|---|
-| `styles.css` | The entry point. Imports every token file. |
-| `tokens/` | `fonts`, `colors`, `typography`, `spacing`, `shape`, `motion`, `base` |
-| `guidelines/` | Foundation specimen cards (Colors, Type, Spacing, Motion, Brand) |
-| `components/core/` | Button, IconButton, Input, Checkbox, Switch, SegmentedControl, Chip, Card, SectionHeader, StatusDot, IconTile, Badge |
-| `components/data/` | ProgressBar, StatCard, Sparkline, DataValue |
-| `components/navigation/` | NavRail, RailItem, FilterRow, TabBar, ContextMenu |
-| `ui_kits/rigseed-desktop/` | Click-through recreation of the app |
-| `assets/` | `mark.svg` (cleat brand mark) |
-| `SKILL.md` | Agent Skills entry point |
-| `PRODUCT.md` | Product schema - platform, users, purpose, constraints, principles |
-| `DESIGN.md` | Design system with machine-readable frontmatter, `[shared]`/`[app]` tagged |
-| `docs/` | Architecture, foundations, app shell, motion and states, build plan, screens |
-| `COMPONENTS.md` | Which file owns which kind of change in the prototypes |
-
-### Intentional additions
-
-- **IconTile** - the rounded accent-tinted square that fronts modal headers, category
-  rows and empty states. It recurs on every screen; it is one component, not a pattern
-  to re-inline.
-- **DataValue** - a mono `<span>` with the right size and weight. Trivial, but it is
-  what enforces the Inter/Mono split, which is the rule most likely to be broken.
-
----
+Reference docs live in **`verastack-labs/rigseed-internal`**: architecture, the
+build plan, per-screen specs, design foundations, content and voice, and the
+write-ups behind the decisions above.
 
 ## Licence
 
-Apache License 2.0 - see `LICENSE`.
+**Apache-2.0**, see [`LICENSE`](LICENSE).
 
-rigseed ships `qbittorrent-nox` as a sidecar. That binary is GPL-2.0-or-later and
-carries its own redistribution obligations, which are separate from rigseed's own
-licence. See `NOTICE` for the detail and for font and icon attribution.
+rigseed ships `qbittorrent-nox` as a sidecar. Upstream's source is GPL-2.0-or-later
+but **the binary distribution is GPL-3.0-or-later**, because it bundles GPLv3+
+assets, and that is the licence governing what we redistribute. Every sidecar
+release carries the corresponding source archive on the same release page, which
+is what GPLv3 §6(d) asks for. See [`NOTICE`](NOTICE) and `licenses/` for the
+detail, including font and icon attribution.
 
-## Contact
+## Maintainer
 
-| Reason | Address |
+Built by **[@riganb](https://github.com/riganb)** at **Verastack Labs**.
+
+| | |
 |---|---|
-| Project, security, code of conduct | verastack.labs@gmail.com |
+| Project, security, conduct | verastack.labs@gmail.com |
 | Maintainer, direct | therealriganb@gmail.com |
 
-Bugs and feature requests go through GitHub issues rather than email - the templates ask
-for the version detail that resolves most reports.
+Bugs and feature requests go through GitHub issues rather than email, since the
+templates ask for the version detail that resolves most reports.
