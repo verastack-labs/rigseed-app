@@ -11,6 +11,7 @@ import { SavePathField } from '@/features/add-torrent/save-path-field'
 import { SourcePicker, type Source } from '@/features/add-torrent/source-picker'
 import { TagPicker, type NewTag } from '@/features/add-torrent/tag-picker'
 import { useApi } from '@/services/api-context'
+import { canReachDesktop, pickFolder } from '@/services/shell'
 import { useLabelStore } from '@/state/label-store'
 import { formatBytes } from '@/utils/format'
 import {
@@ -217,6 +218,18 @@ export function AddTorrentDialog({
           onChange={setSavePath}
           freeSpace={freeSpace}
           needed={needed}
+          // Only where there is a shell to open a picker in. The field itself
+          // stays typeable either way, so a browser loses the convenience and
+          // not the ability to choose.
+          {...(canReachDesktop()
+            ? {
+                onBrowse: () => {
+                  void pickFolder(savePath).then((chosen) => {
+                    if (chosen) setSavePath(chosen)
+                  })
+                },
+              }
+            : {})}
           // Automatic Torrent Management picks the path from the category, so
           // leaving the field live would offer a choice the daemon then
           // ignores.

@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const revealItemInDir = vi.fn()
 const openPath = vi.fn()
+const open = vi.fn()
 
 vi.mock('@tauri-apps/plugin-opener', () => ({ revealItemInDir, openPath }))
+vi.mock('@tauri-apps/plugin-dialog', () => ({ open }))
 
 type Global = { __TAURI_INTERNALS__?: unknown }
 
@@ -21,6 +23,7 @@ describe('shell', () => {
   beforeEach(() => {
     revealItemInDir.mockReset().mockResolvedValue(undefined)
     openPath.mockReset().mockResolvedValue(undefined)
+    open.mockReset().mockResolvedValue(null)
   })
 
   afterEach(() => {
@@ -82,6 +85,39 @@ describe('shell', () => {
 
     expect(complaint).toHaveBeenCalledTimes(1)
     expect(String(complaint.mock.calls[0]?.[0])).toContain('C:/Downloads/video.mkv')
+  })
+
+  describe('pickFolder', () => {
+    it('returns the chosen folder', async () => {
+      underTauri(true)
+      open.mockResolvedValue('D:/media')
+      const { pickFolder } = await shell()
+      await expect(pickFolder('C:/Downloads')).resolves.toBe('D:/media')
+      expect(open).toHaveBeenCalledWith(
+        expect.objectContaining({ directory: true, multiple: false, defaultPath: 'C:/Downloads' }),
+      )
+    })
+
+    it('treats a cancelled picker as no answer', async () => {
+      underTauri(true)
+      open.mockResolvedValue(null)
+      const { pickFolder } = await shell()
+      await expect(pickFolder()).resolves.toBeNull()
+    })
+
+    it('does not send a defaultPath it does not have', async () => {
+      underTauri(true)
+      const { pickFolder } = await shell()
+      await pickFolder()
+      expect(open.mock.calls[0]?.[0]).not.toHaveProperty('defaultPath')
+    })
+
+    it('is null in a browser, where there is nothing to open', async () => {
+      underTauri(false)
+      const { pickFolder } = await shell()
+      await expect(pickFolder('C:/x')).resolves.toBeNull()
+      expect(open).not.toHaveBeenCalled()
+    })
   })
 
   it('says so when a reveal fails too', async () => {
