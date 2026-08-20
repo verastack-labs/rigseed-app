@@ -1,7 +1,7 @@
 import { createClient, type Client } from '@/services/client'
 import { createMockTransport } from '@/services/mock-transport'
 import { capabilitiesFor } from '@/services/torrents'
-import { createHttpTransport } from '@/services/transport'
+import { ApiError, createHttpTransport } from '@/services/transport'
 
 export interface DaemonTarget {
   /** For example `http://127.0.0.1:8080`, or `''` for a same-origin proxy. */
@@ -103,6 +103,37 @@ async function daemonFetch(): Promise<typeof fetch | undefined> {
   return tauriFetch as typeof fetch
 }
 
+/**
+ * Is the thing on the other end actually qBittorrent?
+ *
+ * Asked before any credential is sent. An unauthenticated `app/version` gets
+ * 403 from qBittorrent and something else from anything else, which is enough
+ * to tell a daemon from a Jenkins.
+ *
+ * This exists because of what a taken port does on Windows. A wildcard bind
+ * coexists with a specific one and the specific one wins, so a daemon told to
+ * use a port somebody else already had bound 0.0.0.0, logged "Now listening",
+ * and served nothing: every request went to the other process. rigseed would
+ * have posted its generated password to whatever that was.
+ *
+ * Choosing a free port removed the likelihood. This removes the consequence,
+ * which is the part worth keeping, since the gap between checking a port and
+ * binding it cannot be closed entirely.
+ */
+async function looksLikeQbittorrent(probe: Client): Promise<boolean> {
+  try {
+    await probe.app.version()
+    // Answered without a session. Not impossible if something restored one,
+    // so this is not treated as a failure, but it is not qBittorrent's
+    // documented behaviour either.
+    return true
+  } catch (error) {
+    if (error instanceof ApiError) return error.status === 403
+    // Never reached the far end, which the login below will report properly.
+    return true
+  }
+}
+
 export async function connect(
   target: DaemonTarget,
   { waitMs = 0 }: ConnectOptions = {},
@@ -127,6 +158,13 @@ export async function connect(
 
   for (;;) {
     try {
+      if (!(await looksLikeQbittorrent(probe))) {
+        return {
+          status: 'failed',
+          reason: `Something is listening at ${target.baseUrl || 'this origin'}, but it is not qBittorrent. No credentials were sent to it.`,
+        }
+      }
+
       const accepted = await probe.auth.login(target.username, target.password)
       if (!accepted) {
         return { status: 'failed', reason: 'The daemon rejected those credentials.' }
