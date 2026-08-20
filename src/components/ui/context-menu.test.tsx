@@ -158,6 +158,41 @@ describe('ContextMenu', () => {
     })
   })
 
+  describe('opened at a point', () => {
+    it('positions itself at the pointer instead of under a trigger', () => {
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ height: 160 } as DOMRect)
+      render(<ContextMenu items={items} open onClose={vi.fn()} at={{ x: 120, y: 90 }} />)
+      const menu = screen.getByRole('menu')
+      expect(menu.className).toContain('fixed')
+      expect(menu.className).not.toContain('absolute')
+      expect(menu.style.left).toBe('120px')
+      expect(menu.style.top).toBe('90px')
+    })
+
+    it('clamps to the right edge rather than opening off screen', () => {
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ height: 100 } as DOMRect)
+      render(<ContextMenu items={items} open onClose={vi.fn()} at={{ x: window.innerWidth - 4, y: 20 }} />)
+      // 224 wide, 8px from the edge. A menu that opens past the window is a
+      // menu with items nobody can reach.
+      expect(screen.getByRole('menu').style.left).toBe(`${window.innerWidth - 224 - 8}px`)
+    })
+
+    it('opens upward when there is no room below the pointer', () => {
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ height: 160 } as DOMRect)
+      const y = window.innerHeight - 20
+      render(<ContextMenu items={items} open onClose={vi.fn()} at={{ x: 10, y }} />)
+      expect(screen.getByRole('menu').style.top).toBe(`${y - 160}px`)
+    })
+
+    it('keeps the anchored classes off when it is placed at a point', () => {
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ height: 20 } as DOMRect)
+      render(<ContextMenu items={items} open onClose={vi.fn()} at={{ x: 10, y: 10 }} />)
+      const menu = screen.getByRole('menu')
+      expect(menu.className).not.toContain('top-[calc(100%+8px)]')
+      expect(menu.className).not.toContain('bottom-[calc(100%+8px)]')
+    })
+  })
+
   it('uses the danger colour rather than the accent for destructive items', () => {
     render(<ContextMenu items={items} open onClose={vi.fn()} />)
     const remove = screen.getByRole('menuitem', { name: 'Remove' })

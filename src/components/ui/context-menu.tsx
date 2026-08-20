@@ -20,11 +20,26 @@ export interface ContextMenuSeparator {
 
 export type ContextMenuItem = ContextMenuAction | ContextMenuSeparator
 
+/** A point in viewport coordinates, as a `contextmenu` event reports it. */
+export interface Point {
+  x: number
+  y: number
+}
+
 export interface ContextMenuProps {
   items: readonly ContextMenuItem[]
   open: boolean
   /** Called on selection, on Escape, and on any outside click. */
   onClose: () => void
+  /**
+   * Open at this point instead of under the trigger.
+   *
+   * A right click has its own idea of where the menu belongs, and it is not
+   * the top right corner of the card. With a point the menu is positioned
+   * `fixed` against the viewport and clamped into it; without one it keeps
+   * its anchored behaviour, which is what the three-dot button wants.
+   */
+  at?: Point
   /**
    * Force the flip direction. Left undefined the menu measures itself and
    * flips above when it would otherwise run off the bottom of the viewport.
@@ -53,6 +68,7 @@ export function ContextMenu({
   items,
   open,
   onClose,
+  at,
   above,
   width = 224,
   label,
@@ -60,16 +76,34 @@ export function ContextMenu({
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
   const [measuredFlip, setMeasuredFlip] = useState(false)
+  const [placed, setPlaced] = useState<Point | null>(null)
   const flipped = above ?? measuredFlip
 
   // Measure before paint so the menu never renders in the wrong place first.
   useLayoutEffect(() => {
-    if (!open || above !== undefined) return
+    if (!open || at || above !== undefined) return
     const el = menuRef.current
     if (!el) return
     const rect = el.getBoundingClientRect()
     setMeasuredFlip(rect.height > 0 && rect.bottom > window.innerHeight - 8)
-  }, [open, above, items])
+  }, [open, at, above, items])
+
+  // The pointer-anchored case, which needs both axes rather than a flip.
+  // Clamping rather than flipping on x, because a menu that jumps to the left
+  // of the cursor near the edge of a window reads as a misclick.
+  useLayoutEffect(() => {
+    if (!open || !at) {
+      setPlaced(null)
+      return
+    }
+    const height = menuRef.current?.getBoundingClientRect().height ?? 0
+    const edge = 8
+    const room = window.innerHeight - edge
+    setPlaced({
+      x: Math.max(edge, Math.min(at.x, window.innerWidth - width - edge)),
+      y: at.y + height > room ? Math.max(edge, at.y - height) : at.y,
+    })
+  }, [open, at, width, items])
 
   // Added after the opening click has finished propagating, so it does not
   // immediately close the menu it just opened.
@@ -147,16 +181,17 @@ export function ContextMenu({
       aria-label={label}
       onKeyDown={onKeyDown}
       className={cn(
-        'bg-surface border-line absolute right-0 z-30 rounded-3xl border p-1.5',
+        'bg-surface border-line z-30 rounded-3xl border p-1.5',
+        at ? 'fixed' : 'absolute right-0',
         // Token names live in Tailwind's --shadow-* namespace, so mapping them
         // into @theme would be a self-referential cycle. Shadows appear in four
         // places in the whole app, so an arbitrary value is clearer than
         // inventing a parallel name.
         'shadow-[var(--shadow-card)]',
-        flipped ? 'bottom-[calc(100%+8px)]' : 'top-[calc(100%+8px)]',
+        !at && (flipped ? 'bottom-[calc(100%+8px)]' : 'top-[calc(100%+8px)]'),
         className,
       )}
-      style={{ width }}
+      style={at ? { width, left: placed?.x ?? at.x, top: placed?.y ?? at.y } : { width }}
     >
       {items.map((item, i) =>
         isAction(item) ? (
