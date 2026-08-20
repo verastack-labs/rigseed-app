@@ -38,6 +38,20 @@
   </defs>
 
   <!--
+    Scaled up inside the same canvas.
+
+    The tile was 856 of 1024, an 8% margin on every side. That is the macOS
+    grid, and on a Windows taskbar next to icons that fill their canvas it read
+    as a small icon rather than a padded one. 936 of 1024 keeps a little air
+    without giving away the size.
+
+    A transform rather than 40 rewritten coordinates: the gradients are
+    userSpaceOnUse and live inside the group, so they scale with it.
+  -->
+  <g transform="translate(512 512) scale(1.09346) translate(-512 -512)">
+
+
+  <!--
     Inset rather than full bleed. macOS draws its own squircle and expects the
     art to leave room; Windows crops nothing.
   -->
@@ -65,4 +79,5 @@
   />
 
   <rect x="84" y="84" width="856" height="856" rx="196" fill="url(#rim)" />
+  </g>
 </svg>
