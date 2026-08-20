@@ -1,6 +1,11 @@
 import {
+  Activity,
   ArrowDownToLine,
+  ArrowUpFromLine,
   BookOpen,
+  CircleCheck,
+  Hourglass,
+  Layers,
   Brush,
   Disc,
   FileText,
@@ -36,6 +41,15 @@ export const icons = {
   folder: Folder,
   folderOpen: FolderOpen,
   download: ArrowDownToLine,
+  // The status filters. Each one gets its own glyph rather than seven
+  // folders: the list is scanned by shape long before it is read, and seven
+  // identical icons make the colour of the active row the only thing telling
+  // them apart.
+  all: Layers,
+  upload: ArrowUpFromLine,
+  complete: CircleCheck,
+  active: Activity,
+  stalled: Hourglass,
   palette: Palette,
   resume: Play,
   pause: Pause,
