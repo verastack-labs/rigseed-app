@@ -31,7 +31,10 @@ export function Input({ mono, size = 'md', unit, icon, invalid, className, ...pr
     <div
       className={cn(
         'bg-surface2 flex w-full items-center gap-2 rounded-lg border px-[11px]',
-        'transition-colors duration-fast focus-within:border-accent',
+        // No focus colour on this border. The field already gets the accent
+        // ring from the :focus-visible rule in tokens/base.css, and doing both
+        // drew two concentric outlines around one input.
+        'transition-colors duration-fast',
         HEIGHT[size],
         invalid ? 'border-danger' : 'border-line',
         !unit && className,
