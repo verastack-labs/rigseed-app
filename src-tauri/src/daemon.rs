@@ -113,6 +113,20 @@ pub fn write_config(
     password_hash: &str,
     port: u16,
 ) -> Result<(), DaemonError> {
+    // Loopback only, which is two fixes rather than one.
+    //
+    // A qBittorrent WebUI binds to every interface by default. Nothing but
+    // rigseed talks to this one, so being on the LAN is pure exposure, and on
+    // Windows it is also what raises the firewall prompt about private and
+    // public networks the moment the app first runs.
+    //
+    // It also turns a taken port from a silent hijack into a real failure.
+    // Windows lets a wildcard bind sit alongside a specific one, so with
+    // something already on 127.0.0.1:8080 the daemon bound 0.0.0.0:8080,
+    // logged "Now listening", and every request went to the other process.
+    // rigseed would have posted its generated password to whatever that was.
+    const LOOPBACK: &str = "127.0.0.1";
+
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -128,6 +142,7 @@ pub fn write_config(
         // records a decision the user already made rather than skipping one.
         ("LegalNotice", "Accepted".into(), "true".into()),
         ("Preferences", webui("Enabled"), "true".into()),
+        ("Preferences", webui("Address"), LOOPBACK.into()),
         ("Preferences", webui("Port"), port.to_string()),
         ("Preferences", webui("Username"), username.to_string()),
         (
@@ -295,5 +310,31 @@ mod tests {
         let text = path.to_string_lossy().replace('\\', "/");
         assert!(text.ends_with("/qBittorrent/config/qBittorrent.ini")
             || text.ends_with("/qBittorrent/config/qBittorrent.conf"), "got {text}");
+    }
+
+    #[test]
+    fn binds_the_webui_to_loopback_only() {
+        // Not a preference. A qBittorrent WebUI binds to every interface by
+        // default, and nothing but rigseed talks to this one, so being on the
+        // LAN is exposure with no upside. On Windows it is also what raises
+        // the firewall prompt about private and public networks.
+        //
+        // It is what makes a taken port fail honestly, too. Windows lets a
+        // wildcard bind sit alongside a specific one, so bound to 0.0.0.0 the
+        // daemon reported "Now listening" while another process served every
+        // request, and rigseed would have posted its password to whatever that
+        // was.
+        let dir = std::env::temp_dir().join(format!("rigseed-test-bind-{}", std::process::id()));
+        let path = dir.join("qBittorrent.conf");
+        let _ = fs::remove_dir_all(&dir);
+
+        write_config(&path, "rigseed", "hash", 43880).unwrap();
+        let written = fs::read_to_string(&path).unwrap();
+
+        assert!(
+            written.contains("WebUI\\Address=127.0.0.1"),
+            "the WebUI must not be offered to the network: {written}"
+        );
+        let _ = fs::remove_dir_all(&dir);
     }
 }
