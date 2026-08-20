@@ -7,10 +7,14 @@ import { useLogTail } from '@/state/use-log-tail'
 const main = vi.fn()
 const peers = vi.fn()
 const api = { log: { main, peers } }
-vi.mock('@/services/api-context', () => ({ useApi: () => api }))
+const other = { log: { main, peers } }
+vi.mock('@/services/api-context', () => ({ useApi: () => holder.current }))
+const holder = { current: api as typeof api }
 
 let latest: ReturnType<typeof useLogTail>
 
+// Swappable, because the provider hands out a mock client while it looks for a
+// daemon and replaces it with the real one when it finds it.
 function Probe() {
   const state = useLogTail(50)
   useEffect(() => {
@@ -29,6 +33,7 @@ const entry = (id: number, type = 1) => ({
 beforeEach(() => {
   vi.clearAllMocks()
   peers.mockResolvedValue([])
+  holder.current = api
 })
 
 afterEach(cleanup)
@@ -104,5 +109,25 @@ describe('useLogTail', () => {
     await waitFor(() => expect(latest.entries).toHaveLength(1))
     await waitFor(() => expect(latest.error).toBe('gone'))
     expect(latest.entries).toHaveLength(1)
+  })
+
+  it('drops everything when the connection changes', async () => {
+    // The provider starts on a mock client and swaps in the real one. Keeping
+    // the buffer across that swap left sample entries on screen; keeping the
+    // cursor was worse, because the real daemon was then asked for everything
+    // after the mock's last id and its first lines were skipped silently.
+    main.mockResolvedValueOnce([entry(0), entry(1)]).mockResolvedValue([])
+    const { rerender } = render(<Probe />)
+    await waitFor(() => expect(latest.entries).toHaveLength(2))
+
+    main.mockClear()
+    main.mockResolvedValueOnce([entry(0), entry(1), entry(2)]).mockResolvedValue([])
+    holder.current = other
+    rerender(<Probe />)
+
+    // The new connection is asked from the beginning, not from the old
+    // connection's cursor.
+    await waitFor(() => expect(main.mock.calls[0]?.[0]).toBe(-1))
+    await waitFor(() => expect(latest.entries).toHaveLength(3))
   })
 })
