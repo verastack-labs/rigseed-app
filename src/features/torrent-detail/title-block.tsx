@@ -1,7 +1,10 @@
 import { ProgressBar } from '@/components/ui/progress-bar'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatusDot } from '@/components/ui/status-dot'
+import { IconButton } from '@/components/ui/icon-button'
+import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
+import { canReachDesktop, revealInFolder } from '@/services/shell'
 import type { Torrent } from '@/types/qbittorrent'
 import {
   STATE_LABEL,
@@ -43,9 +46,13 @@ export function TitleBlock({ torrent, className }: TitleBlockProps) {
   // skipped reported a figure that never quite reached its own total.
   const done = torrent.completed
 
-  const meta: { label: string; value: string; mono?: boolean }[] = [
+  const meta: { label: string; value: string; mono?: boolean; reveal?: string }[] = [
     { label: 'Category', value: torrent.category || 'none' },
-    { label: 'Save path', value: torrent.save_path, mono: true },
+    // The header row is where the save path is read, so it is where the
+    // button to open it belongs. The same action also sits beside the save
+    // path in the General tab's card and in both menus: this is the one
+    // people go looking for, and one route to it was not enough.
+    { label: 'Save path', value: torrent.save_path, mono: true, reveal: torrent.content_path },
     { label: 'Added', value: formatDate(torrent.added_on) },
     { label: 'Ratio', value: formatRatio(torrent.ratio), mono: true },
     { label: 'Hash', value: torrent.hash, mono: true },
@@ -97,15 +104,25 @@ export function TitleBlock({ torrent, className }: TitleBlockProps) {
         {meta.map((item) => (
           <div key={item.label} className="flex min-w-0 flex-col gap-1">
             <SectionHeader>{item.label}</SectionHeader>
-            <span
-              title={item.value}
-              className={cn(
-                'truncate text-[12.5px] text-text-dim',
-                item.mono ? 'font-mono' : 'font-sans',
-              )}
-            >
-              {item.value}
-            </span>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span
+                title={item.value}
+                className={cn(
+                  'min-w-0 truncate text-[12.5px] text-text-dim',
+                  item.mono ? 'font-mono' : 'font-sans',
+                )}
+              >
+                {item.value}
+              </span>
+              {item.reveal && canReachDesktop() ? (
+                <IconButton
+                  title="Open containing folder"
+                  onClick={() => void revealInFolder(item.reveal ?? '')}
+                >
+                  <icons.folderOpen className="size-[14px]" strokeWidth={2} />
+                </IconButton>
+              ) : null}
+            </div>
           </div>
         ))}
       </div>
