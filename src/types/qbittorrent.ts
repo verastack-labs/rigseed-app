@@ -352,3 +352,30 @@ export interface Preferences {
 
 /** What can be written back. Every key optional, since only changes are sent. */
 export type PreferenceChanges = Partial<Preferences>
+
+/** Four levels, and the bitmask the daemon reports them as. */
+export type LogLevel = 'normal' | 'info' | 'warning' | 'critical'
+
+export interface LogEntry {
+  id: number
+  message: string
+  /** Unix seconds, not milliseconds. */
+  timestamp: number
+  /** 1 normal, 2 info, 4 warning, 8 critical. A bitmask value, not an index. */
+  type: number
+}
+
+/**
+ * One line of `log/peers`.
+ *
+ * `reason` says what refused the address, and it is not always something this
+ * app can undo. Manual bans live in the `banned_IPs` preference; entries the
+ * internal IP filter produced have nothing to remove them from.
+ */
+export interface PeerBan {
+  id: number
+  ip: string
+  timestamp: number
+  blocked: boolean
+  reason: string
+}

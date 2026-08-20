@@ -2,6 +2,8 @@ import { PRIORITY, type Priority } from '@/lib/priority'
 import type { Transport } from '@/services/transport'
 import type {
   Category,
+  LogEntry,
+  PeerBan,
   Preferences,
   MainData,
   Peer,
@@ -92,6 +94,61 @@ const PREFERENCES: Preferences = {
   web_ui_clickjacking_protection_enabled: true,
   web_ui_host_header_validation_enabled: true,
 }
+
+/**
+ * A daemon's first minute, shaped like a real one.
+ *
+ * Types are the bitmask the API sends: 1 normal, 2 info, 4 warning, 8
+ * critical. Written out rather than generated so the screen has something with
+ * every level in it to render against.
+ */
+const LOG: LogEntry[] = [
+  {
+    id: 0,
+    message: 'qBittorrent v5.2.3 started. Process ID: 4120',
+    timestamp: 1_787_249_189,
+    type: 1,
+  },
+  { id: 1, message: 'Using config directory: /config', timestamp: 1_787_249_189, type: 1 },
+  { id: 2, message: 'Trying to listen on: 0.0.0.0:2791', timestamp: 1_787_249_190, type: 2 },
+  { id: 3, message: 'Peer ID: -qB5230-', timestamp: 1_787_249_190, type: 2 },
+  { id: 4, message: 'HTTP User-Agent: qBittorrent/5.2.3', timestamp: 1_787_249_190, type: 2 },
+  { id: 5, message: 'DHT support [ON]', timestamp: 1_787_249_191, type: 2 },
+  { id: 6, message: 'Local Peer Discovery support [ON]', timestamp: 1_787_249_191, type: 2 },
+  { id: 7, message: 'Encryption support [FORCED]', timestamp: 1_787_249_191, type: 2 },
+  {
+    id: 8,
+    message: 'Web UI: Now listening on IP: 127.0.0.1, port: 8080',
+    timestamp: 1_787_249_192,
+    type: 1,
+  },
+  {
+    id: 9,
+    message:
+      'UPnP/NAT-PMP port mapping failed. Message: "could not map port using UPnP: no router found"',
+    timestamp: 1_787_249_347,
+    type: 4,
+  },
+  { id: 10, message: 'Detected external IP: 203.0.113.9', timestamp: 1_787_249_360, type: 2 },
+  {
+    id: 11,
+    message: 'Could not write to file "/downloads/ubuntu.iso": no space left on device',
+    timestamp: 1_787_249_400,
+    type: 8,
+  },
+  {
+    id: 12,
+    message: 'Torrent "ubuntu-24.04.2-desktop-amd64.iso" resumed',
+    timestamp: 1_787_249_420,
+    type: 1,
+  },
+]
+
+const BANS: PeerBan[] = [
+  { id: 0, ip: '198.51.100.24', timestamp: 1_787_249_281, blocked: true, reason: 'IP filter' },
+  { id: 1, ip: '203.0.113.77', timestamp: 1_787_249_290, blocked: true, reason: 'banned by user' },
+  { id: 2, ip: '2001:db8::9f2', timestamp: 1_787_249_301, blocked: true, reason: 'IP filter' },
+]
 
 const CATEGORIES: Record<string, Category> = {
   Linux: { name: 'Linux', savePath: '/downloads/linux' },
@@ -530,6 +587,18 @@ export function createMockTransport({
       if (path === 'torrents/tags') return wait(tags as T)
       if (path === 'app/version') return wait('v5.2.3' as T)
       if (path === 'app/preferences') return wait(preferences as T)
+      if (path === 'log/main') {
+        // The tail cursor, honoured rather than ignored: a Follow loop that
+        // gets the whole log back every tick would prepend duplicates for
+        // ever, and it is the kind of thing that looks fine on a log with
+        // twelve lines in it.
+        const since = Number(params?.['last_known_id'] ?? -1)
+        return wait(LOG.filter((e) => e.id > since) as T)
+      }
+      if (path === 'log/peers') {
+        const since = Number(params?.['last_known_id'] ?? -1)
+        return wait(BANS.filter((e) => e.id > since) as T)
+      }
       if (path === 'app/webapiVersion') return wait('2.11.2' as T)
       if (path === 'app/defaultSavePath') return wait('/downloads' as T)
 

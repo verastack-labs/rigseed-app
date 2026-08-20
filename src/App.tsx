@@ -5,6 +5,7 @@ import { ApiProvider } from '@/services/context'
 import { Placeholder } from '@/pages/placeholder'
 import { TorrentDetail } from '@/pages/torrent-detail'
 import { Categories } from '@/pages/categories'
+import { Logs } from '@/pages/logs'
 import { Settings } from '@/pages/settings'
 import { Transfers } from '@/pages/transfers'
 
@@ -32,7 +33,7 @@ export function App() {
             />
             <Route path="rss" element={<Placeholder title="RSS" tier="V2" api="rss/items" />} />
             <Route path="categories" element={<Categories />} />
-            <Route path="logs" element={<Placeholder title="Logs" tier="V1" api="log/main" />} />
+            <Route path="logs" element={<Logs />} />
             <Route
               path="connections"
               element={<Placeholder title="Connections" tier="V2" api="auth/login" />}

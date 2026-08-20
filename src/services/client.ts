@@ -1,5 +1,6 @@
 import { createAppApi } from '@/services/app'
 import { createAuthApi } from '@/services/auth'
+import { createLogApi } from '@/services/log'
 import { createSyncApi } from '@/services/sync'
 import { createTorrentsApi, DEFAULT_CAPABILITIES, type Capabilities } from '@/services/torrents'
 import { createTransferApi } from '@/services/transfer'
@@ -16,6 +17,7 @@ export function createClient(transport: Transport, caps: Capabilities = DEFAULT_
   return {
     app: createAppApi(transport),
     auth: createAuthApi(transport),
+    log: createLogApi(transport),
     sync: createSyncApi(transport),
     torrents: createTorrentsApi(transport, caps),
     transfer: createTransferApi(transport),
