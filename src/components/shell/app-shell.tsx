@@ -10,6 +10,7 @@ import { RailItem } from '@/components/ui/rail-item'
 import { BrandMark } from '@/components/brand-mark'
 import { icons } from '@/lib/icons'
 import { useThemeAttributes } from '@/state/use-theme-attributes'
+import { useWindowIcon } from '@/state/use-window-icon'
 
 const DESTINATIONS = [
   { to: '/', label: 'Transfers', Icon: icons.transfers, breadcrumb: undefined },
@@ -29,6 +30,9 @@ const DESTINATIONS = [
  */
 export function AppShell() {
   useThemeAttributes()
+  // The same theme, applied to the one piece of chrome the CSS cascade cannot
+  // reach. Does nothing outside Tauri.
+  useWindowIcon()
   const [railExpanded, setRailExpanded] = useState(false)
   const { pathname } = useLocation()
   const current = DESTINATIONS.find((d) => d.to === pathname)
