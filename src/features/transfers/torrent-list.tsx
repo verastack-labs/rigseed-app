@@ -59,7 +59,7 @@ export function TorrentList({ torrents, selected, onToggle, ...actions }: Layout
               />
             </div>
 
-            <DataValue size="sm" tone="dim" className="text-right">
+            <DataValue size="md" tone="dim" className="text-right">
               {formatBytes(torrent.size)}
             </DataValue>
 
@@ -71,10 +71,10 @@ export function TorrentList({ torrents, selected, onToggle, ...actions }: Layout
               label={torrent.name}
             />
 
-            <DataValue size="sm" tone={paused ? 'dimmer' : 'accent'} className="text-right">
+            <DataValue size="md" tone={paused ? 'dimmer' : 'accent'} className="text-right">
               {formatSpeed(torrent.dlspeed)}
             </DataValue>
-            <DataValue size="sm" tone={paused ? 'dimmer' : 'accent2'} className="text-right">
+            <DataValue size="md" tone={paused ? 'dimmer' : 'accent2'} className="text-right">
               {formatSpeed(torrent.upspeed)}
             </DataValue>
 

@@ -51,14 +51,14 @@ export function TorrentGrid({ torrents, selected, onToggle, ...actions }: Layout
             />
 
             <div className="flex items-center gap-3">
-              <DataValue size="sm" tone={isPaused(torrent.state) ? 'dimmer' : 'accent'}>
+              <DataValue size="md" tone={isPaused(torrent.state) ? 'dimmer' : 'accent'}>
                 {formatSpeed(torrent.dlspeed)}
               </DataValue>
-              <DataValue size="sm" tone={isPaused(torrent.state) ? 'dimmer' : 'accent2'}>
+              <DataValue size="md" tone={isPaused(torrent.state) ? 'dimmer' : 'accent2'}>
                 {formatSpeed(torrent.upspeed)}
               </DataValue>
               <span className="flex-1" />
-              <DataValue size="sm" tone="dim">
+              <DataValue size="md" tone="dim">
                 {formatPercent(torrent.progress)}
               </DataValue>
             </div>
