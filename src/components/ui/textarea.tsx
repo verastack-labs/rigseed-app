@@ -21,7 +21,12 @@ export function Textarea({ mono, invalid, className, ...props }: TextareaProps) 
     <div
       className={cn(
         'bg-surface2 flex w-full rounded-lg border px-[11px] py-[9px]',
-        'transition-colors duration-fast focus-within:border-accent',
+        // No focus colour on this border, same as Input. The field gets the
+        // accent ring from the :focus-visible rule in tokens/base.css, and a
+        // border that also changes is a second ring by another name. Input
+        // was fixed and this was missed, which is why the magnet box still
+        // showed both.
+        'transition-colors duration-fast',
         invalid ? 'border-danger' : 'border-line',
         className,
       )}
