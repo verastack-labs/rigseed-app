@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { ReactNode, RefObject } from 'react'
 
 import { cn } from '@/lib/utils'
 
@@ -20,17 +20,40 @@ export interface ContextMenuSeparator {
 
 export type ContextMenuItem = ContextMenuAction | ContextMenuSeparator
 
+/** A point in viewport coordinates, as a `contextmenu` event reports it. */
+export interface Point {
+  x: number
+  y: number
+}
+
 export interface ContextMenuProps {
   items: readonly ContextMenuItem[]
   open: boolean
   /** Called on selection, on Escape, and on any outside click. */
   onClose: () => void
   /**
+   * Open at this point instead of under the trigger.
+   *
+   * A right click has its own idea of where the menu belongs, and it is not
+   * the top right corner of the card. With a point the menu is positioned
+   * `fixed` against the viewport and clamped into it; without one it keeps
+   * its anchored behaviour, which is what the three-dot button wants.
+   */
+  at?: Point
+  /**
    * Force the flip direction. Left undefined the menu measures itself and
    * flips above when it would otherwise run off the bottom of the viewport.
    */
   above?: boolean
   width?: number
+  /**
+   * The element that owns the menu, trigger included.
+   *
+   * A press inside it is not an outside press. Without this the outside
+   * handler fires on the trigger, closes the menu, and the trigger's own
+   * toggle then reopens it, so the button appears to do nothing.
+   */
+  anchorRef?: RefObject<HTMLElement | null>
   /** Accessible name, usually the torrent the menu acts on. */
   label?: string
   className?: string
@@ -53,6 +76,8 @@ export function ContextMenu({
   items,
   open,
   onClose,
+  at,
+  anchorRef,
   above,
   width = 224,
   label,
@@ -64,23 +89,59 @@ export function ContextMenu({
 
   // Measure before paint so the menu never renders in the wrong place first.
   useLayoutEffect(() => {
-    if (!open || above !== undefined) return
+    if (!open || at || above !== undefined) return
     const el = menuRef.current
     if (!el) return
     const rect = el.getBoundingClientRect()
     setMeasuredFlip(rect.height > 0 && rect.bottom > window.innerHeight - 8)
-  }, [open, above, items])
+  }, [open, at, above, items])
 
-  // Added after the opening click has finished propagating, so it does not
-  // immediately close the menu it just opened.
+  // The pointer-anchored case, which needs both axes rather than a flip.
+  // Clamping rather than flipping on x, because a menu that jumps to the left
+  // of the cursor near the edge of a window reads as a misclick.
+  //
+  // Written straight onto the node rather than into state. The correction
+  // depends on the height the browser just laid out, so a state round trip
+  // would be a second render to reach a value this pass already knows, and
+  // setting state from a layout effect is the pattern the lint rule exists to
+  // stop. A layout effect runs before paint, so nothing is ever visible at the
+  // uncorrected position.
+  useLayoutEffect(() => {
+    const el = menuRef.current
+    if (!open || !at || !el) return
+    const height = el.getBoundingClientRect().height
+    const edge = 8
+    const room = window.innerHeight - edge
+    el.style.left = `${Math.max(edge, Math.min(at.x, window.innerWidth - width - edge))}px`
+    el.style.top = `${at.y + height > room ? Math.max(edge, at.y - height) : at.y}px`
+  }, [open, at, width, items])
+
+  // `pointerdown`, not `click`, and the reason is the whole bug.
+  //
+  // React flushes this effect while the click that opened the menu is still
+  // bubbling towards the window, so a `click` listener registered here
+  // received that very click and closed the menu it had just opened. The
+  // button looked dead. A scripted `.click()` did not reproduce it, which is
+  // how it survived being checked in a browser: only real pointer input
+  // orders the phases that way.
+  //
+  // A pointerdown for the opening press has already happened by the time this
+  // runs, so the listener cannot hear it. Outside presses still close the
+  // menu, one event earlier than before, which is the behaviour people expect
+  // from a menu anyway.
   useEffect(() => {
     if (!open) return
-    const onDocumentClick = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) onClose()
+    const onOutside = (event: Event) => {
+      const target = event.target as Node
+      if (menuRef.current?.contains(target)) return
+      // The trigger toggles the menu itself. Closing here as well would make
+      // the two cancel out.
+      if (anchorRef?.current?.contains(target)) return
+      onClose()
     }
-    window.addEventListener('click', onDocumentClick)
-    return () => window.removeEventListener('click', onDocumentClick)
-  }, [open, onClose])
+    window.addEventListener('pointerdown', onOutside)
+    return () => window.removeEventListener('pointerdown', onOutside)
+  }, [open, onClose, anchorRef])
 
   const actionIndexes = items.reduce<number[]>((acc, item, i) => {
     if (isAction(item) && !item.disabled) acc.push(i)
@@ -147,16 +208,17 @@ export function ContextMenu({
       aria-label={label}
       onKeyDown={onKeyDown}
       className={cn(
-        'bg-surface border-line absolute right-0 z-30 rounded-3xl border p-1.5',
+        'bg-surface border-line z-30 rounded-3xl border p-1.5',
+        at ? 'fixed' : 'absolute right-0',
         // Token names live in Tailwind's --shadow-* namespace, so mapping them
         // into @theme would be a self-referential cycle. Shadows appear in four
         // places in the whole app, so an arbitrary value is clearer than
         // inventing a parallel name.
         'shadow-[var(--shadow-card)]',
-        flipped ? 'bottom-[calc(100%+8px)]' : 'top-[calc(100%+8px)]',
+        !at && (flipped ? 'bottom-[calc(100%+8px)]' : 'top-[calc(100%+8px)]'),
         className,
       )}
-      style={{ width }}
+      style={at ? { width, left: at.x, top: at.y } : { width }}
     >
       {items.map((item, i) =>
         isAction(item) ? (

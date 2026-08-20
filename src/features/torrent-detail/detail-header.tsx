@@ -1,8 +1,9 @@
 import { MoreVertical } from 'lucide-react'
-import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { ContextMenu } from '@/components/ui/context-menu'
+import { usePointerMenu } from '@/lib/use-pointer-menu'
+import { canReachDesktop, revealInFolder } from '@/services/shell'
 import { TabBar, type Tab } from '@/components/ui/tab-bar'
 import type { DetailTab } from '@/features/torrent-detail/tabs'
 import { icons } from '@/lib/icons'
@@ -43,7 +44,7 @@ export function DetailHeader({
   onRemove,
   className,
 }: DetailHeaderProps) {
-  const [menuOpen, setMenuOpen] = useState(false)
+  const { anchor, open: menuOpen, toggle, menuProps } = usePointerMenu()
   const paused = isPaused(torrent.state)
 
   // The key is omitting `count` rather than passing undefined. Not loaded yet
@@ -87,30 +88,40 @@ export function DetailHeader({
           Recheck
         </Button>
 
-        <div className={cn('relative shrink-0', menuOpen && 'z-30')}>
+        <div ref={anchor} className={cn('relative shrink-0', menuOpen && 'z-30')}>
           <button
             type="button"
             title={`Actions for ${torrent.name}`}
             aria-label={`Actions for ${torrent.name}`}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((v) => !v)}
+            onClick={toggle}
             className="flex size-[30px] items-center justify-center rounded-lg border border-line bg-surface2 text-text-dim transition-colors duration-quick hover:text-accent"
           >
             <MoreVertical className="size-4" strokeWidth={2} />
           </button>
           <ContextMenu
-            open={menuOpen}
-            onClose={() => setMenuOpen(false)}
             label={torrent.name}
             items={[
               { label: 'Force recheck', onSelect: onRecheck },
               { label: 'Reannounce to trackers', onSelect: onReannounce },
               { separator: true as const },
               { label: 'Copy magnet link', onSelect: onCopyMagnet },
+              // The same action the row menu offers and the folder button
+              // beside the save path performs. Three places, because this is
+              // the one people went looking for and could not find.
+              ...(canReachDesktop()
+                ? [
+                    {
+                      label: 'Open containing folder',
+                      onSelect: () => void revealInFolder(torrent.content_path),
+                    },
+                  ]
+                : []),
               { separator: true as const },
               { label: 'Remove torrent', danger: true, onSelect: onRemove },
             ]}
+            {...menuProps}
           />
         </div>
       </div>

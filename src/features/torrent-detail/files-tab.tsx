@@ -98,14 +98,25 @@ export function FilesTab({ files, selected, onToggle, onPriority, savePath }: Fi
           return (
             <div
               key={file.index}
-              // Double click rather than single: a single click here already
-              // means "toggle the checkbox I am next to", and a row that both
-              // selects and launches on one click is a row that launches a
-              // video every time somebody meant to deselect it.
-              onDoubleClick={
-                openable && savePath ? () => void openPath(join(savePath, file.name)) : undefined
+              // One click, because the row has no other meaning. Selecting a
+              // file is the checkbox's job and always was, so there is no
+              // second gesture to disambiguate from and nothing to be gained
+              // by asking for a double click nobody expects in a list.
+              onClick={
+                openable && savePath
+                  ? (event) => {
+                      // The row carries a checkbox and a priority select, and
+                      // a click on either of those is not a click on the row.
+                      // Checking the target beats stopPropagation in the two
+                      // controls, which is a call somebody has to remember
+                      // again every time the row grows a third one.
+                      const target = event.target as HTMLElement
+                      if (target.closest('button, [role="button"], input, select, a')) return
+                      void openPath(join(savePath, file.name))
+                    }
+                  : undefined
               }
-              title={openable ? `Double click to open ${basename(file.name)}` : undefined}
+              title={openable ? `Open ${basename(file.name)}` : undefined}
               className={cn(
                 'grid grid-cols-[1fr_100px_150px_132px] items-center gap-2 border-t border-line px-3 py-2.5',
                 'transition-colors duration-fast first:border-t-0 hover:bg-surface2',

@@ -4,6 +4,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { FilesTab, type FilesTabProps } from '@/features/torrent-detail/files-tab'
 import type { TorrentFile } from '@/types/qbittorrent'
 
+const openPath = vi.fn()
+vi.mock('@/services/shell', () => ({
+  canReachDesktop: () => true,
+  openPath: (path: string) => openPath(path),
+  revealInFolder: vi.fn(),
+}))
+
 const files: TorrentFile[] = [
   {
     index: 0,
@@ -102,6 +109,40 @@ describe('FilesTab', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Skip' }))
     expect(onPriority).toHaveBeenCalledWith([0, 2], 0)
+  })
+
+  describe('opening a file', () => {
+    const withPath = { ...base, savePath: 'C:/Downloads' }
+
+    it('opens on a single click, not a double one', () => {
+      openPath.mockClear()
+      render(<FilesTab {...withPath} />)
+      fireEvent.click(screen.getByText('ubuntu.iso'))
+      expect(openPath).toHaveBeenCalledWith('C:/Downloads/ubuntu/ubuntu.iso')
+    })
+
+    it('leaves the checkbox alone', () => {
+      // The row and the checkbox overlap, and a tick that also launched a
+      // video would make the list unusable.
+      openPath.mockClear()
+      render(<FilesTab {...withPath} />)
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select ubuntu.iso' }))
+      expect(openPath).not.toHaveBeenCalled()
+    })
+
+    it('leaves the priority select alone', () => {
+      openPath.mockClear()
+      render(<FilesTab {...withPath} />)
+      fireEvent.click(screen.getByLabelText('Priority for ubuntu.iso'))
+      expect(openPath).not.toHaveBeenCalled()
+    })
+
+    it('does nothing without a save path to join to', () => {
+      openPath.mockClear()
+      render(<FilesTab {...base} />)
+      fireEvent.click(screen.getByText('ubuntu.iso'))
+      expect(openPath).not.toHaveBeenCalled()
+    })
   })
 
   it('reports a tick', () => {

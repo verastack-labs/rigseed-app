@@ -1,5 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+const revealInFolder = vi.fn()
+vi.mock('@/services/shell', () => ({
+  canReachDesktop: () => true,
+  revealInFolder: (path: string) => revealInFolder(path),
+  openPath: vi.fn(),
+  pickFolder: vi.fn(),
+}))
 
 import { GeneralTab } from '@/features/torrent-detail/general-tab'
 import { makeTorrent } from '@/test/torrent'
@@ -101,24 +109,27 @@ describe('GeneralTab stat grid', () => {
 })
 
 describe('GeneralTab detail card', () => {
-  it('starts collapsed', () => {
+  it('starts open, because it carries an action and not only facts', () => {
     setup()
     const toggle = screen.getByRole('button', { name: /Paths, hash and comment/ })
-    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('Created by')).toBeInTheDocument()
+  })
+
+  it('still collapses when asked', () => {
+    setup()
+    fireEvent.click(screen.getByRole('button', { name: /Paths, hash and comment/ }))
     expect(screen.queryByText('Created by')).not.toBeInTheDocument()
   })
 
-  it('opens to the values that never change', () => {
+  it('shows the values that never change', () => {
     setup()
-    fireEvent.click(screen.getByRole('button', { name: /Paths, hash and comment/ }))
-
     expect(screen.getByText('mktorrent 1.1')).toBeInTheDocument()
     expect(screen.getByText('13916 of 21744 · 262.1 KB each')).toBeInTheDocument()
   })
 
   it('says what an empty incomplete path means rather than showing a blank', () => {
     setup()
-    fireEvent.click(screen.getByRole('button', { name: /Paths, hash and comment/ }))
     expect(screen.getByText('same as save path')).toBeInTheDocument()
   })
 
@@ -129,7 +140,16 @@ describe('GeneralTab detail card', () => {
 
   it('shows a skeleton inside the card while properties are still loading', () => {
     setup(null)
-    fireEvent.click(screen.getByRole('button', { name: /Paths, hash and comment/ }))
     expect(screen.queryByText('mktorrent 1.1')).not.toBeInTheDocument()
+  })
+
+  it('offers a way to open the containing folder beside the save path', () => {
+    // The third place this action lives, after the row menu and a right click,
+    // because the save path is where somebody looks for it once they are
+    // already reading the torrent's details.
+    revealInFolder.mockClear()
+    setup()
+    fireEvent.click(screen.getByTitle('Open containing folder'))
+    expect(revealInFolder).toHaveBeenCalledWith(torrent.content_path)
   })
 })

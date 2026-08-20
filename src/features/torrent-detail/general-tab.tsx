@@ -42,7 +42,13 @@ function formatDateTime(seconds: number): string {
  * block look like it is updating when most of it never will.
  */
 export function GeneralTab({ torrent, properties }: GeneralTabProps) {
-  const [open, setOpen] = useState(false)
+  // Open by default. It was collapsed while it held nothing but reference
+  // values, which was defensible; it now also holds the only Open containing
+  // folder button on this screen, and an accordion that hides an action is a
+  // different thing from one that hides a piece of trivia. Somebody looking
+  // for the save path has already opened the torrent's details, so there is
+  // nothing left to protect them from.
+  const [open, setOpen] = useState(true)
   const done = isComplete(torrent.progress)
 
   const cards = [
@@ -151,17 +157,23 @@ export function GeneralTab({ torrent, properties }: GeneralTabProps) {
                   <span className="w-[132px] shrink-0 text-[11.5px] text-text-dim">
                     {row.label}
                   </span>
-                  <span className="min-w-0 flex-1 font-mono text-[11.5px] break-all text-text">
-                    {row.value}
+                  {/* The button hugs the path rather than sitting at the end
+                      of the row. Given a full-width card it was landing 800px
+                      to the right of the text it belonged to, which is a
+                      button nobody finds. */}
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
+                    <span className="min-w-0 font-mono text-[11.5px] break-all text-text">
+                      {row.value}
+                    </span>
+                    {row.reveal && canReachDesktop() ? (
+                      <IconButton
+                        title="Open containing folder"
+                        onClick={() => void revealInFolder(row.reveal ?? '')}
+                      >
+                        <icons.folderOpen className="size-[15px]" strokeWidth={2} />
+                      </IconButton>
+                    ) : null}
                   </span>
-                  {row.reveal && canReachDesktop() ? (
-                    <IconButton
-                      title="Open containing folder"
-                      onClick={() => void revealInFolder(row.reveal ?? '')}
-                    >
-                      <icons.folderOpen className="size-[15px]" strokeWidth={2} />
-                    </IconButton>
-                  ) : null}
                 </div>
               ))
             ) : (

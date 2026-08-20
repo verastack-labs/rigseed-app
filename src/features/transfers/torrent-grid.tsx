@@ -14,7 +14,13 @@ export function TorrentGrid({ torrents, selected, onToggle, ...actions }: Layout
   return (
     <div className="grid grid-cols-1 gap-3.5 p-6 md:grid-cols-2 xl:grid-cols-3">
       {torrents.map((torrent) => (
-        <Card key={torrent.hash} hoverable padding="card" className="relative overflow-visible">
+        <Card
+          data-context-target
+          key={torrent.hash}
+          hoverable
+          padding="card"
+          className="relative overflow-visible"
+        >
           <div className="flex flex-col gap-2.5">
             <div className="flex items-start gap-2.5">
               <span className="relative z-10 pt-0.5">

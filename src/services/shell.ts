@@ -31,6 +31,41 @@ function complain(what: string, path: string, error: unknown): void {
   console.error(`rigseed: could not ${what} ${path}`, error)
 }
 
+async function dialog() {
+  if (!canReachDesktop()) return null
+  try {
+    return await import('@tauri-apps/plugin-dialog')
+  } catch (error) {
+    complain('load the dialog plugin for', '', error)
+    return null
+  }
+}
+
+/**
+ * Ask for a folder and return what was chosen.
+ *
+ * Null covers both "there is no desktop to ask" and "the person closed the
+ * picker", because a caller has the same job in either case: leave the field
+ * as it was. The multi-select form of the API can return an array, which is
+ * not something this ever asks for, so it is treated as no answer.
+ */
+export async function pickFolder(startingAt?: string): Promise<string | null> {
+  const mod = await dialog()
+  if (!mod) return null
+  try {
+    const chosen = await mod.open({
+      directory: true,
+      multiple: false,
+      title: 'Choose where to save',
+      ...(startingAt ? { defaultPath: startingAt } : {}),
+    })
+    return typeof chosen === 'string' ? chosen : null
+  } catch (error) {
+    complain('open a folder picker at', startingAt ?? '', error)
+    return null
+  }
+}
+
 async function opener() {
   if (!(globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return null
   try {

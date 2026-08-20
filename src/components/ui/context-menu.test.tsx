@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -46,6 +46,34 @@ describe('ContextMenu', () => {
       </div>,
     )
     await userEvent.click(screen.getByRole('button', { name: 'elsewhere' }))
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('survives the press that opened it', async () => {
+    // The bug this exists for. React flushed the effect that registers the
+    // outside listener while the opening click was still bubbling, so a
+    // `click` listener heard that click and closed the menu immediately. The
+    // three-dot button looked dead in the real app while a scripted .click()
+    // in a browser worked, because only real pointer input orders the phases
+    // that way. Listening for `pointerdown` means the opening press is
+    // already over by the time anything is listening.
+    const onClose = vi.fn()
+    const anchor = { current: document.createElement('div') }
+    document.body.appendChild(anchor.current)
+    render(<ContextMenu items={items} open onClose={onClose} anchorRef={anchor} />)
+
+    // The press that a trigger inside the anchor would have produced.
+    fireEvent.pointerDown(anchor.current)
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('closes on a press outside the anchor', () => {
+    const onClose = vi.fn()
+    const anchor = { current: document.createElement('div') }
+    document.body.appendChild(anchor.current)
+    render(<ContextMenu items={items} open onClose={onClose} anchorRef={anchor} />)
+
+    fireEvent.pointerDown(document.body)
     expect(onClose).toHaveBeenCalled()
   })
 
@@ -155,6 +183,41 @@ describe('ContextMenu', () => {
       } as DOMRect)
       render(<ContextMenu items={items} open onClose={vi.fn()} above={false} />)
       expect(screen.getByRole('menu').className).toContain('top-[calc(100%+8px)]')
+    })
+  })
+
+  describe('opened at a point', () => {
+    it('positions itself at the pointer instead of under a trigger', () => {
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ height: 160 } as DOMRect)
+      render(<ContextMenu items={items} open onClose={vi.fn()} at={{ x: 120, y: 90 }} />)
+      const menu = screen.getByRole('menu')
+      expect(menu.className).toContain('fixed')
+      expect(menu.className).not.toContain('absolute')
+      expect(menu.style.left).toBe('120px')
+      expect(menu.style.top).toBe('90px')
+    })
+
+    it('clamps to the right edge rather than opening off screen', () => {
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ height: 100 } as DOMRect)
+      render(<ContextMenu items={items} open onClose={vi.fn()} at={{ x: window.innerWidth - 4, y: 20 }} />)
+      // 224 wide, 8px from the edge. A menu that opens past the window is a
+      // menu with items nobody can reach.
+      expect(screen.getByRole('menu').style.left).toBe(`${window.innerWidth - 224 - 8}px`)
+    })
+
+    it('opens upward when there is no room below the pointer', () => {
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ height: 160 } as DOMRect)
+      const y = window.innerHeight - 20
+      render(<ContextMenu items={items} open onClose={vi.fn()} at={{ x: 10, y }} />)
+      expect(screen.getByRole('menu').style.top).toBe(`${y - 160}px`)
+    })
+
+    it('keeps the anchored classes off when it is placed at a point', () => {
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ height: 20 } as DOMRect)
+      render(<ContextMenu items={items} open onClose={vi.fn()} at={{ x: 10, y: 10 }} />)
+      const menu = screen.getByRole('menu')
+      expect(menu.className).not.toContain('top-[calc(100%+8px)]')
+      expect(menu.className).not.toContain('bottom-[calc(100%+8px)]')
     })
   })
 
