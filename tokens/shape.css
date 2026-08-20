@@ -17,6 +17,9 @@
   --shadow-card: 0 8px 24px var(--shadow-color);
   --shadow-float: 0 4px 14px var(--shadow-color);
   --shadow-fab: 0 6px 20px var(--shadow-color);
+  /* Hover lifts rather than outlines. A ring drew a hard edge around a round
+     button and read as a border; a shadow reads as the thing rising. */
+  --shadow-fab-hover: 0 12px 30px var(--shadow-color), 0 0 26px var(--accent-soft);
   --shadow-modal: 0 30px 80px var(--shadow-color);
   --shadow-rail: 10px 0 30px var(--shadow-color);
 
