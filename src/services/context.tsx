@@ -117,12 +117,8 @@ export function ApiProvider({ target, children }: ApiProviderProps) {
       // Told to Rust, which is the only place it can be read afterwards. A
       // packaged app has no console, so a silent fall back to sample data
       // otherwise leaves nothing behind to explain itself.
-      // Which fetch went out is the difference between talking to the daemon
-      // and talking to the webview's own origin, and it is invisible from
-      // outside, so it is reported alongside the outcome.
-      const internals = typeof (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
       void report(
-        `${result.status} (tauri internals: ${internals})`,
+        result.status,
         result.status === 'connected'
           ? `${result.label}, qBittorrent ${result.version}`
           : result.status === 'failed'
