@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { LabelList, type LabelSummary } from '@/features/labels/label-list'
 
 const items: LabelSummary[] = [
-  { name: 'Movies', sub: '/media/movies', color: 'amber', icon: 'disc', count: 12, size: 5_000 },
-  { name: 'Music', sub: '/media/music', color: 'violet', icon: 'disc', count: 3, size: 0 },
+  { name: 'Movies', sub: '/media/movies', color: 'mustard', icon: 'disc', count: 12, size: 5_000 },
+  { name: 'Music', sub: '/media/music', color: 'lavender', icon: 'disc', count: 3, size: 0 },
 ]
 
 const setup = (props: Partial<React.ComponentProps<typeof LabelList>> = {}) =>
