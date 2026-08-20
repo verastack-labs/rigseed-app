@@ -131,11 +131,12 @@ describe('usePreferences', () => {
     expect(latest.draft).toBeNull()
   })
 
-  it('throws the draft away when the connection changes', async () => {
-    // The provider hands out a mock client while it looks for a daemon.
-    // Leaving the sample values on screen would be bad enough; the dangerous
-    // part is an edit made in that window diffing against them, so Apply
-    // would write sample values to a real daemon.
+  it('empties the screen the moment the connection changes', async () => {
+    // The provider hands out a mock client while it looks for a daemon. The
+    // read that follows the swap would replace these values anyway, but not
+    // for a round trip, and during that round trip the screen presents the
+    // sample values as the daemon's and accepts edits against them. Dropping
+    // the draft at once turns that window into a skeleton, which is honest.
     await mounted()
     latest.set('max_active_downloads', 9)
     await waitFor(() => expect(latest.dirtyKeys).toHaveLength(1))
@@ -143,6 +144,10 @@ describe('usePreferences', () => {
     preferences.mockResolvedValue({ ...base, max_active_downloads: 4 })
     holder.current = other
     rerenderProbe()
+
+    // Immediately, not once the new read lands.
+    expect(latest.draft).toBeNull()
+    expect(latest.saved).toBeNull()
 
     await waitFor(() => expect(latest.draft?.max_active_downloads).toBe(4))
     expect(latest.dirtyKeys).toHaveLength(0)
