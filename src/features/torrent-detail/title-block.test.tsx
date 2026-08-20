@@ -1,5 +1,13 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
+const revealInFolder = vi.fn()
+vi.mock('@/services/shell', () => ({
+  canReachDesktop: () => true,
+  revealInFolder: (path: string) => revealInFolder(path),
+  openPath: vi.fn(),
+  pickFolder: vi.fn(),
+}))
 
 import { TitleBlock } from '@/features/torrent-detail/title-block'
 import { makeTorrent } from '@/test/torrent'
@@ -82,5 +90,15 @@ describe('TitleBlock', () => {
   it('still shows a real estimate while downloading', () => {
     render(<TitleBlock torrent={makeTorrent({ progress: 0.4, eta: 252 })} />)
     expect(screen.getByText(/left$/)).toBeInTheDocument()
+  })
+
+  it('opens the containing folder from the save path in the header row', () => {
+    // This row is where the save path is read, so it is where the button
+    // belongs. It spent one release at the far right of a card below, 800px
+    // from the path, and nobody found it.
+    revealInFolder.mockClear()
+    render(<TitleBlock torrent={makeTorrent({ content_path: 'C:/Downloads/thing' })} />)
+    fireEvent.click(screen.getByTitle('Open containing folder'))
+    expect(revealInFolder).toHaveBeenCalledWith('C:/Downloads/thing')
   })
 })

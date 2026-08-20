@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { DataValue } from '@/components/ui/data-value'
+import { Disclosure } from '@/components/ui/disclosure'
 import { FilterRow } from '@/components/ui/filter-row'
 import { SectionHeader } from '@/components/ui/section-header'
 import { Sparkline } from '@/components/ui/sparkline'
@@ -78,9 +79,11 @@ export function Sidebar({
         ))}
       </div>
 
+      {/* Folding, because these two grow without limit while Status never
+          does. A person with forty tags was scrolling past them to reach the
+          Clear filters button. */}
       {categories.size > 0 ? (
-        <div className="flex flex-col gap-1">
-          <SectionHeader className="px-[9px] pb-1">Categories</SectionHeader>
+        <Disclosure title="Categories" count={categories.size}>
           {[...categories].map(([name, count]) => (
             <FilterRow
               key={name}
@@ -91,12 +94,11 @@ export function Sidebar({
               onClick={() => onCategory(category === name ? null : name)}
             />
           ))}
-        </div>
+        </Disclosure>
       ) : null}
 
       {tags.size > 0 ? (
-        <div className="flex flex-col gap-1">
-          <SectionHeader className="px-[9px] pb-1">Tags</SectionHeader>
+        <Disclosure title="Tags" count={tags.size}>
           {[...tags].map(([name, count]) => (
             <FilterRow
               key={name}
@@ -107,7 +109,7 @@ export function Sidebar({
               onClick={() => onTag(tag === name ? null : name)}
             />
           ))}
-        </div>
+        </Disclosure>
       ) : null}
 
       {/* Fades in rather than appearing, so the list below does not jump. */}

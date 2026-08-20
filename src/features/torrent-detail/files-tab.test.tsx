@@ -111,6 +111,24 @@ describe('FilesTab', () => {
     expect(onPriority).toHaveBeenCalledWith([0, 2], 0)
   })
 
+  describe('indentation', () => {
+    it('puts the shallowest level flush, not one step in', () => {
+      // Almost every torrent wraps its files in a folder named after itself,
+      // and that folder has no row of its own. Measuring depth from the root
+      // indented every row against an invisible parent, so the column looked
+      // like it had failed to line up with its own header.
+      render(<FilesTab {...base} />)
+      const row = screen.getByText('ubuntu.iso').closest('div[style]')
+      expect(row).toHaveStyle({ paddingLeft: '0px' })
+    })
+
+    it('still steps in for real nesting', () => {
+      render(<FilesTab {...base} />)
+      const row = screen.getByText('artwork.tar.gz').closest('div[style]')
+      expect(row).toHaveStyle({ paddingLeft: '14px' })
+    })
+  })
+
   describe('opening a file', () => {
     const withPath = { ...base, savePath: 'C:/Downloads' }
 

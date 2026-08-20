@@ -4,10 +4,7 @@ import { ChevronRight } from 'lucide-react'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatCard } from '@/components/ui/stat-card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { IconButton } from '@/components/ui/icon-button'
-import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
-import { canReachDesktop, revealInFolder } from '@/services/shell'
 import type { Torrent, TorrentProperties } from '@/types/qbittorrent'
 import {
   STATE_LABEL,
@@ -42,12 +39,11 @@ function formatDateTime(seconds: number): string {
  * block look like it is updating when most of it never will.
  */
 export function GeneralTab({ torrent, properties }: GeneralTabProps) {
-  // Open by default. It was collapsed while it held nothing but reference
-  // values, which was defensible; it now also holds the only Open containing
-  // folder button on this screen, and an accordion that hides an action is a
-  // different thing from one that hides a piece of trivia. Somebody looking
-  // for the save path has already opened the torrent's details, so there is
-  // nothing left to protect them from.
+  // Open by default. Somebody who has opened a torrent's details has already
+  // asked for its details, and hash, comment and incomplete path are the
+  // answers to questions this screen exists to answer. The folder button that
+  // briefly lived down here has moved to the header row, which is where the
+  // save path is actually read.
   const [open, setOpen] = useState(true)
   const done = isComplete(torrent.progress)
 
@@ -97,12 +93,9 @@ export function GeneralTab({ torrent, properties }: GeneralTabProps) {
     { label: 'Added on', value: formatDateTime(torrent.added_on), sub: 'local time' },
   ]
 
-  const rows: { label: string; value: string; reveal?: string }[] = properties
+  const rows: { label: string; value: string }[] = properties
     ? [
-        // The reveal target is `content_path`, not the save path: for a
-        // single-file torrent that is the file itself, so the file manager
-        // highlights it rather than dumping the user in a folder of hundreds.
-        { label: 'Save path', value: properties.save_path, reveal: torrent.content_path },
+        { label: 'Save path', value: properties.save_path },
         { label: 'Incomplete path', value: properties.download_path || 'same as save path' },
         { label: 'Hash', value: properties.infohash_v1 ?? torrent.hash },
         { label: 'Comment', value: properties.comment || 'none' },
@@ -157,22 +150,8 @@ export function GeneralTab({ torrent, properties }: GeneralTabProps) {
                   <span className="w-[132px] shrink-0 text-[11.5px] text-text-dim">
                     {row.label}
                   </span>
-                  {/* The button hugs the path rather than sitting at the end
-                      of the row. Given a full-width card it was landing 800px
-                      to the right of the text it belonged to, which is a
-                      button nobody finds. */}
-                  <span className="flex min-w-0 flex-1 items-center gap-2">
-                    <span className="min-w-0 font-mono text-[11.5px] break-all text-text">
-                      {row.value}
-                    </span>
-                    {row.reveal && canReachDesktop() ? (
-                      <IconButton
-                        title="Open containing folder"
-                        onClick={() => void revealInFolder(row.reveal ?? '')}
-                      >
-                        <icons.folderOpen className="size-[15px]" strokeWidth={2} />
-                      </IconButton>
-                    ) : null}
+                  <span className="min-w-0 flex-1 font-mono text-[11.5px] break-all text-text">
+                    {row.value}
                   </span>
                 </div>
               ))
