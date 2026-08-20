@@ -4,6 +4,7 @@ import { AppShell } from '@/components/shell/app-shell'
 import { ApiProvider } from '@/services/context'
 import { Placeholder } from '@/pages/placeholder'
 import { TorrentDetail } from '@/pages/torrent-detail'
+import { Categories } from '@/pages/categories'
 import { Transfers } from '@/pages/transfers'
 
 /**
@@ -29,12 +30,7 @@ export function App() {
               element={<Placeholder title="Search" tier="V2" api="search/start" />}
             />
             <Route path="rss" element={<Placeholder title="RSS" tier="V2" api="rss/items" />} />
-            <Route
-              path="categories"
-              element={
-                <Placeholder title="Categories and tags" tier="V1" api="torrents/categories" />
-              }
-            />
+            <Route path="categories" element={<Categories />} />
             <Route path="logs" element={<Placeholder title="Logs" tier="V1" api="log/main" />} />
             <Route
               path="connections"
