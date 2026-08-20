@@ -34,9 +34,9 @@ export function TorrentEasy({ torrents, selected, onToggle, onResume, onPause }:
         const done = isComplete(torrent.progress)
 
         return (
-          <Card key={torrent.hash} padding="section">
+          <Card key={torrent.hash} padding="section" className="relative">
             <div className="flex items-start gap-4">
-              <span className="pt-1">
+              <span className="relative z-10 pt-1">
                 <Checkbox
                   checked={selected.includes(torrent.hash)}
                   onChange={() => onToggle(torrent.hash)}
@@ -51,6 +51,7 @@ export function TorrentEasy({ torrents, selected, onToggle, onResume, onPause }:
 
               <div className="flex min-w-0 flex-1 flex-col gap-2.5">
                 <TorrentLink
+                  stretch
                   hash={torrent.hash}
                   name={torrent.name}
                   className="truncate text-[15px] font-semibold"
@@ -84,7 +85,7 @@ export function TorrentEasy({ torrents, selected, onToggle, onResume, onPause }:
                   <span className="flex-1" />
                   <Button
                     size="md"
-                    className="min-h-11"
+                    className="relative z-10 min-h-11"
                     onClick={() => (paused ? onResume([torrent.hash]) : onPause([torrent.hash]))}
                   >
                     {paused ? 'Resume' : 'Pause'}

@@ -14,10 +14,10 @@ export function TorrentGrid({ torrents, selected, onToggle, ...actions }: Layout
   return (
     <div className="grid grid-cols-1 gap-3.5 p-6 md:grid-cols-2 xl:grid-cols-3">
       {torrents.map((torrent) => (
-        <Card key={torrent.hash} hoverable padding="card" className="overflow-visible">
+        <Card key={torrent.hash} hoverable padding="card" className="relative overflow-visible">
           <div className="flex flex-col gap-2.5">
             <div className="flex items-start gap-2.5">
-              <span className="pt-0.5">
+              <span className="relative z-10 pt-0.5">
                 <Checkbox
                   checked={selected.includes(torrent.hash)}
                   onChange={() => onToggle(torrent.hash)}
@@ -28,6 +28,7 @@ export function TorrentGrid({ torrents, selected, onToggle, ...actions }: Layout
                 <icons.folder className="size-[13px]" strokeWidth={2} />
               </IconTile>
               <TorrentLink
+                stretch
                 hash={torrent.hash}
                 name={torrent.name}
                 className="min-w-0 flex-1 truncate pt-1 text-[12.5px] font-semibold"

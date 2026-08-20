@@ -3,6 +3,7 @@ import { useState } from 'react'
 
 import { ContextMenu } from '@/components/ui/context-menu'
 import { cn } from '@/lib/utils'
+import { canReachDesktop, revealInFolder } from '@/services/shell'
 import type { Torrent } from '@/types/qbittorrent'
 
 export interface TorrentActions {
@@ -24,8 +25,21 @@ function menuItems(torrent: Torrent, actions: TorrentActions) {
     { label: 'Pause', onSelect: () => actions.onPause([torrent.hash]) },
     { label: 'Force recheck' },
     { separator: true as const },
-    { label: 'Copy magnet link' },
-    { label: 'Open folder' },
+    {
+      label: 'Copy magnet link',
+      // The daemon's own magnet, which carries the display name and trackers.
+      onSelect: () => void navigator.clipboard?.writeText(torrent.magnet_uri),
+    },
+    // Only where there is a desktop to ask. In a browser this would be a menu
+    // item that does nothing, which is worse than one that is not there.
+    ...(canReachDesktop()
+      ? [
+          {
+            label: 'Open containing folder',
+            onSelect: () => void revealInFolder(torrent.content_path),
+          },
+        ]
+      : []),
     { separator: true as const },
     { label: 'Remove', danger: true, onSelect: () => actions.onRemove([torrent.hash]) },
   ]
@@ -42,7 +56,7 @@ export function RowMenu({ torrent, actions }: { torrent: Torrent; actions: Torre
   const [open, setOpen] = useState(false)
 
   return (
-    <div className={cn('relative shrink-0', open && 'z-30')}>
+    <div className={cn('relative z-10 shrink-0', open && 'z-30')}>
       <button
         type="button"
         title={`Actions for ${torrent.name}`}
