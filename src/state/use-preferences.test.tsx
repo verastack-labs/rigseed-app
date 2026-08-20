@@ -13,7 +13,9 @@ const setPreferences = vi.fn()
 // preferences every render and wipes whatever was being edited. The real
 // provider holds one client in state, which is why this only bites here.
 const api = { app: { preferences, setPreferences } }
-vi.mock('@/services/api-context', () => ({ useApi: () => api }))
+const other = { app: { preferences, setPreferences } }
+const holder = { current: api }
+vi.mock('@/services/api-context', () => ({ useApi: () => holder.current }))
 
 let latest: ReturnType<typeof usePreferences>
 
@@ -35,14 +37,18 @@ const base = { save_path: '/downloads', max_active_downloads: 3, dht: true }
 // a coin toss.
 beforeEach(() => {
   vi.clearAllMocks()
+  holder.current = api
   preferences.mockResolvedValue({ ...base })
   setPreferences.mockResolvedValue(undefined)
 })
 
 afterEach(cleanup)
 
+let rerenderProbe: () => void
+
 async function mounted() {
-  render(<Probe />)
+  const view = render(<Probe />)
+  rerenderProbe = () => view.rerender(<Probe />)
   await waitFor(() => expect(latest.draft).not.toBeNull())
 }
 
@@ -123,5 +129,22 @@ describe('usePreferences', () => {
     render(<Probe />)
     await waitFor(() => expect(latest.error).toBe('no daemon'))
     expect(latest.draft).toBeNull()
+  })
+
+  it('throws the draft away when the connection changes', async () => {
+    // The provider hands out a mock client while it looks for a daemon.
+    // Leaving the sample values on screen would be bad enough; the dangerous
+    // part is an edit made in that window diffing against them, so Apply
+    // would write sample values to a real daemon.
+    await mounted()
+    latest.set('max_active_downloads', 9)
+    await waitFor(() => expect(latest.dirtyKeys).toHaveLength(1))
+
+    preferences.mockResolvedValue({ ...base, max_active_downloads: 4 })
+    holder.current = other
+    rerenderProbe()
+
+    await waitFor(() => expect(latest.draft?.max_active_downloads).toBe(4))
+    expect(latest.dirtyKeys).toHaveLength(0)
   })
 })

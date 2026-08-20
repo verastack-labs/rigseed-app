@@ -46,6 +46,25 @@ export function usePreferences(): PreferencesState {
   /** Guards a response that arrives after the screen has gone. */
   const live = useRef(true)
 
+  /**
+   * Which connection the values in state came from.
+   *
+   * The provider hands out a mock client while it looks for a daemon, so this
+   * screen can be showing the sample preferences when the real connection
+   * arrives. Leaving them on screen would be bad enough; the dangerous part is
+   * that an edit made in that window diffs against the sample values, and
+   * Apply would then write them to a real daemon.
+   *
+   * Adjusted during render, so the stale frame is never committed.
+   */
+  const [owner, setOwner] = useState(api)
+  if (owner !== api) {
+    setOwner(api)
+    setSaved(null)
+    setDraft(null)
+    setError(null)
+  }
+
   useEffect(() => {
     live.current = true
     void (async () => {
