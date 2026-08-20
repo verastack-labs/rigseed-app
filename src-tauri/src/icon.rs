@@ -68,8 +68,24 @@ fn field(accent: &str, dark_mode: bool) -> (&'static str, &'static str) {
     }
 }
 
+/// The icon for one accent as a PNG.
+///
+/// Only used by `examples/render-icons.rs`, which writes every accent out so
+/// they can be looked at together. Worth having: the whole point of theming
+/// the icon is how the set looks side by side, and that is not a thing a unit
+/// test can tell you.
+pub fn render_png(accent: &str, dark_mode: bool) -> Result<Vec<u8>, IconError> {
+    let pixmap = draw(accent, dark_mode)?;
+    pixmap.encode_png().map_err(|_| IconError::Allocate)
+}
+
 /// The icon for one accent, as premultiplied RGBA at [`SIZE`] square.
 pub fn render(accent: &str, dark_mode: bool) -> Result<(Vec<u8>, u32, u32), IconError> {
+    Ok((draw(accent, dark_mode)?.take(), SIZE, SIZE))
+}
+
+/// Substitute the sky and rasterise.
+fn draw(accent: &str, dark_mode: bool) -> Result<tiny_skia::Pixmap, IconError> {
     let (top, bottom) = field(accent, dark_mode);
     let svg = TEMPLATE
         .replace("SKY_TOP", top)
@@ -86,7 +102,7 @@ pub fn render(accent: &str, dark_mode: bool) -> Result<(Vec<u8>, u32, u32), Icon
         &mut pixmap.as_mut(),
     );
 
-    Ok((pixmap.take(), SIZE, SIZE))
+    Ok(pixmap)
 }
 
 #[cfg(test)]
