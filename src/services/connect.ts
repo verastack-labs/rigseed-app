@@ -1,7 +1,8 @@
 import { createClient, type Client } from '@/services/client'
 import { createMockTransport } from '@/services/mock-transport'
 import { capabilitiesFor } from '@/services/torrents'
-import { ApiError, createHttpTransport } from '@/services/transport'
+import { createTauriTransport } from '@/services/tauri-transport'
+import { ApiError, createHttpTransport, type Transport } from '@/services/transport'
 
 export interface DaemonTarget {
   /** For example `http://127.0.0.1:8080`, or `''` for a same-origin proxy. */
@@ -90,17 +91,25 @@ export interface ConnectOptions {
  * The alternative was turning the daemon's CSRF protection off, which would
  * leave it open to any page in the user's browser that learned the password.
  */
-async function daemonFetch(): Promise<typeof fetch | undefined> {
-  if (!(globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return undefined
-
-  // Not caught. Falling back to the webview's fetch inside Tauri means every
-  // request carries an origin the daemon rejects, and it rejects it as a 401,
-  // so the app would report "the daemon rejected those credentials" about a
-  // password that is perfectly correct. That happened once already, during a
-  // Vite dependency re-optimisation, and cost more time to understand than the
-  // fix took. A missing plugin should say it is missing.
-  const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
-  return tauriFetch as typeof fetch
+/**
+ * The transport to reach the daemon with.
+ *
+ * Inside Tauri every request is performed in Rust. Not for speed: qBittorrent
+ * answers a request whose `Origin` is not its own host with 401, and inside a
+ * webview there is no way to send the right one. `Origin` is a forbidden
+ * header name so the page cannot set it, and the HTTP plugin forwards the
+ * page's origin and overrides one the caller supplies. A request built in
+ * `src-tauri/src/http.rs` sends no `Origin` at all, which is the case the
+ * daemon accepts and how every native client talks to it.
+ *
+ * Outside Tauri the ordinary fetch transport is used, which is what the dev
+ * server's proxy and the test suite both rely on.
+ */
+function transportFor(baseUrl: string): Transport {
+  if ((globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+    return createTauriTransport(baseUrl)
+  }
+  return createHttpTransport({ baseUrl })
 }
 
 /**
@@ -119,18 +128,26 @@ async function daemonFetch(): Promise<typeof fetch | undefined> {
  * Choosing a free port removed the likelihood. This removes the consequence,
  * which is the part worth keeping, since the gap between checking a port and
  * binding it cannot be closed entirely.
+ *
+ * Returns null when it looks right, or what was wrong when it does not.
  */
-async function looksLikeQbittorrent(probe: Client): Promise<boolean> {
+async function looksLikeQbittorrent(probe: Client): Promise<string | null> {
   try {
     await probe.app.version()
     // Answered without a session. Not impossible if something restored one,
     // so this is not treated as a failure, but it is not qBittorrent's
     // documented behaviour either.
-    return true
+    return null
   } catch (error) {
-    if (error instanceof ApiError) return error.status === 403
-    // Never reached the far end, which the login below will report properly.
-    return true
+    if (error instanceof ApiError) {
+      // 401 as well as 403. qBittorrent answers 403 for an unauthenticated
+      // API call, but a daemon that has banned this address for failed logins
+      // answers 401, and that is still very much qBittorrent.
+      if (error.status === 403 || error.status === 401) return null
+      return `it answered ${error.status}, where qBittorrent answers 403`
+    }
+    // Never reached the far end, which the login below reports properly.
+    return null
   }
 }
 
@@ -138,30 +155,18 @@ export async function connect(
   target: DaemonTarget,
   { waitMs = 0 }: ConnectOptions = {},
 ): Promise<ConnectionState> {
-  let fetchImpl: typeof fetch | undefined
-  try {
-    fetchImpl = await daemonFetch()
-  } catch (error) {
-    return {
-      status: 'failed',
-      reason: `The HTTP plugin is unavailable, so the daemon cannot be reached without tripping its CSRF protection: ${String(error)}`,
-    }
-  }
-
-  const transport = createHttpTransport({
-    baseUrl: target.baseUrl,
-    ...(fetchImpl ? { fetchImpl } : {}),
-  })
+  const transport = transportFor(target.baseUrl)
   const probe = createClient(transport)
 
   const deadline = Date.now() + waitMs
 
   for (;;) {
     try {
-      if (!(await looksLikeQbittorrent(probe))) {
+      const wrong = await looksLikeQbittorrent(probe)
+      if (wrong) {
         return {
           status: 'failed',
-          reason: `Something is listening at ${target.baseUrl || 'this origin'}, but it is not qBittorrent. No credentials were sent to it.`,
+          reason: `Something is listening at ${target.baseUrl || 'this origin'} but it is not qBittorrent: ${wrong}. No credentials were sent to it.`,
         }
       }
 

@@ -30,6 +30,17 @@ export interface ApiProviderProps {
  * the dev proxy is the only route, since the page cannot hold a session cookie
  * for another origin without the daemon relaxing its own CSRF checks.
  */
+/** Best effort. Outside Tauri there is a console and nobody to tell. */
+async function report(status: string, detail: string): Promise<void> {
+  if (!(globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    await invoke('report_connection', { status, detail })
+  } catch {
+    // Reporting a failure must never become a second failure.
+  }
+}
+
 async function findTarget(): Promise<DaemonTarget | null> {
   const tauri = (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
   if (tauri) {
@@ -102,6 +113,19 @@ export function ApiProvider({ target, children }: ApiProviderProps) {
       // opens and has not bound its port yet; anything else is already running
       // or it is not.
       const result = await connect(found, { waitMs: found.spawned ? 10_000 : 0 })
+
+      // Told to Rust, which is the only place it can be read afterwards. A
+      // packaged app has no console, so a silent fall back to sample data
+      // otherwise leaves nothing behind to explain itself.
+      void report(
+        result.status,
+        result.status === 'connected'
+          ? `${result.label}, qBittorrent ${result.version}`
+          : result.status === 'failed'
+            ? result.reason
+            : '',
+      )
+
       return result.status === 'failed'
         ? mockConnection(`${result.reason} Showing sample data.`)
         : result

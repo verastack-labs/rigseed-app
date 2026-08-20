@@ -76,6 +76,36 @@ pub fn ensure_password() -> Result<String, DaemonError> {
     }
 }
 
+/// The WebUI port recorded in an existing config, if there is one.
+///
+/// Read rather than remembered, because the daemon that is running may have
+/// been started by a previous launch of rigseed that never got to shut it
+/// down. Its config is the only thing that knows which port it took.
+pub fn configured_port(path: &Path) -> Option<u16> {
+    let text = fs::read_to_string(path).ok()?;
+    text.lines()
+        .find_map(|line| line.strip_prefix("WebUI\\Port="))
+        .and_then(|value| value.trim().parse().ok())
+}
+
+/// Whether something is accepting connections there.
+///
+/// A daemon left behind by a crash, or by a parent process killed without
+/// running its shutdown, keeps the profile locked and the port bound. A second
+/// qbittorrent-nox on the same profile simply exits, so the choice is to adopt
+/// the one that is running or to leave the app permanently unable to start.
+///
+/// Only a TCP check. Whether it is really qBittorrent is settled by the
+/// frontend's own probe before any credential is sent, which is where that
+/// question already belongs.
+pub fn something_listening(port: u16) -> bool {
+    use std::net::{Ipv4Addr, SocketAddr, TcpStream};
+    use std::time::Duration;
+
+    let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
+    TcpStream::connect_timeout(&addr, Duration::from_millis(400)).is_ok()
+}
+
 /// Where qBittorrent keeps its config inside a profile directory.
 ///
 /// The daemon is started with `--profile=<app_data>`, which is what keeps the

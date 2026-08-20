@@ -1,4 +1,5 @@
-mod daemon;
+pub mod daemon;
+pub mod http;
 
 use std::sync::Mutex;
 
@@ -129,7 +130,15 @@ const DAEMON_USER: &str = "rigseed";
 struct Daemon(Mutex<Option<CommandChild>>);
 
 /// What the frontend needs to reach the local daemon.
+///
+/// camelCase over the boundary, because that is what the TypeScript side
+/// reads. Without the rename serde sent `base_url`, the frontend read
+/// `baseUrl`, got `undefined`, and every request threw building its URL before
+/// it left the app. Nothing reported it: the failure surfaced as "could not
+/// reach the daemon", which is exactly what an absent daemon looks like, so a
+/// running one was blamed for being missing.
 #[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 struct Connection {
     base_url: String,
     username: String,
@@ -166,10 +175,80 @@ fn bundled_connection(port: tauri::State<'_, WebUiPort>) -> Result<Connection, S
     })
 }
 
+/// Records how the frontend's attempt to reach the daemon went.
+///
+/// A packaged desktop app has no console anybody can open, so a connection
+/// that quietly falls back to sample data leaves no trace at all. The frontend
+/// knows exactly why it failed and this is the only way that reason reaches
+/// the log file beside the daemon's own.
+#[tauri::command]
+fn report_connection(status: String, detail: String) {
+    if status == "connected" {
+        log::info!("frontend connected: {detail}");
+    } else {
+        log::warn!("frontend could not connect ({status}): {detail}");
+    }
+}
+
 /// Whether the sidecar is running.
 #[tauri::command]
 fn daemon_running(state: tauri::State<'_, Daemon>) -> bool {
     state.0.lock().map(|g| g.is_some()).unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_frontend_gets_the_names_it_reads() {
+        // The one contract in this app that no compiler checks. TypeScript's
+        // DaemonTarget asks for baseUrl; serde's default would send base_url;
+        // and the frontend reading undefined fails in a way that looks exactly
+        // like the daemon not being there.
+        let json = serde_json::to_string(&Connection {
+            base_url: "http://127.0.0.1:43880".into(),
+            username: "rigseed".into(),
+            password: "secret".into(),
+        })
+        .unwrap();
+
+        assert!(json.contains("baseUrl"), "got {json}");
+        assert!(!json.contains("base_url"), "got {json}");
+    }
+
+    #[test]
+    fn a_connection_never_prints_its_password() {
+        let rendered = format!(
+            "{:?}",
+            Connection {
+                base_url: "http://127.0.0.1:43880".into(),
+                username: "rigseed".into(),
+                password: "hunter2-should-not-appear".into(),
+            }
+        );
+        assert!(!rendered.contains("hunter2-should-not-appear"));
+        assert!(rendered.contains("rigseed"));
+    }
+
+    #[test]
+    fn the_preferred_port_avoids_the_ephemeral_range() {
+        // Windows allocates outbound ephemeral ports from 49152, so a fixed
+        // listener above that can lose a race with the machine's own traffic.
+        assert!(PREFERRED_PORT < 49152);
+        // And it is not qBittorrent's own default, which is the collision the
+        // move was for.
+        assert_ne!(PREFERRED_PORT, 8080);
+    }
+
+    #[test]
+    fn a_chosen_port_is_actually_free() {
+        use std::net::TcpListener;
+        let port = pick_port();
+        // Bindable at the moment it is handed back. The window between here
+        // and the daemon binding is what the frontend's probe covers.
+        assert!(TcpListener::bind(("127.0.0.1", port)).is_ok(), "port {port} was not free");
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -186,8 +265,16 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .manage(Daemon::default())
+        .manage(http::Http::default())
         .manage(WebUiPort::default())
-        .invoke_handler(tauri::generate_handler![bundled_connection, daemon_running])
+        .invoke_handler(tauri::generate_handler![
+            bundled_connection,
+            daemon_running,
+            report_connection,
+            http::api_get,
+            http::api_post,
+            http::api_post_form
+        ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 fit_within_screen(&window);
@@ -205,15 +292,26 @@ pub fn run() {
                 }
             };
 
-            let port = pick_port();
+            // A daemon from a previous launch may still be running. It holds
+            // the profile lock, so a second one started now would exit
+            // immediately and the app would sit next to a working daemon
+            // reporting that it cannot find one. Adopt it instead.
+            let config = daemon::config_path(&profile);
+            let adopted = daemon::configured_port(&config).filter(|p| daemon::something_listening(*p));
+
+            let port = adopted.unwrap_or_else(pick_port);
             if let Ok(mut slot) = app.state::<WebUiPort>().0.lock() {
                 *slot = port;
+            }
+
+            if let Some(port) = adopted {
+                log::info!("adopting the daemon already running on port {port}");
+                return Ok(());
             }
 
             match daemon::ensure_password() {
                 Ok(password) => {
                     let hash = daemon::hash_password(&password);
-                    let config = daemon::config_path(&profile);
                     if let Err(error) =
                         daemon::write_config(&config, DAEMON_USER, &hash, port)
                     {
