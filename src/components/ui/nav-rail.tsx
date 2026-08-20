@@ -25,14 +25,19 @@ export interface NavRailProps {
 export function NavRail({ expanded, onToggle, children, brand, className }: NavRailProps) {
   return (
     <>
-      {expanded ? (
-        <div
-          role="presentation"
-          onClick={onToggle}
-          className="fixed inset-0 z-20 backdrop-blur-[3px]"
-          style={{ background: 'var(--scrim)' }}
-        />
-      ) : null}
+      {/* Always mounted, faded rather than switched. A conditionally
+          rendered element has no previous state to transition from, so the
+          scrim appeared at full strength in one frame while the menu it
+          belongs to animated in behind it. */}
+      <div
+        role="presentation"
+        onClick={() => onToggle()}
+        className={cn(
+          'fixed inset-0 z-20 backdrop-blur-[3px] transition-opacity duration-base',
+          expanded ? 'opacity-100' : 'pointer-events-none opacity-0',
+        )}
+        style={{ background: 'var(--scrim)' }}
+      />
       <nav
         aria-label="Main"
         onKeyDown={(e) => {

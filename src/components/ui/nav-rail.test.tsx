@@ -40,13 +40,14 @@ describe('NavRail', () => {
         {items}
       </NavRail>,
     )
-    expect(container.querySelector('[role="presentation"]')).toBeNull()
+    // Always mounted, faded rather than switched, so it can transition in.
+    expect(container.querySelector('[role="presentation"]')?.className).toContain('opacity-0')
     rerender(
       <NavRail expanded onToggle={vi.fn()}>
         {items}
       </NavRail>,
     )
-    expect(container.querySelector('[role="presentation"]')).toBeTruthy()
+    expect(container.querySelector('[role="presentation"]')?.className).toContain('opacity-100')
   })
 
   it('collapses when the scrim is clicked', async () => {
