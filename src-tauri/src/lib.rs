@@ -1,5 +1,6 @@
 pub mod daemon;
 pub mod http;
+pub mod icon;
 
 use std::sync::Mutex;
 
@@ -190,6 +191,29 @@ fn report_connection(status: String, detail: String) {
     }
 }
 
+/// Repaints the window icon in the accent the user picked.
+///
+/// The taskbar icon while the app is open is the window's, not the
+/// executable's, and unlike the executable's it can be replaced at runtime.
+/// The one compiled into the binary stays as it is, which is why Explorer and
+/// the Start menu shortcut keep the default: that icon is a resource, not a
+/// setting.
+///
+/// A failure here is cosmetic. The app keeps whatever icon it already had
+/// rather than refusing to run over a colour.
+#[tauri::command]
+fn set_window_icon(window: tauri::WebviewWindow, accent: String, dark: bool) -> Result<(), String> {
+    let (rgba, width, height) = icon::render(&accent, dark).map_err(|e| e.to_string())?;
+    window
+        .set_icon(tauri::image::Image::new_owned(rgba, width, height))
+        .map_err(|e| e.to_string())?;
+    log::info!(
+        "window icon repainted for {accent} ({})",
+        if dark { "dark" } else { "light" }
+    );
+    Ok(())
+}
+
 /// Whether the sidecar is running.
 #[tauri::command]
 fn daemon_running(state: tauri::State<'_, Daemon>) -> bool {
@@ -271,6 +295,7 @@ pub fn run() {
             bundled_connection,
             daemon_running,
             report_connection,
+            set_window_icon,
             http::api_get,
             http::api_post,
             http::api_post_form
