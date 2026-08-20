@@ -6,7 +6,7 @@
  * app is traceable to the endpoint that produced it, and a renaming layer is
  * one more place for a typo to become a silent undefined.
  *
- * Taken verbatim from rigseed-internal/docs/architecture.md section 8.
+ * Taken verbatim from the data model in the architecture reference.
  */
 
 export type TorrentState =

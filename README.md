@@ -49,8 +49,7 @@ rigseed.exe
 └── spawns qbittorrent-nox       → --profile=<app data>, loopback only
 ```
 
-Four decisions in there are load-bearing, and each is written up in
-`rigseed-internal`:
+Four decisions in there are load-bearing:
 
 - **The WebUI binds to `127.0.0.1`.** Nothing but rigseed talks to it, so being
   on the LAN is exposure with no upside, and it turns a taken port from a
@@ -110,9 +109,11 @@ this read as that app's desktop port.
 
 ## Documentation
 
-Reference docs live in **`verastack-labs/rigseed-internal`**: architecture, the
-build plan, per-screen specs, design foundations, content and voice, and the
-write-ups behind the decisions above.
+[`PRODUCT.md`](PRODUCT.md) covers what rigseed is for and who it is for.
+[`DESIGN.md`](DESIGN.md) carries the design foundations the app is built
+against, machine-readable, next to the code that has to honour them. Every
+non-obvious decision is written up in the source, next to the thing it
+explains, rather than in a document that drifts away from it.
 
 ## Licence
 

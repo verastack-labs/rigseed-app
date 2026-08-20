@@ -54,7 +54,7 @@ Sessions are long-lived and mostly ambient - the window sits open showing live s
 
 ## Evidence on Hand
 
-None. Pre-build project - no screenshots of a shipping build, no usage data, no testimonials. The `.dc.html` files under `docs/design-references/` are prototypes, not evidence; do not present them as product screenshots.
+None. Pre-build project - no screenshots of a shipping build, no usage data, no testimonials. The design prototypes are prototypes, not evidence; do not present them as product screenshots.
 
 ## Product Principles
 

@@ -15,7 +15,7 @@ name: Build sidecar
 # qBittorrent supports. Homebrew shipped libtorrent 2.1, which fails against
 # 5.2.3 with "no member named 'mapped_files'". Upstream builds libtorrent and
 # boost from pinned source precisely to avoid that, so we do too. See
-# docs/sidecar.md in rigseed-internal for the full account.
+# the sidecar reference for the full account.
 #
 # See src-tauri/binaries/README.md and licenses/README.md. Shipping this binary
 # obliges us to ship its corresponding source on the same release.

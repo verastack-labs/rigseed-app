@@ -5,7 +5,7 @@
  * system package. This file does one job on top of it: expose those tokens to
  * Tailwind as utilities, without freezing their values.
  *
- * See licenses/../DESIGN.md and rigseed-internal/docs/design-foundations.md.
+ * See DESIGN.md at the repository root.
  */
 
 @import 'tailwindcss';
