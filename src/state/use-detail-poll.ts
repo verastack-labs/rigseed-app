@@ -71,6 +71,27 @@ export function useDetailPoll(hash: string, tab: DetailTabKey, intervalMs = 2000
     [api, hash],
   )
 
+  // The Files tab carries its count in the tab bar, so the count has to exist
+  // before anybody opens the tab. It used to appear only once the tab had been
+  // visited, which made the badge look like it was still loading on a screen
+  // that had finished loading. One request on mount rather than a second
+  // poller: the tab's own poll keeps it current once it is open.
+  useEffect(() => {
+    if (!hash) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const data = await api.torrents.files(hash)
+        if (!cancelled) setFiles(data)
+      } catch {
+        // The tab fetches it again when it opens.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [api, hash])
+
   useEffect(() => {
     stopped.current = false
     let timer: ReturnType<typeof setTimeout> | undefined
