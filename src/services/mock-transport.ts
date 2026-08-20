@@ -123,6 +123,7 @@ function makeTorrent(index: number, rand: () => number): Torrent {
     // and what makes it worth copying rather than rebuilding from the hash.
     magnet_uri: `magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(name)}&tr=${encodeURIComponent('https://torrent.ubuntu.com/announce')}`,
     tracker: paused ? '' : 'https://torrent.ubuntu.com/announce',
+    content_path: `/downloads/${name}`,
   }
 }
 
