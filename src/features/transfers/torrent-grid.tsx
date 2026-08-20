@@ -22,8 +22,12 @@ export function TorrentGrid({ torrents, selected, onToggle, ...actions }: Layout
           className="relative overflow-visible"
         >
           <div className="flex flex-col gap-2.5">
-            <div className="flex items-start gap-2.5">
-              <span className="relative z-10 pt-0.5">
+            {/* Centred, not top-aligned. The four things on this row are a
+                checkbox, a 26px tile, one line of text and a 24px button, and
+                nudging each one down by a different amount to fake alignment
+                is what the pt-0.5 and pt-1 here used to be doing. */}
+            <div className="flex items-center gap-2.5">
+              <span className="relative z-10 flex">
                 <Checkbox
                   checked={selected.includes(torrent.hash)}
                   onChange={() => onToggle(torrent.hash)}
@@ -37,7 +41,7 @@ export function TorrentGrid({ torrents, selected, onToggle, ...actions }: Layout
                 stretch
                 hash={torrent.hash}
                 name={torrent.name}
-                className="min-w-0 flex-1 truncate pt-1 text-[14px] font-semibold"
+                className="min-w-0 flex-1 truncate text-[14px] font-semibold"
               />
               <RowMenu torrent={torrent} actions={actions} />
             </div>
