@@ -1,6 +1,8 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { useEffect } from 'react'
+
 import { usePreferences } from '@/state/use-preferences'
 
 const preferences = vi.fn()
@@ -16,8 +18,14 @@ vi.mock('@/services/api-context', () => ({ useApi: () => api }))
 let latest: ReturnType<typeof usePreferences>
 
 function Probe() {
-  latest = usePreferences()
-  return <span data-testid="dirty">{latest.dirtyKeys.join(',') || 'clean'}</span>
+  const state = usePreferences()
+  // Published from an effect rather than assigned during render. Writing to
+  // something outside the component while rendering is a side effect, and the
+  // lint rule is right to say so even in a test.
+  useEffect(() => {
+    latest = state
+  })
+  return <span data-testid="dirty">{state.dirtyKeys.join(',') || 'clean'}</span>
 }
 
 const base = { save_path: '/downloads', max_active_downloads: 3, dht: true }
