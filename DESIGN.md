@@ -93,12 +93,12 @@ components:
 
 rigseed has one surface today - the app - so unlike riggit there is no Persuade/Operate split to manage. The convention still holds:
 
-- **Foundations** (colour, shape, elevation, motion principles, the brand mark) are canonical in `docs/design-foundations.md`, destined for `rigseed-internal/docs/`. They are mirrored below so the machine-readable block sits next to the code that gets checked. **Change them at the source first**, then propagate here and into the theme layer.
+- **Foundations** (colour, shape, elevation, motion principles, the brand mark) are canonical upstream of this repository. They are mirrored below so the machine-readable block sits next to the code that gets checked. **Change them at the source first**, then propagate here and into the theme layer.
 - **Everything else in this file is app-specific** and owned here.
 
 Sections are tagged `[shared]` or `[app]`. When the landing page lands in `verastack-labs/rigseed`, it gets its own `DESIGN.md` mirroring the `[shared]` sections and owning its own type scale.
 
-Propagation order: `rigseed-internal/docs/design-foundations.md` → this file's frontmatter → `rigseed-theme.css` (the prototype's variable layer, which the real app's `@theme` block replaces).
+Propagation order: the upstream design foundations → this file's frontmatter → `rigseed-theme.css` (the prototype's variable layer, which the real app's `@theme` block replaces).
 
 ## Overview
 

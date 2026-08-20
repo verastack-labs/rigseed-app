@@ -10,10 +10,9 @@ Read `PRODUCT.md` and `DESIGN.md` at the repo root. They are not decoration - th
 is resolved to a high fidelity, and a change that contradicts them will be sent back even
 if the code is good.
 
-Canonical design foundations live in `verastack-labs/rigseed-internal`, in
-`docs/design-foundations.md`. Colour, shape, elevation, motion and the brand mark are
-owned there and propagate outward. If your change needs a foundation to move, that starts
-as a conversation, not a pull request.
+Colour, shape, elevation, motion and the brand mark are foundations. They are owned
+upstream of this repository and propagate into `DESIGN.md` and the token layer. If your
+change needs a foundation to move, that starts as a conversation, not a pull request.
 
 ## Branching
 
