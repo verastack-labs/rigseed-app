@@ -37,6 +37,7 @@ export function AppShell() {
   const { pathname } = useLocation()
   const current = DESTINATIONS.find((d) => d.to === pathname)
 
+
   return (
     <div className="bg-bg flex h-full">
       <NavRail
@@ -51,7 +52,17 @@ export function AppShell() {
           onClick={() => setRailExpanded((v) => !v)}
         />
         {DESTINATIONS.map((d) => (
-          <NavLink key={d.to} to={d.to} className="contents">
+          // The rail overlays the content, so leaving it open after a
+          // destination is chosen covers the screen the choice just asked
+          // for. Closed on the choice rather than on the route change,
+          // because collapsing from an effect is a cascading render and the
+          // lint rule is right about that.
+          <NavLink
+            key={d.to}
+            to={d.to}
+            className="contents"
+            onClick={() => setRailExpanded(false)}
+          >
             {({ isActive }) => (
               <RailItem
                 icon={<d.Icon className="size-[17px]" strokeWidth={2} />}
