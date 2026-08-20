@@ -1,9 +1,8 @@
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
-
 import { createClient, type Client } from '@/services/client'
 import { createMockTransport } from '@/services/mock-transport'
 import { capabilitiesFor } from '@/services/torrents'
-import { ApiError, createHttpTransport } from '@/services/transport'
+import { createTauriTransport } from '@/services/tauri-transport'
+import { ApiError, createHttpTransport, type Transport } from '@/services/transport'
 
 export interface DaemonTarget {
   /** For example `http://127.0.0.1:8080`, or `''` for a same-origin proxy. */
@@ -92,35 +91,25 @@ export interface ConnectOptions {
  * The alternative was turning the daemon's CSRF protection off, which would
  * leave it open to any page in the user's browser that learned the password.
  */
-function daemonFetch(baseUrl: string): typeof fetch | undefined {
-  // Statically imported, not loaded on demand. A dynamic import races Vite's
-  // dependency pre-bundling: on a cold start the module is not ready, the
-  // await resolves late or the page reloads under it, and the request goes out
-  // through the webview's own fetch instead. That carries an origin the daemon
-  // answers 401 to, so a correct password is reported as rejected. It behaved
-  // differently on consecutive runs of the same build, which is what gave it
-  // away.
-  //
-  // Importing it in a browser is harmless. The module only fails when called
-  // without Tauri underneath, and the guard below is what decides that.
-  if (!(globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return undefined
-  if (!baseUrl) return tauriFetch as typeof fetch
-
-  // The plugin forwards the page's own origin, which in dev is the Vite server
-  // and in production is the Tauri protocol. Either way it is not the daemon's
-  // own host, and qBittorrent answers a mismatched Origin with 401, which the
-  // app then reports as a rejected password.
-  //
-  // A browser refuses to let anything set Origin. This is not a browser: the
-  // request is made in Rust, so the header can say what is true, which is that
-  // the request originates with the daemon's own WebUI as far as it is
-  // concerned. That keeps the daemon's CSRF protection switched on rather than
-  // turning it off to accommodate us.
-  return ((input, init) =>
-    tauriFetch(input as string, {
-      ...init,
-      headers: { ...((init?.headers as Record<string, string>) ?? {}), Origin: baseUrl },
-    })) as typeof fetch
+/**
+ * The transport to reach the daemon with.
+ *
+ * Inside Tauri every request is performed in Rust. Not for speed: qBittorrent
+ * answers a request whose `Origin` is not its own host with 401, and inside a
+ * webview there is no way to send the right one. `Origin` is a forbidden
+ * header name so the page cannot set it, and the HTTP plugin forwards the
+ * page's origin and overrides one the caller supplies. A request built in
+ * `src-tauri/src/http.rs` sends no `Origin` at all, which is the case the
+ * daemon accepts and how every native client talks to it.
+ *
+ * Outside Tauri the ordinary fetch transport is used, which is what the dev
+ * server's proxy and the test suite both rely on.
+ */
+function transportFor(baseUrl: string): Transport {
+  if ((globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+    return createTauriTransport(baseUrl)
+  }
+  return createHttpTransport({ baseUrl })
 }
 
 /**
@@ -166,11 +155,7 @@ export async function connect(
   target: DaemonTarget,
   { waitMs = 0 }: ConnectOptions = {},
 ): Promise<ConnectionState> {
-  const fetchImpl = daemonFetch(target.baseUrl)
-  const transport = createHttpTransport({
-    baseUrl: target.baseUrl,
-    ...(fetchImpl ? { fetchImpl } : {}),
-  })
+  const transport = transportFor(target.baseUrl)
   const probe = createClient(transport)
 
   const deadline = Date.now() + waitMs

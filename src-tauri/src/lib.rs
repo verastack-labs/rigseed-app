@@ -1,4 +1,5 @@
-mod daemon;
+pub mod daemon;
+pub mod http;
 
 use std::sync::Mutex;
 
@@ -264,8 +265,16 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .manage(Daemon::default())
+        .manage(http::Http::default())
         .manage(WebUiPort::default())
-        .invoke_handler(tauri::generate_handler![bundled_connection, daemon_running, report_connection])
+        .invoke_handler(tauri::generate_handler![
+            bundled_connection,
+            daemon_running,
+            report_connection,
+            http::api_get,
+            http::api_post,
+            http::api_post_form
+        ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 fit_within_screen(&window);
