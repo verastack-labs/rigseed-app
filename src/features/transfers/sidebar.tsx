@@ -5,20 +5,21 @@ import { Disclosure } from '@/components/ui/disclosure'
 import { FilterRow } from '@/components/ui/filter-row'
 import { SectionHeader } from '@/components/ui/section-header'
 import { Sparkline } from '@/components/ui/sparkline'
-import { icons } from '@/lib/icons'
-import { swatchColor, swatchFor } from '@/lib/labels'
+import { categoryIcons, icons } from '@/lib/icons'
+import { swatchColor } from '@/lib/labels'
 import { cn } from '@/lib/utils'
+import { categoryStyle, tagColor, useLabelStore } from '@/state/label-store'
 import type { StatusFilter } from '@/state/transfers-store'
 import { formatSpeed } from '@/utils/format'
 
-const STATUSES: { key: StatusFilter; label: string }[] = [
-  { key: 'all', label: 'All torrents' },
-  { key: 'downloading', label: 'Downloading' },
-  { key: 'seeding', label: 'Seeding' },
-  { key: 'completed', label: 'Completed' },
-  { key: 'paused', label: 'Paused' },
-  { key: 'active', label: 'Active' },
-  { key: 'stalled', label: 'Stalled' },
+const STATUSES: { key: StatusFilter; label: string; icon: keyof typeof icons }[] = [
+  { key: 'all', label: 'All torrents', icon: 'all' },
+  { key: 'downloading', label: 'Downloading', icon: 'download' },
+  { key: 'seeding', label: 'Seeding', icon: 'upload' },
+  { key: 'completed', label: 'Completed', icon: 'complete' },
+  { key: 'paused', label: 'Paused', icon: 'pause' },
+  { key: 'active', label: 'Active', icon: 'active' },
+  { key: 'stalled', label: 'Stalled', icon: 'stalled' },
 ]
 
 export interface SidebarProps {
@@ -58,6 +59,11 @@ export function Sidebar({
   onClear,
   className,
 }: SidebarProps) {
+  // Read here rather than threaded through props: the sidebar is the only
+  // consumer, and a label's look is app-local rather than part of the filter
+  // state the page owns.
+  const labels = useLabelStore()
+
   return (
     <aside
       className={cn(
@@ -67,16 +73,19 @@ export function Sidebar({
     >
       <div className="flex flex-col gap-1">
         <SectionHeader className="px-[9px] pb-1">Status</SectionHeader>
-        {STATUSES.map((s) => (
-          <FilterRow
-            key={s.key}
-            label={s.label}
-            icon={<icons.folder className="size-[15px]" strokeWidth={2} />}
-            count={statusCounts[s.key]}
-            active={status === s.key}
-            onClick={() => onStatus(s.key)}
-          />
-        ))}
+        {STATUSES.map((s) => {
+          const Glyph = icons[s.icon]
+          return (
+            <FilterRow
+              key={s.key}
+              label={s.label}
+              icon={<Glyph className="size-[15px]" strokeWidth={2} />}
+              count={statusCounts[s.key]}
+              active={status === s.key}
+              onClick={() => onStatus(s.key)}
+            />
+          )
+        })}
       </div>
 
       {/* Folding, because these two grow without limit while Status never
@@ -84,16 +93,29 @@ export function Sidebar({
           Clear filters button. */}
       {categories.size > 0 ? (
         <Disclosure title="Categories" count={categories.size}>
-          {[...categories].map(([name, count]) => (
-            <FilterRow
-              key={name}
-              label={name}
-              dot={swatchColor(swatchFor(name))}
-              count={count}
-              active={category === name}
-              onClick={() => onCategory(category === name ? null : name)}
-            />
-          ))}
+          {[...categories].map(([name, count]) => {
+            // The icon and colour chosen on the Categories screen, not a
+            // generic dot. A category is a thing the user drew, and showing
+            // it as an anonymous dot here makes the choice look decorative.
+            const style = categoryStyle(labels, name)
+            const Glyph = categoryIcons[style.icon]
+            return (
+              <FilterRow
+                key={name}
+                label={name}
+                icon={
+                  <Glyph
+                    className="size-[15px]"
+                    strokeWidth={2}
+                    style={{ color: swatchColor(style.color) }}
+                  />
+                }
+                count={count}
+                active={category === name}
+                onClick={() => onCategory(category === name ? null : name)}
+              />
+            )
+          })}
         </Disclosure>
       ) : null}
 
@@ -103,7 +125,7 @@ export function Sidebar({
             <FilterRow
               key={name}
               label={name}
-              dot={swatchColor(swatchFor(name))}
+              dot={swatchColor(tagColor(labels, name))}
               count={count}
               active={tag === name}
               onClick={() => onTag(tag === name ? null : name)}
