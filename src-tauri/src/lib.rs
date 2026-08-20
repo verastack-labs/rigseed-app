@@ -11,7 +11,46 @@ use tauri_plugin_shell::ShellExt;
 /// Fixed rather than negotiated. A remote instance is a saved connection with
 /// its own address; this is only the local one, and a stable port means a user
 /// can point a browser at it when they need to debug something.
-const WEBUI_PORT: u16 = 8080;
+/// The port rigseed asks for first.
+///
+/// Not 8080. That is qBittorrent's own default, so a user who has enabled the
+/// WebUI on their existing install collides with us immediately, and it is one
+/// of the most contended ports on any developer's machine besides.
+///
+/// Deliberately below 49152 as well. Windows allocates ephemeral ports for
+/// outbound connections from 49152 upwards, so a fixed listener up there can
+/// lose a race with the machine's own outbound traffic.
+///
+/// Only a preference. `pick_port` moves on if it is taken, which is the part
+/// that actually matters: no fixed number is safe on a machine we do not own.
+const PREFERRED_PORT: u16 = 43880;
+
+/// A port nothing is listening on, preferring `PREFERRED_PORT`.
+///
+/// Asked of the OS rather than assumed. There is a window between letting the
+/// listener go and the daemon binding, which is unavoidable when the port has
+/// to be passed as an argument, but it is milliseconds against the certainty
+/// of a fixed port already being in use.
+fn pick_port() -> u16 {
+    use std::net::TcpListener;
+
+    if TcpListener::bind(("127.0.0.1", PREFERRED_PORT)).is_ok() {
+        return PREFERRED_PORT;
+    }
+
+    match TcpListener::bind(("127.0.0.1", 0)).and_then(|l| l.local_addr()) {
+        Ok(addr) => {
+            log::info!("{PREFERRED_PORT} was taken, using {}", addr.port());
+            addr.port()
+        }
+        // Nothing is bindable, which is a broken machine rather than a busy
+        // one. Let the daemon report it rather than inventing a number.
+        Err(error) => {
+            log::error!("could not find a free port: {error}");
+            PREFERRED_PORT
+        }
+    }
+}
 
 /// The size the screens were drawn at, and the smallest the layout holds at.
 ///
@@ -72,6 +111,13 @@ fn fit_within_screen(window: &tauri::WebviewWindow) {
     let _ = window.set_position(LogicalPosition::new(x.max(0.0), y.max(0.0)));
 }
 
+/// The port the daemon was actually given.
+///
+/// Chosen at startup rather than fixed, so it has to be remembered: the
+/// frontend asks for the connection separately and has no other way to know.
+#[derive(Default)]
+struct WebUiPort(std::sync::Mutex<u16>);
+
 /// The WebUI account rigseed creates for itself.
 ///
 /// Written into the daemon's config and handed to the frontend, so the two
@@ -106,10 +152,15 @@ impl std::fmt::Debug for Connection {
 /// The password crosses this boundary once, into the API client, and is never
 /// rendered. It is not put in the store plugin: the keychain is the store.
 #[tauri::command]
-fn bundled_connection() -> Result<Connection, String> {
+fn bundled_connection(port: tauri::State<'_, WebUiPort>) -> Result<Connection, String> {
     let password = daemon::ensure_password().map_err(|e| e.to_string())?;
+    let port = port.0.lock().map(|p| *p).unwrap_or(PREFERRED_PORT);
+    // The port is chosen at startup, so this is the only place that says which
+    // one the frontend was actually told to use. Worth a line: a mismatch here
+    // looks exactly like a daemon that will not accept the password.
+    log::info!("handing the frontend http://127.0.0.1:{port} as {DAEMON_USER}");
     Ok(Connection {
-        base_url: format!("http://127.0.0.1:{WEBUI_PORT}"),
+        base_url: format!("http://127.0.0.1:{port}"),
         username: DAEMON_USER.into(),
         password,
     })
@@ -135,6 +186,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .manage(Daemon::default())
+        .manage(WebUiPort::default())
         .invoke_handler(tauri::generate_handler![bundled_connection, daemon_running])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
@@ -153,12 +205,17 @@ pub fn run() {
                 }
             };
 
+            let port = pick_port();
+            if let Ok(mut slot) = app.state::<WebUiPort>().0.lock() {
+                *slot = port;
+            }
+
             match daemon::ensure_password() {
                 Ok(password) => {
                     let hash = daemon::hash_password(&password);
                     let config = daemon::config_path(&profile);
                     if let Err(error) =
-                        daemon::write_config(&config, DAEMON_USER, &hash, WEBUI_PORT)
+                        daemon::write_config(&config, DAEMON_USER, &hash, port)
                     {
                         log::error!("could not write {}: {error}", config.display());
                     } else {
@@ -174,12 +231,12 @@ pub fn run() {
                 Ok(command) => match command
                     .args([
                         format!("--profile={}", profile.display()),
-                        format!("--webui-port={WEBUI_PORT}"),
+                        format!("--webui-port={port}"),
                     ])
                     .spawn()
                 {
                     Ok((_rx, child)) => {
-                        log::info!("qbittorrent-nox started on port {WEBUI_PORT}");
+                        log::info!("qbittorrent-nox started on port {port}");
                         if let Ok(mut slot) = app.state::<Daemon>().0.lock() {
                             *slot = Some(child);
                         }
