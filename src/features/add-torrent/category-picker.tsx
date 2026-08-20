@@ -116,7 +116,9 @@ export function CategoryPicker({
             </span>
           </div>
 
-          <div className="grid grid-cols-[1fr_1.2fr] gap-2.5">
+          {/* Stacks below 520px so the two fields never squeeze to the point
+              where a save path shows four characters. */}
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[1fr_1.2fr]">
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}

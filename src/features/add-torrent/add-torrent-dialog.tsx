@@ -212,25 +212,33 @@ export function AddTorrentDialog({
           onMagnet={setMagnet}
         />
 
-        <div className="grid grid-cols-[1.4fr_1fr] gap-3.5">
-          <SavePathField
-            value={savePath}
-            onChange={setSavePath}
-            freeSpace={freeSpace}
-            needed={needed}
-            // Automatic Torrent Management picks the path from the category,
-            // so leaving the field live would offer a choice the daemon then
-            // ignores.
-            disabled={options.autoTMM}
-          />
-          <CategoryPicker
-            categories={categories}
-            value={category}
-            onChange={setCategory}
-            onCreate={(next) => void createCategory(next)}
-            defaultSavePath={defaultSavePath}
-          />
-        </div>
+        <SavePathField
+          value={savePath}
+          onChange={setSavePath}
+          freeSpace={freeSpace}
+          needed={needed}
+          // Automatic Torrent Management picks the path from the category, so
+          // leaving the field live would offer a choice the daemon then
+          // ignores.
+          disabled={options.autoTMM}
+        />
+
+        {/*
+          Full width, like the tags below it. These two were side by side in a
+          1.4fr / 1fr grid, which was fine until the category creator opened:
+          the panel then had to fit a name, a save path, seven icons and eight
+          swatches into the narrower column, and it read as a cramped box
+          floating off to the right. Tags never had the problem because they
+          were already full width, which is why creating a tag looked right and
+          creating a category did not.
+        */}
+        <CategoryPicker
+          categories={categories}
+          value={category}
+          onChange={setCategory}
+          onCreate={(next) => void createCategory(next)}
+          defaultSavePath={defaultSavePath}
+        />
 
         <TagPicker
           tags={tags}
