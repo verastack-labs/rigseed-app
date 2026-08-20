@@ -1,7 +1,7 @@
 import { MoreVertical } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
 
-import { ContextMenu, type Point } from '@/components/ui/context-menu'
+import { ContextMenu } from '@/components/ui/context-menu'
+import { usePointerMenu } from '@/lib/use-pointer-menu'
 import { cn } from '@/lib/utils'
 import { canReachDesktop, revealInFolder } from '@/services/shell'
 import type { Torrent } from '@/types/qbittorrent'
@@ -59,61 +59,26 @@ function menuItems(torrent: Torrent, actions: TorrentActions) {
  * also how the actions become findable, since a three-dot button in the
  * corner of a card is not where anybody looks first.
  *
- * The listener goes on the nearest `[data-torrent-card]` ancestor rather than
- * on this wrapper, because the whole card is the target and the wrapper is a
- * 24px corner of it. Reaching up the DOM is the price of keeping one piece of
- * open state here instead of three copies in three layouts.
+ * The right-click target is the card, found through `[data-context-target]`.
+ * See `usePointerMenu`, which the detail screen's own menu shares.
  */
 export function RowMenu({ torrent, actions }: { torrent: Torrent; actions: TorrentActions }) {
-  const [open, setOpen] = useState(false)
-  const [at, setAt] = useState<Point | null>(null)
-  const wrapper = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const card = wrapper.current?.closest<HTMLElement>('[data-torrent-card]')
-    if (!card) return
-
-    const onContextMenu = (event: MouseEvent) => {
-      // Otherwise the webview's own menu opens on top of ours, offering
-      // Reload and Inspect on a torrent.
-      event.preventDefault()
-      setAt({ x: event.clientX, y: event.clientY })
-      setOpen(true)
-    }
-
-    card.addEventListener('contextmenu', onContextMenu)
-    return () => card.removeEventListener('contextmenu', onContextMenu)
-  }, [])
-
-  const close = () => {
-    setOpen(false)
-    setAt(null)
-  }
+  const { anchor, open, toggle, menuProps } = usePointerMenu()
 
   return (
-    <div ref={wrapper} className={cn('relative z-10 shrink-0', open && 'z-30')}>
+    <div ref={anchor} className={cn('relative z-10 shrink-0', open && 'z-30')}>
       <button
         type="button"
         title={`Actions for ${torrent.name}`}
         aria-label={`Actions for ${torrent.name}`}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => {
-          // Back under the button, wherever the last right click happened.
-          setAt(null)
-          setOpen((v) => !v)
-        }}
+        onClick={toggle}
         className="flex size-6 items-center justify-center rounded-md text-text-dim transition-colors duration-quick hover:bg-surface2 hover:text-accent"
       >
         <MoreVertical className="size-4" strokeWidth={2} />
       </button>
-      <ContextMenu
-        items={menuItems(torrent, actions)}
-        open={open}
-        onClose={close}
-        label={torrent.name}
-        {...(at ? { at } : {})}
-      />
+      <ContextMenu items={menuItems(torrent, actions)} label={torrent.name} {...menuProps} />
     </div>
   )
 }

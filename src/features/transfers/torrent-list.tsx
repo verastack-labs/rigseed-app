@@ -34,7 +34,7 @@ export function TorrentList({ torrents, selected, onToggle, ...actions }: Layout
         return (
           <div
             key={torrent.hash}
-            data-torrent-card
+            data-context-target
             className={cn(
               'relative grid items-center gap-3 rounded-md px-2',
               'transition-colors duration-quick hover:bg-surface2',

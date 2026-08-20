@@ -15,7 +15,7 @@ export function TorrentGrid({ torrents, selected, onToggle, ...actions }: Layout
     <div className="grid grid-cols-1 gap-3.5 p-6 md:grid-cols-2 xl:grid-cols-3">
       {torrents.map((torrent) => (
         <Card
-          data-torrent-card
+          data-context-target
           key={torrent.hash}
           hoverable
           padding="card"

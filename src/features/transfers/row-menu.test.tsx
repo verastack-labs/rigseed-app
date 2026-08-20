@@ -25,7 +25,7 @@ const actions: TorrentActions = { onResume: vi.fn(), onPause: vi.fn(), onRemove:
 /** A card, because RowMenu finds its right-click target by climbing to one. */
 const inACard = () =>
   render(
-    <div data-torrent-card data-testid="card">
+    <div data-context-target data-testid="card">
       <RowMenu torrent={torrent} actions={actions} />
     </div>,
   )

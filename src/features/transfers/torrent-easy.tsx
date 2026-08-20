@@ -34,7 +34,7 @@ export function TorrentEasy({ torrents, selected, onToggle, onResume, onPause }:
         const done = isComplete(torrent.progress)
 
         return (
-          <Card data-torrent-card key={torrent.hash} padding="section" className="relative">
+          <Card data-context-target key={torrent.hash} padding="section" className="relative">
             <div className="flex items-start gap-4">
               <span className="relative z-10 pt-1">
                 <Checkbox

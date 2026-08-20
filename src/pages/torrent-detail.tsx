@@ -97,7 +97,7 @@ export function TorrentDetail() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div data-context-target className="flex h-full min-h-0 flex-col">
       <DetailHeader
         torrent={torrent}
         tab={tab}
