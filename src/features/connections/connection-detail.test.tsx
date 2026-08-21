@@ -2,20 +2,24 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-import { ConnectionDetail } from '@/features/connections/connection-detail'
-import type { Connection } from '@/state/connection-store'
+import { ConnectionDetail, type TestResult } from '@/features/connections/connection-detail'
+import { emptyDraft, type ConnectionDraft } from '@/state/connection-store'
 
-const connection = (over: Partial<Connection> = {}): Connection => ({
-  id: 'one',
-  label: 'Home server',
+const draft = (over: Partial<ConnectionDraft> = {}): ConnectionDraft => ({
+  ...emptyDraft(),
+  label: 'Home NAS',
   host: '192.168.1.5',
-  port: 8080,
-  https: false,
-  path: '',
-  username: 'admin',
-  requiresAuth: true,
   ...over,
 })
+
+const passed: TestResult = {
+  ok: true,
+  version: 'v5.2.3',
+  webApiVersion: '2.15.1',
+  torrents: 4,
+  network: 'connected',
+  at: 0,
+}
 
 const setup = (props: Partial<React.ComponentProps<typeof ConnectionDetail>> = {}) => {
   const handlers = {
@@ -23,14 +27,16 @@ const setup = (props: Partial<React.ComponentProps<typeof ConnectionDetail>> = {
     onChange: vi.fn(),
     onTest: vi.fn(),
     onMakeActive: vi.fn(),
+    onSave: vi.fn(),
     onRemove: vi.fn(),
   }
   render(
     <ConnectionDetail
-      connection={connection()}
-      builtIn={{ label: 'Built into rigseed', address: '127.0.0.1:43119' }}
+      draft={draft()}
+      locked={false}
+      adding={false}
       active={false}
-      health="connected"
+      dirty={false}
       test={null}
       testing={false}
       password=""
@@ -43,25 +49,6 @@ const setup = (props: Partial<React.ComponentProps<typeof ConnectionDetail>> = {
 }
 
 describe('ConnectionDetail', () => {
-  it('shows the full base URL, which is what requests are built on', () => {
-    setup({ connection: connection({ https: true, port: 8443, path: '/qbt' }) })
-    expect(screen.getByText('https://192.168.1.5:8443/qbt')).toBeInTheDocument()
-  })
-
-  it('answers whether this is the one running the app before anything else', () => {
-    setup({ active: false })
-    expect(screen.getByText('Saved, not in use')).toBeInTheDocument()
-    setup({ active: true, health: 'connected' })
-    expect(screen.getByText('In use, connected')).toBeInTheDocument()
-  })
-
-  it('does not claim health for a connection nobody is using', () => {
-    // health is only meaningful for the active one, and painting a saved row
-    // green because the active one is fine would be a lie.
-    setup({ active: false, health: 'connected' })
-    expect(screen.queryByText(/In use/)).not.toBeInTheDocument()
-  })
-
   it('reports an edit rather than holding its own copy', async () => {
     const { onChange } = setup()
     await userEvent.type(screen.getByLabelText('Host'), '9')
@@ -70,46 +57,72 @@ describe('ConnectionDetail', () => {
 
   it('sends the port as a number, not as the string the input gives', async () => {
     // `port` is compared and range checked. A string sails through both and
-    // then builds `http://host:8080undefined`.
+    // then builds an address nothing answers on.
     const { onChange } = setup()
     await userEvent.type(screen.getByLabelText('Port'), '1')
     expect(onChange).toHaveBeenLastCalledWith({ port: 80801 })
     expect(typeof onChange.mock.lastCall?.[0]?.port).toBe('number')
   })
 
-  it('hides the login fields when there is no login to do', () => {
-    // Asking for a credential that is never sent implies it matters.
-    setup({ connection: connection({ requiresAuth: false }) })
-    expect(screen.queryByLabelText('Username')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument()
+  it('locks the address of the bundled instance, and says why', () => {
+    setup({ locked: true })
+    expect(screen.getByLabelText('Host')).toBeDisabled()
+    expect(screen.getByLabelText('Port')).toBeDisabled()
+    expect(screen.getByText(/cannot be moved or removed/)).toBeInTheDocument()
   })
 
-  it('says where the password goes, and says so differently when nowhere', () => {
+  it('hides authentication entirely for the bundled instance', () => {
+    // rigseed generated that login. There is nothing in it to fill in.
+    setup({ locked: true })
+    expect(screen.queryByText('Authentication')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Username')).not.toBeInTheDocument()
+  })
+
+  it('hides the login fields when there is no login to do', () => {
+    setup({ draft: draft({ requiresAuth: false }) })
+    expect(screen.getByText('Authentication')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Username')).not.toBeInTheDocument()
+  })
+
+  it('says the password goes to the keychain', () => {
     setup({ keychain: true })
-    expect(screen.getByText(/system keychain/)).toBeInTheDocument()
+    expect(screen.getByText(/stored in the system keychain/)).toBeInTheDocument()
+  })
+
+  it('says so plainly when there is no keychain to write to', () => {
     setup({ keychain: false })
     expect(screen.getByText(/this session only/)).toBeInTheDocument()
   })
 
-  it('keeps the password out of the connection it is editing', async () => {
+  it('keeps the password out of the draft it is editing', async () => {
     const { onPasswordChange, onChange } = setup()
     await userEvent.type(screen.getByLabelText('Password'), 'hunter2')
     expect(onPasswordChange).toHaveBeenCalled()
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('offers no fields for the built-in daemon, and says why', () => {
-    setup({ connection: null })
-    expect(screen.queryByLabelText('Host')).not.toBeInTheDocument()
-    expect(screen.getByText(/picks a free port at every launch/)).toBeInTheDocument()
+  it('will not save when nothing was changed', () => {
+    // Save is the only thing that writes, so an always-enabled one gives no
+    // signal about whether an edit is still pending.
+    setup({ dirty: false })
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
   })
 
-  it('will not offer to remove the built-in daemon', () => {
-    // A button that could only ever be greyed out is worse than no button.
-    setup({ connection: null })
+  it('saves once something is different', () => {
+    setup({ dirty: true })
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+  })
+
+  it('reads as adding rather than editing when the connection is new', () => {
+    setup({ adding: true, draft: emptyDraft() })
+    expect(screen.getByText('New connection')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add connection' })).toBeEnabled()
     expect(screen.queryByRole('button', { name: /Remove/ })).not.toBeInTheDocument()
-    setup({ connection: connection() })
-    expect(screen.getByRole('button', { name: /Remove/ })).toBeInTheDocument()
+  })
+
+  it('has no stats to show before anything has been contacted', () => {
+    setup({ adding: true, draft: emptyDraft() })
+    expect(screen.queryByText('Last contact')).not.toBeInTheDocument()
   })
 
   it('says a test changes nothing, before anybody has run one', () => {
@@ -118,15 +131,27 @@ describe('ConnectionDetail', () => {
   })
 
   it('reports what the daemon said when a test worked', () => {
-    setup({ test: { ok: true, version: 'v5.2.3', webApiVersion: '2.11.4', at: 0 } })
-    expect(screen.getByText(/qBittorrent v5\.2\.3 · Web API 2\.11\.4/)).toBeInTheDocument()
+    setup({ test: passed })
+    expect(screen.getByText('v5.2.3')).toBeInTheDocument()
+    expect(screen.getByText('2.15.1')).toBeInTheDocument()
+    expect(screen.getByText('4')).toBeInTheDocument()
+    expect(screen.getByText('Connected')).toBeInTheDocument()
   })
 
-  it("reports the daemon's own words when a test failed", () => {
-    // The reason is the only thing that tells a wrong password apart from a
-    // closed port, and it comes from the far end.
-    setup({ test: { ok: false, reason: 'The daemon rejected those credentials.', at: 0 } })
+  it("reports the daemon's own words, and which step gave up, on failure", () => {
+    // The reason separates a wrong password from a closed port; the endpoint
+    // separates "not qBittorrent" from "wrong password".
+    setup({
+      test: {
+        ok: false,
+        reason: 'The daemon rejected those credentials.',
+        endpoint: 'auth/login → 403',
+        at: 0,
+      },
+    })
     expect(screen.getByText('The daemon rejected those credentials.')).toBeInTheDocument()
+    expect(screen.getByText('auth/login → 403')).toBeInTheDocument()
+    expect(screen.queryByText('Last contact')).not.toBeInTheDocument()
   })
 
   it('marks the test as running, so nobody presses it twice', async () => {
@@ -137,22 +162,38 @@ describe('ConnectionDetail', () => {
     expect(onTest).not.toHaveBeenCalled()
   })
 
-  it('cannot make the active connection active again', () => {
-    setup({ active: true })
-    expect(screen.getByRole('button', { name: 'In use' })).toBeDisabled()
+  it('offers Test again once there is a result to replace', () => {
+    setup({ test: passed })
+    expect(screen.getByRole('button', { name: 'Test again' })).toBeInTheDocument()
   })
 
-  it('offers to switch to one that is not in use', async () => {
+  it('offers to switch to a connection not in use', async () => {
     const { onMakeActive } = setup({ active: false })
     await userEvent.click(screen.getByRole('button', { name: 'Make active' }))
     expect(onMakeActive).toHaveBeenCalled()
   })
 
-  it('can switch to the built-in daemon too', async () => {
+  it('drops the switch button for the one already in use', () => {
+    setup({ active: true })
+    expect(screen.queryByRole('button', { name: 'Make active' })).not.toBeInTheDocument()
+  })
+
+  it('can switch to the bundled instance too', async () => {
     // Getting back to the local one has to be possible from here, or a bad
     // remote connection is a dead end.
-    const { onMakeActive } = setup({ connection: null, active: false })
+    const { onMakeActive } = setup({ locked: true, active: false })
     await userEvent.click(screen.getByRole('button', { name: 'Make active' }))
     expect(onMakeActive).toHaveBeenCalled()
+  })
+
+  it('will not offer to remove the bundled instance, and says so', () => {
+    setup({ locked: true })
+    expect(screen.queryByRole('button', { name: /Remove/ })).not.toBeInTheDocument()
+    expect(screen.getByText('the bundled instance cannot be removed')).toBeInTheDocument()
+  })
+
+  it('says what removing does before it is pressed', () => {
+    setup()
+    expect(screen.getByText(/nothing on that machine changes/)).toBeInTheDocument()
   })
 })

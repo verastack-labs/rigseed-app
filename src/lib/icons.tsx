@@ -1,8 +1,15 @@
 import {
   Activity,
+  AlertCircle,
   ArrowDownToLine,
   ArrowUpFromLine,
   BookOpen,
+  Check,
+  Cloud,
+  Monitor,
+  Plus,
+  Server,
+  Wifi,
   CircleCheck,
   Filter,
   Hourglass,
@@ -58,6 +65,17 @@ export const icons = {
   pause: Pause,
   remove: Trash2,
   clear: X,
+  add: Plus,
+  check: Check,
+  alert: AlertCircle,
+  /** The test-connection glyph: signal arcs, not the nav rail's bars. */
+  test: Wifi,
+  // What kind of machine a connection points at. Guessed from the address,
+  // because the daemon has no way to tell us and the shape is what makes a
+  // list of four instances readable at a glance.
+  desktop: Monitor,
+  lan: Server,
+  remote: Cloud,
 } as const
 
 /**
@@ -75,3 +93,27 @@ export const categoryIcons = {
   folder: Folder,
   file: FileText,
 } as const
+
+/** The icon keys a connection can take. */
+export type InstanceKind = 'desktop' | 'lan' | 'remote'
+
+/**
+ * Which glyph a connection gets, guessed from its address.
+ *
+ * Returns the key rather than the component so callers can index `icons`
+ * directly, which is how every other dynamic icon in the app is rendered. A
+ * function returning a component would be created fresh on each render.
+ *
+ * The daemon cannot tell us what kind of machine it runs on, and four
+ * identical icons make the label the only thing separating four rows. A
+ * private address is something on this network; anything else is out there.
+ */
+export function instanceKind(host: string, bundled: boolean): InstanceKind {
+  if (bundled) return 'desktop'
+  const name = host.split(':')[0] ?? ''
+  const isPrivate =
+    /^(10\.|127\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(name) ||
+    name === 'localhost' ||
+    name.endsWith('.local')
+  return isPrivate ? 'lan' : 'remote'
+}

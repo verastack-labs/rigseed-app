@@ -1,34 +1,56 @@
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { StatusDot, type StatusTone } from '@/components/ui/status-dot'
+import { SectionHeader } from '@/components/ui/section-header'
 import { Switch } from '@/components/ui/switch'
-import { SettingRow } from '@/features/settings/setting-row'
-import { icons } from '@/lib/icons'
-import { baseUrlOf, type Connection, type ConnectionDraft } from '@/state/connection-store'
-import type { BuiltInInstance, InstanceHealth } from '@/features/connections/instance-column'
+import { icons, instanceKind } from '@/lib/icons'
+import { cn } from '@/lib/utils'
+import type { ConnectionDraft } from '@/state/connection-store'
 
-/** What a test of a connection came back with. */
+/**
+ * What a test of a connection came back with.
+ *
+ * The four stats the design asks for are version, Web API version, torrents
+ * and session uptime. There is no uptime anywhere in qBittorrent's Web API,
+ * so the fourth is the daemon's own network status, which `sync/maindata`
+ * does carry and which is the thing worth knowing about a remote instance.
+ */
 export type TestResult =
-  | { ok: true; version: string; webApiVersion: string; at: number }
-  | { ok: false; reason: string; at: number }
+  | {
+      ok: true
+      version: string
+      webApiVersion: string
+      torrents: number
+      network: 'connected' | 'firewalled' | 'disconnected'
+      at: number
+    }
+  | { ok: false; reason: string; endpoint: string; at: number }
 
 export interface ConnectionDetailProps {
-  /** The connection to show, or null for rigseed's own daemon. */
-  connection: Connection | null
-  builtIn: BuiltInInstance
+  /** The edited copy. Null while nothing is selected. */
+  draft: ConnectionDraft | null
+  /**
+   * True for the built-in daemon, whose address rigseed owns.
+   *
+   * Its host and port are locked rather than hidden: seeing where it is
+   * answers a real question, and being unable to type in the field answers
+   * the next one.
+   */
+  locked: boolean
+  /** True when this connection does not exist yet. */
+  adding: boolean
   /** Whether this is the one the app is running on. */
   active: boolean
-  /** How the app's own connection is doing. Only meaningful when active. */
-  health: InstanceHealth
+  /** Whether the draft differs from what is saved. */
+  dirty: boolean
   test: TestResult | null
   testing: boolean
   /**
-   * The password as typed, which is never in the connection itself.
+   * The password as typed, which is never part of the draft.
    *
-   * Held by the caller rather than here so it survives a switch between rows
-   * and can be written to the keychain on save without this component
-   * knowing anything about keychains.
+   * Held by the caller so it survives a switch between rows and can be
+   * written to the keychain on save, without this component knowing anything
+   * about keychains.
    */
   password: string
   /** False when there is nowhere durable to put a password. */
@@ -37,86 +59,55 @@ export interface ConnectionDetailProps {
   onChange: (patch: Partial<ConnectionDraft>) => void
   onTest: () => void
   onMakeActive: () => void
+  onSave: () => void
   onRemove: () => void
 }
 
 const clockOf = (at: number): string =>
   new Date(at).toLocaleTimeString(undefined, { hour12: false })
 
-/** `accent2` for connected, which is what the footer's own dot uses. */
-const HEALTH_TONE: Record<InstanceHealth, StatusTone> = {
-  connected: 'accent2',
-  connecting: 'warn',
-  failed: 'danger',
-  mock: 'muted',
-}
+const NETWORK_LABEL = {
+  connected: 'Connected',
+  firewalled: 'Firewalled',
+  disconnected: 'Disconnected',
+} as const
 
-const HEALTH_WORDS: Record<InstanceHealth, string> = {
-  connected: 'In use, connected',
-  connecting: 'In use, connecting',
-  failed: 'In use, not reachable',
-  mock: 'In use, showing sample data',
-}
-
-/**
- * The header, which is the same for the built-in daemon and a saved one.
- *
- * The status line says whether this row is the one running the app before it
- * says anything about health, because that is the question somebody arriving
- * on this screen is asking.
- */
-function Header({
-  label,
-  address,
-  active,
-  health,
-}: {
-  label: string
-  address: string
-  active: boolean
-  health: InstanceHealth
-}) {
+/** One of the four stats under Last contact. */
+function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div className="flex items-start gap-4">
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <h2 className="truncate text-[17px] leading-tight font-semibold text-text">{label}</h2>
-        <span className="truncate font-mono text-[11px] text-text-dimmer">{address}</span>
-      </div>
-      <StatusDot
-        tone={active ? HEALTH_TONE[health] : 'muted'}
-        label={active ? HEALTH_WORDS[health] : 'Saved, not in use'}
-        pulse={active && health === 'connecting'}
-      />
+    <div className="flex min-w-0 flex-col gap-[5px]">
+      <SectionHeader>{label}</SectionHeader>
+      <span
+        className={cn(
+          'truncate font-mono text-[13px] font-medium',
+          accent ? 'text-accent' : 'text-text',
+        )}
+      >
+        {value}
+      </span>
     </div>
   )
 }
 
-/** Whatever the last test said, in the words it said it in. */
-function LastContact({ test }: { test: TestResult | null }) {
-  if (!test) {
-    return (
-      <p className="text-[12px] leading-[1.6] text-text-dim">
-        Not tried yet. Testing sends a login and asks the daemon what version it is, and changes
-        nothing on either side.
-      </p>
-    )
-  }
-
-  if (!test.ok) {
-    return (
-      <div className="flex flex-col gap-1.5">
-        <span className="text-[12px] font-semibold text-danger">Failed at {clockOf(test.at)}</span>
-        <p className="text-[12px] leading-[1.6] text-text-dim">{test.reason}</p>
-      </div>
-    )
-  }
-
+/**
+ * A test that did not work, in the words the far end used.
+ *
+ * The reason is the only thing separating a wrong password from a closed
+ * port, and the endpoint beside it says which of the four steps in `connect`
+ * gave up, which is the difference between "not qBittorrent" and "wrong
+ * password".
+ */
+function ErrorCard({ test }: { test: Extract<TestResult, { ok: false }> }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-[12px] font-semibold text-ok">Answered at {clockOf(test.at)}</span>
-      <p className="font-mono text-[11px] text-text-dim">
-        qBittorrent {test.version} · Web API {test.webApiVersion}
-      </p>
+    <div className="flex shrink-0 items-start gap-3 rounded-xl border border-danger bg-danger-soft px-[17px] py-[15px]">
+      <span className="flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-danger-soft text-danger">
+        <icons.alert className="size-[15px]" strokeWidth={2.2} />
+      </span>
+      <div className="flex flex-1 flex-col gap-1">
+        <span className="text-[12.5px] font-semibold text-text">Could not reach this instance</span>
+        <span className="text-[11.5px] leading-[1.5] text-text-dim">{test.reason}</span>
+      </div>
+      <span className="shrink-0 font-mono text-[10.5px] text-danger">{test.endpoint}</span>
     </div>
   )
 }
@@ -124,16 +115,17 @@ function LastContact({ test }: { test: TestResult | null }) {
 /**
  * One instance, in full.
  *
- * The built-in daemon and a saved one share a header, a last-contact card and
- * a bottom bar, and differ in the middle: there is nothing to edit about a
- * daemon whose port rigseed picks at run time and whose password rigseed
- * generated, so it gets an explanation where the others get fields.
+ * Edits are staged. Every field here is addressing for a connection that may
+ * be the one the app is currently running on, and rewriting the address of a
+ * live connection halfway through typing it would drop the session on the
+ * third keystroke. Nothing is written until Save.
  */
 export function ConnectionDetail({
-  connection,
-  builtIn,
+  draft,
+  locked,
+  adding,
   active,
-  health,
+  dirty,
   test,
   testing,
   password,
@@ -142,156 +134,246 @@ export function ConnectionDetail({
   onChange,
   onTest,
   onMakeActive,
+  onSave,
   onRemove,
 }: ConnectionDetailProps) {
-  const label = connection?.label || builtIn.label
-  const address = connection ? baseUrlOf(connection) : builtIn.address
+  if (!draft) return null
+
+  const Icon = adding ? icons.add : icons[instanceKind(draft.host, locked)]
+  const failed = test !== null && !test.ok
+
+  const subtitle = adding
+    ? 'Point this at a qBittorrent instance running its Web UI.'
+    : locked
+      ? 'Runs on this machine, managed by rigseed'
+      : active
+        ? 'Remote instance · in use'
+        : 'Remote instance · saved'
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-6 py-5">
-        <Header label={label} address={address} active={active} health={health} />
+    <div className="flex min-w-0 flex-1 flex-col">
+      {/* Capped at the width the cards have in the prototype at its 1440px
+          canvas, so this is identical there and does not stretch a host field
+          across half a metre of screen on a wide window. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 pt-[22px] pb-6 [&>*]:w-full [&>*]:max-w-[912px]">
+        <div className="flex shrink-0 items-center gap-3.5">
+          <span
+            className={cn(
+              'flex size-[44px] shrink-0 items-center justify-center rounded-[11px]',
+              failed ? 'bg-danger-soft text-danger' : 'bg-accent-soft text-accent',
+            )}
+          >
+            <Icon className="size-[21px]" strokeWidth={1.9} />
+          </span>
+          <div className="flex min-w-0 flex-1 flex-col gap-[5px]">
+            <span className="truncate text-[20px] leading-none font-semibold tracking-[-0.015em] text-text">
+              {adding ? 'New connection' : draft.label || 'Untitled'}
+            </span>
+            <span className="truncate text-[12px] text-text-dim">{subtitle}</span>
+          </div>
+          <Button
+            variant="secondary"
+            onClick={onTest}
+            disabled={testing}
+            icon={<icons.test className="size-[14px]" strokeWidth={2} />}
+          >
+            {testing ? 'Testing…' : test ? 'Test again' : 'Test connection'}
+          </Button>
+        </div>
 
-        {connection ? (
-          <>
-            <Card title="Address" padding="none">
-              <SettingRow label="Name" hint="What this instance is called in the list.">
+        <Card title="Address" api="base url" padding="none">
+          <div className="flex flex-col gap-3.5 px-[18px] py-4">
+            <div className="grid grid-cols-[1.6fr_108px] gap-3">
+              <label className="flex flex-col gap-1.5">
+                <SectionHeader>Host</SectionHeader>
                 <Input
-                  aria-label="Name"
-                  value={connection.label}
-                  onChange={(event) => onChange({ label: event.target.value })}
-                  className="w-[220px]"
-                />
-              </SettingRow>
-              <SettingRow label="Host" hint="A hostname or an IP address. A pasted URL works too.">
-                <Input
+                  mono
                   aria-label="Host"
-                  mono
-                  value={connection.host}
+                  placeholder="192.168.1.24"
+                  disabled={locked}
+                  value={draft.host}
                   onChange={(event) => onChange({ host: event.target.value })}
-                  className="w-[220px]"
                 />
-              </SettingRow>
-              <SettingRow label="Port" hint="qBittorrent's Web UI port, 8080 out of the box.">
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <SectionHeader>Port</SectionHeader>
                 <Input
+                  mono
                   aria-label="Port"
-                  mono
-                  type="number"
-                  value={connection.port}
+                  placeholder="8080"
+                  disabled={locked}
+                  value={draft.port}
                   onChange={(event) => onChange({ port: Number(event.target.value) })}
-                  className="w-[110px]"
                 />
-              </SettingRow>
-              <SettingRow
-                label="Use HTTPS"
-                hint="Only if the daemon or the proxy in front of it serves TLS."
-              >
-                <Switch
-                  label="Use HTTPS"
-                  checked={connection.https}
-                  onChange={(next) => onChange({ https: next })}
-                />
-              </SettingRow>
-              <SettingRow
-                label="Path"
-                hint="Leave empty unless a reverse proxy serves it under a prefix."
-              >
-                <Input
-                  aria-label="Path"
-                  mono
-                  placeholder="/qbt"
-                  value={connection.path}
-                  onChange={(event) => onChange({ path: event.target.value })}
-                  className="w-[220px]"
-                />
-              </SettingRow>
-            </Card>
+              </label>
+            </div>
 
-            <Card title="Authentication" api="auth/login" padding="none">
-              <SettingRow
-                label="Requires a login"
-                hint="qBittorrent can be told to skip this for local or whitelisted addresses."
-              >
+            <label className="flex flex-col gap-1.5">
+              <SectionHeader>Display name</SectionHeader>
+              <Input
+                aria-label="Display name"
+                placeholder="Home NAS"
+                value={draft.label}
+                onChange={(event) => onChange({ label: event.target.value })}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <SectionHeader>Path</SectionHeader>
+              <Input
+                mono
+                aria-label="Path"
+                placeholder="/qbt"
+                disabled={locked}
+                value={draft.path}
+                onChange={(event) => onChange({ path: event.target.value })}
+              />
+            </label>
+
+            <div className="flex items-center gap-3.5 rounded-[9px] bg-surface2 px-3.5 py-3">
+              <div className="flex flex-1 flex-col gap-[3px]">
+                <span className="text-[12.5px] font-semibold text-text">Use HTTPS</span>
+                <span className="text-[11.5px] text-text-dim">
+                  {draft.https
+                    ? 'Requests go over TLS.'
+                    : 'Plain HTTP - fine on a trusted local network.'}
+                </span>
+              </div>
+              <Switch
+                label="Use HTTPS"
+                checked={draft.https}
+                disabled={locked}
+                onChange={(next) => onChange({ https: next })}
+              />
+            </div>
+
+            {locked ? (
+              <span className="text-[11.5px] leading-[1.5] text-pretty text-text-dim">
+                The bundled instance runs on this machine and cannot be moved or removed. Its
+                credentials are generated on first launch and stored in the system keychain.
+              </span>
+            ) : null}
+          </div>
+        </Card>
+
+        {/* Hidden entirely for the bundled instance: rigseed generated that
+            login and there is nothing in it for anybody to fill in. */}
+        {locked ? null : (
+          <Card title="Authentication" api="auth/login" padding="none">
+            <div className="flex flex-col gap-3.5 px-[18px] py-4">
+              <div className="flex items-center gap-3.5">
+                <div className="flex flex-1 flex-col gap-[3px]">
+                  <span className="text-[12.5px] font-semibold text-text">
+                    This instance requires a login
+                  </span>
+                  <span className="text-[11.5px] text-text-dim">
+                    Turn off only if the Web UI is set to bypass authentication.
+                  </span>
+                </div>
                 <Switch
-                  label="Requires a login"
-                  checked={connection.requiresAuth}
+                  label="This instance requires a login"
+                  checked={draft.requiresAuth}
                   onChange={(next) => onChange({ requiresAuth: next })}
                 />
-              </SettingRow>
-              {connection.requiresAuth ? (
+              </div>
+
+              {draft.requiresAuth ? (
                 <>
-                  <SettingRow label="Username" hint="Whatever the daemon's Web UI was set up with.">
-                    <Input
-                      aria-label="Username"
-                      mono
-                      value={connection.username}
-                      onChange={(event) => onChange({ username: event.target.value })}
-                      className="w-[220px]"
-                    />
-                  </SettingRow>
-                  <SettingRow
-                    label="Password"
-                    hint={
-                      keychain
-                        ? "Kept in the system keychain, never in rigseed's own files."
-                        : 'Kept for this session only. There is no keychain to write to here.'
-                    }
-                  >
-                    <Input
-                      aria-label="Password"
-                      type="password"
-                      value={password}
-                      placeholder={keychain ? 'Unchanged' : ''}
-                      onChange={(event) => onPasswordChange(event.target.value)}
-                      className="w-[220px]"
-                    />
-                  </SettingRow>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="flex flex-col gap-1.5">
+                      <SectionHeader>Username</SectionHeader>
+                      <Input
+                        mono
+                        aria-label="Username"
+                        placeholder="admin"
+                        value={draft.username}
+                        onChange={(event) => onChange({ username: event.target.value })}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5">
+                      <SectionHeader>Password</SectionHeader>
+                      <Input
+                        mono
+                        type="password"
+                        aria-label="Password"
+                        placeholder={adding ? '' : 'Unchanged'}
+                        value={password}
+                        onChange={(event) => onPasswordChange(event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <span className="font-mono text-[10.5px] text-text-dimmer">
+                    {keychain
+                      ? 'stored in the system keychain, never in config'
+                      : 'kept for this session only - no keychain here'}
+                  </span>
                 </>
               ) : null}
-            </Card>
-          </>
-        ) : (
-          <Card title="Managed by rigseed" padding="section">
-            <p className="text-[12px] leading-[1.6] text-text-dim">
-              rigseed starts this one itself and looks after it: it picks a free port at every
-              launch and keeps a generated password in the system keychain, so there is nothing here
-              to fill in and nothing worth writing down. Torrents it is running stay where they are
-              whichever instance you switch to.
-            </p>
+            </div>
           </Card>
         )}
 
-        <Card title="Last contact" padding="section">
-          <LastContact test={test} />
-        </Card>
+        {/* Hidden while adding: there is nothing to have contacted yet. */}
+        {!adding && test?.ok ? (
+          <Card title="Last contact" api="app/version · sync/maindata" padding="none">
+            <div className="grid grid-cols-4 gap-[18px] px-[18px] py-3.5">
+              <Stat label="qBittorrent" value={test.version} />
+              <Stat label="Web API" value={test.webApiVersion} />
+              <Stat label="Torrents" value={String(test.torrents)} accent />
+              <Stat label="Network" value={NETWORK_LABEL[test.network]} />
+            </div>
+            <div className="border-t border-line px-[18px] py-2.5">
+              <span className="font-mono text-[10.5px] text-text-dimmer">
+                answered at {clockOf(test.at)}
+              </span>
+            </div>
+          </Card>
+        ) : null}
+
+        {!adding && test && !test.ok ? <ErrorCard test={test} /> : null}
+
+        {!adding && !test ? (
+          <Card title="Last contact" api="app/version · sync/maindata" padding="section">
+            <p className="text-[12px] leading-[1.6] text-text-dim">
+              Not tried yet. Testing sends a login and asks the daemon what it is, and changes
+              nothing on either side.
+            </p>
+          </Card>
+        ) : null}
       </div>
 
-      <div className="flex shrink-0 items-center gap-2.5 border-t border-line bg-sidebar px-6 py-3.5">
-        <Button variant="secondary" size="sm" onClick={onTest} disabled={testing}>
-          {testing ? 'Testing…' : 'Test connection'}
-        </Button>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={onMakeActive}
-          disabled={active}
-          title={active ? 'Already in use' : undefined}
-        >
-          {active ? 'In use' : 'Make active'}
-        </Button>
-        <span className="flex-1" />
-        {/* The built-in daemon has no Remove: rigseed owns it, and a button
+      <div className="flex shrink-0 items-center gap-3 border-t border-line bg-sidebar px-6 py-[13px]">
+        {/* No Remove for the bundled instance: rigseed owns it, and a button
             that could only ever be greyed out is worse than no button. */}
-        {connection ? (
+        {locked || adding ? null : (
           <Button
             variant="danger"
-            size="sm"
             onClick={onRemove}
             icon={<icons.remove className="size-[14px]" strokeWidth={2} />}
           >
             Remove
           </Button>
+        )}
+        <span className="font-mono text-[10.5px] text-text-dimmer">
+          {locked
+            ? 'the bundled instance cannot be removed'
+            : adding
+              ? 'nothing is saved until you add it'
+              : 'removes the saved address only - nothing on that machine changes'}
+        </span>
+        <span className="flex-1" />
+        {!adding && !active ? (
+          <Button
+            variant="secondary"
+            onClick={onMakeActive}
+            icon={<icons.check className="size-[14px]" strokeWidth={2.2} />}
+          >
+            Make active
+          </Button>
         ) : null}
+        <Button variant="primary" onClick={onSave} disabled={!adding && !dirty}>
+          {adding ? 'Add connection' : 'Save changes'}
+        </Button>
       </div>
     </div>
   )
