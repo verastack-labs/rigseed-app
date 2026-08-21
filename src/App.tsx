@@ -2,9 +2,9 @@ import { HashRouter, Route, Routes } from 'react-router'
 
 import { AppShell } from '@/components/shell/app-shell'
 import { ApiProvider } from '@/services/context'
-import { Placeholder } from '@/pages/placeholder'
 import { TorrentDetail } from '@/pages/torrent-detail'
 import { Categories } from '@/pages/categories'
+import { Connections } from '@/pages/connections'
 import { Logs } from '@/pages/logs'
 import { Rss } from '@/pages/rss'
 import { Search } from '@/pages/search'
@@ -33,10 +33,7 @@ export function App() {
             <Route path="rss" element={<Rss />} />
             <Route path="categories" element={<Categories />} />
             <Route path="logs" element={<Logs />} />
-            <Route
-              path="connections"
-              element={<Placeholder title="Connections" tier="V2" api="auth/login" />}
-            />
+            <Route path="connections" element={<Connections />} />
             <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>

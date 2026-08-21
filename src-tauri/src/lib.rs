@@ -1,6 +1,7 @@
 pub mod daemon;
 pub mod http;
 pub mod icon;
+mod secrets;
 
 use std::sync::Mutex;
 
@@ -331,6 +332,9 @@ pub fn run() {
         .manage(http::Http::default())
         .manage(WebUiPort::default())
         .invoke_handler(tauri::generate_handler![
+            secrets::secret_set,
+            secrets::secret_get,
+            secrets::secret_delete,
             bundled_connection,
             daemon_running,
             report_connection,
