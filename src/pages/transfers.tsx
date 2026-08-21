@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
+import { useNavigate } from 'react-router'
 import { useShallow } from 'zustand/react/shallow'
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -23,15 +24,19 @@ import {
   tagCounts,
 } from '@/features/transfers/filter'
 import { icons } from '@/lib/icons'
+import { nextIndex, useHotkeys } from '@/lib/use-hotkeys'
 import { useApi } from '@/services/api-context'
 import { useThemeStore, type Layout } from '@/state/theme-store'
 import { selectTorrentList, useTorrentStore } from '@/state/torrent-store'
 import { hasActiveFilters, useTransfersStore } from '@/state/transfers-store'
 import { useSyncPoll } from '@/state/use-sync-poll'
+import { isPaused } from '@/utils/format'
 
 export function Transfers() {
   useSyncPoll()
   const api = useApi()
+  const navigate = useNavigate()
+  const searchRef = useRef<HTMLInputElement>(null)
 
   const torrents = useTorrentStore(useShallow(selectTorrentList))
   const serverState = useTorrentStore((s) => s.serverState)
@@ -57,6 +62,7 @@ export function Transfers() {
     setQuery,
     setLayout,
     toggleSelected,
+    selectOnly,
     clearSelection,
     clearFilters,
   } = useTransfersStore()
@@ -101,6 +107,69 @@ export function Transfers() {
     ...act,
   }
 
+  /**
+   * The keyboard map, per `motion-and-states.md` section 6.
+   *
+   * Everything acts on the selection, never on `scope`. The toolbar falls back
+   * to everything in view when nothing is selected, which is fine behind a
+   * labelled button and alarming behind a single keystroke: Space would pause
+   * two hundred torrents and Delete would offer to remove them.
+   *
+   * The cursor is the most recently touched row rather than a separate piece
+   * of state. `toggleSelected` appends, so the last entry is the one the user
+   * last acted on, and arrowing from there is what a list is expected to do.
+   */
+  const cursor = visible.findIndex((t) => t.hash === selected[selected.length - 1])
+
+  const move = (delta: number) => {
+    const next = visible[nextIndex(cursor, delta, visible.length)]
+    if (!next) return
+    selectOnly([next.hash])
+    // The row may be below the fold, and a selection nobody can see is worse
+    // than no selection. `nearest` rather than `center` so a row already on
+    // screen does not make the list jump under a held arrow key.
+    document
+      .querySelector(`[data-hash="${next.hash}"]`)
+      ?.scrollIntoView({ block: 'nearest', behavior: 'auto' })
+  }
+
+  useHotkeys([
+    { key: '/', run: () => searchRef.current?.focus() },
+    { key: 'ArrowDown', run: () => move(1) },
+    { key: 'ArrowUp', run: () => move(-1) },
+    {
+      key: 'a',
+      mod: true,
+      run: () => selectOnly(visible.map((t) => t.hash)),
+    },
+    {
+      key: 'Enter',
+      run: () => {
+        const torrent = visible[cursor]
+        if (torrent) void navigate(`/torrent/${torrent.hash}`)
+      },
+    },
+    {
+      key: ' ',
+      run: () => {
+        if (!selected.length) return
+        // Resume only when every selected torrent is already paused. A mixed
+        // selection pauses, which is the reversible half of the pair.
+        const chosen = visible.filter((t) => selected.includes(t.hash))
+        const allPaused = chosen.length > 0 && chosen.every((t) => isPaused(t.state))
+        if (allPaused) act.onResume(selected)
+        else act.onPause(selected)
+      },
+    },
+    {
+      key: 'Delete',
+      run: () => {
+        if (selected.length) act.onRemove(selected)
+      },
+    },
+    { key: 'Escape', run: clearSelection },
+  ])
+
   return (
     <div className="relative flex h-full">
       <Sidebar
@@ -136,6 +205,7 @@ export function Transfers() {
             <Input
               mono
               size="sm"
+              ref={searchRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search torrents…"
