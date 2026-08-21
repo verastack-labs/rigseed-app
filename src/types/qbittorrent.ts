@@ -379,3 +379,39 @@ export interface PeerBan {
   blocked: boolean
   reason: string
 }
+
+/** One hit. Names are qBittorrent's, read off a live 5.2.3 rather than guessed. */
+export interface SearchResult {
+  fileName: string
+  fileSize: number
+  fileUrl: string
+  /** The page a human would read. Often the same host as `siteUrl`. */
+  descrLink: string
+  siteUrl: string
+  nbSeeders: number
+  nbLeechers: number
+  /** Not sent by the API. Filled in from the engine that returned the hit. */
+  engine?: string
+}
+
+/** `search/status`, one entry per job the daemon still holds. */
+export interface SearchJobStatus {
+  id: number
+  status: 'Running' | 'Stopped'
+  total: number
+}
+
+export interface SearchResults {
+  results: SearchResult[]
+  status: 'Running' | 'Stopped'
+  total: number
+}
+
+export interface SearchPlugin {
+  name: string
+  fullName: string
+  url: string
+  version: string
+  enabled: boolean
+  supportedCategories: { id: string; name: string }[]
+}

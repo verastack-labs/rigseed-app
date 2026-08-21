@@ -6,6 +6,7 @@ import { Placeholder } from '@/pages/placeholder'
 import { TorrentDetail } from '@/pages/torrent-detail'
 import { Categories } from '@/pages/categories'
 import { Logs } from '@/pages/logs'
+import { Search } from '@/pages/search'
 import { Settings } from '@/pages/settings'
 import { Transfers } from '@/pages/transfers'
 
@@ -27,10 +28,7 @@ export function App() {
             {/* Hash rather than an index, because the daemon identifies a
                 torrent by hash and nothing else survives a reorder. */}
             <Route path="torrent/:hash" element={<TorrentDetail />} />
-            <Route
-              path="search"
-              element={<Placeholder title="Search" tier="V2" api="search/start" />}
-            />
+            <Route path="search" element={<Search />} />
             <Route path="rss" element={<Placeholder title="RSS" tier="V2" api="rss/items" />} />
             <Route path="categories" element={<Categories />} />
             <Route path="logs" element={<Logs />} />
