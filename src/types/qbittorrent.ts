@@ -343,6 +343,18 @@ export interface Preferences {
   max_ratio_enabled: boolean
   max_ratio: number
 
+  /**
+   * RSS.
+   *
+   * `rss_processing_enabled` is off by default, and while it is off the daemon
+   * never refreshes a feed. A feed list that quietly never updates is the
+   * worst version of that, so the screen says it.
+   */
+  rss_processing_enabled: boolean
+  rss_auto_downloading_enabled: boolean
+  /** Minutes. */
+  rss_refresh_interval: number
+
   // Web UI
   web_ui_port: number
   web_ui_csrf_protection_enabled: boolean
@@ -414,4 +426,66 @@ export interface SearchPlugin {
   version: string
   enabled: boolean
   supportedCategories: { id: string; name: string }[]
+}
+
+/**
+ * One article in a feed.
+ *
+ * `isRead` is absent rather than false on an unread article in some versions,
+ * so nothing here may test it for equality with `false`.
+ */
+export interface RssArticle {
+  id: string
+  title: string
+  /** The `.torrent` or magnet the item points at. */
+  torrentURL: string
+  /** The page a human would read. */
+  link: string
+  description?: string
+  /** RFC 2822, as the feed published it. */
+  date: string
+  isRead?: boolean
+  category?: string
+  size?: number
+  author?: string
+}
+
+/**
+ * A feed as `rss/items?withData=true` reports it.
+ *
+ * The response is a tree keyed by name, and a folder is the same shape minus
+ * `uid`, so `uid` is what tells the two apart. See `flattenFeeds`.
+ */
+export interface RssFeed {
+  uid: string
+  url: string
+  title: string
+  lastBuildDate: string
+  isLoading: boolean
+  hasError: boolean
+  articles: RssArticle[]
+}
+
+/** A feed plus where it sits in the tree, which the API only encodes in keys. */
+export interface RssFeedEntry extends RssFeed {
+  /** The key path, which is also what `rss/removeItem` and friends take. */
+  path: string
+  /** The last segment, which is what a person calls the feed. */
+  name: string
+}
+
+export interface RssRule {
+  enabled: boolean
+  mustContain: string
+  mustNotContain: string
+  useRegex: boolean
+  episodeFilter: string
+  smartFilter: boolean
+  previouslyMatchedEpisodes: string[]
+  affectedFeeds: string[]
+  ignoreDays: number
+  lastMatch: string
+  addPaused: boolean | null
+  assignedCategory: string
+  savePath: string
 }

@@ -5,6 +5,7 @@ import type {
   LogEntry,
   PeerBan,
   Preferences,
+  RssRule,
   SearchPlugin,
   SearchResult,
   MainData,
@@ -90,6 +91,10 @@ const PREFERENCES: Preferences = {
   anonymous_mode: false,
   max_ratio_enabled: false,
   max_ratio: -1,
+
+  rss_processing_enabled: true,
+  rss_auto_downloading_enabled: true,
+  rss_refresh_interval: 30,
 
   web_ui_port: 8080,
   web_ui_csrf_protection_enabled: true,
@@ -224,6 +229,95 @@ const HITS: SearchResult[] = [
   },
 ]
 
+/**
+ * The RSS tree, with one feed inside a folder.
+ *
+ * The nesting is the point. `rss/items` answers a tree keyed by name and a
+ * folder is the same shape minus `uid`, so a mock that was flat would never
+ * exercise the only thing that tells the two apart.
+ *
+ * One article deliberately has no `isRead` at all rather than `isRead: false`,
+ * because that is what the daemon sends and code that compares against false
+ * gets it backwards.
+ */
+const RSS_TREE: Record<string, unknown> = {
+  'Linux ISOs': {
+    uid: '{11111111-1111-1111-1111-111111111111}',
+    url: 'https://linuxtracker.org/rss.php',
+    title: 'Linux ISOs',
+    lastBuildDate: 'Wed, 20 Aug 2026 18:00:00 +0000',
+    isLoading: false,
+    hasError: false,
+    articles: [
+      {
+        id: 'a1',
+        title: 'ubuntu-24.04.2-desktop-amd64.iso',
+        torrentURL: 'magnet:?xt=urn:btih:aaaa1111',
+        link: 'https://linuxtracker.org/a1',
+        date: 'Wed, 20 Aug 2026 17:40:00 +0000',
+        size: 5_700_000_000,
+        category: 'Software',
+      },
+      {
+        id: 'a2',
+        title: 'debian-12.9.0-amd64-netinst.iso',
+        torrentURL: 'magnet:?xt=urn:btih:bbbb2222',
+        link: 'https://linuxtracker.org/a2',
+        date: 'Wed, 20 Aug 2026 12:10:00 +0000',
+        isRead: true,
+        size: 661_000_000,
+      },
+    ],
+  },
+  Archives: {
+    'Public Domain': {
+      uid: '{22222222-2222-2222-2222-222222222222}',
+      url: 'https://archive.org/rss',
+      title: 'Public Domain',
+      lastBuildDate: 'Wed, 20 Aug 2026 09:00:00 +0000',
+      isLoading: false,
+      hasError: false,
+      articles: [
+        {
+          id: 'b1',
+          title: 'Project Gutenberg 2025 complete archive',
+          torrentURL: 'magnet:?xt=urn:btih:dddd4444',
+          link: 'https://archive.org/b1',
+          date: 'Wed, 20 Aug 2026 08:20:00 +0000',
+          size: 82_000_000_000,
+        },
+      ],
+    },
+  },
+  'Gone Quiet': {
+    uid: '{33333333-3333-3333-3333-333333333333}',
+    url: 'https://example.org/quiet.xml',
+    title: 'Gone Quiet',
+    lastBuildDate: '',
+    isLoading: false,
+    hasError: false,
+    articles: [],
+  },
+}
+
+const RSS_RULES: Record<string, RssRule> = {
+  'Linux releases': {
+    enabled: true,
+    mustContain: 'amd64',
+    mustNotContain: 'netinst',
+    useRegex: false,
+    episodeFilter: '',
+    smartFilter: false,
+    previouslyMatchedEpisodes: [],
+    affectedFeeds: ['https://linuxtracker.org/rss.php'],
+    ignoreDays: 0,
+    lastMatch: 'Wed, 20 Aug 2026 17:40:00 +0000',
+    addPaused: null,
+    assignedCategory: 'Software',
+    savePath: '',
+  },
+}
+
 const CATEGORIES: Record<string, Category> = {
   Linux: { name: 'Linux', savePath: '/downloads/linux' },
   Archives: { name: 'Archives', savePath: '/downloads/archives' },
@@ -323,6 +417,29 @@ export interface MockTransportOptions {
   latency?: number
 }
 
+/**
+ * Walk the RSS tree by its key path.
+ *
+ * Backslash separated, which is the API's own separator for these and not a
+ * file path, so it does not vary by platform.
+ */
+function nodeAt(tree: Record<string, unknown>, path: string): unknown {
+  let node: unknown = tree
+  for (const segment of path.split('\\').filter(Boolean)) {
+    if (!node || typeof node !== 'object') return undefined
+    node = (node as Record<string, unknown>)[segment]
+  }
+  return node
+}
+
+function removeAt(tree: Record<string, unknown>, path: string): void {
+  const segments = path.split('\\').filter(Boolean)
+  const last = segments.pop()
+  if (!last) return
+  const parent = nodeAt(tree, segments.join('\\'))
+  if (parent && typeof parent === 'object') delete (parent as Record<string, unknown>)[last]
+}
+
 export function createMockTransport({
   torrentCount = 6,
   seed = 7,
@@ -349,6 +466,8 @@ export function createMockTransport({
    */
   const jobs = new Map<number, { ticks: number; stopped: boolean }>()
   let nextJobId = 1
+  const rssTree: Record<string, unknown> = structuredClone(RSS_TREE)
+  const rssRules: Record<string, RssRule> = structuredClone(RSS_RULES)
   const tags = [...TAGS]
 
   let rid = 0
@@ -672,6 +791,12 @@ export function createMockTransport({
       if (path === 'app/version') return wait('v5.2.3' as T)
       if (path === 'app/preferences') return wait(preferences as T)
       if (path === 'search/plugins') return wait(plugins as T)
+      if (path === 'rss/items') return wait(rssTree as T)
+      if (path === 'rss/rules') return wait(rssRules as T)
+      if (path === 'rss/matchingArticles') {
+        // Only the titles, keyed by feed, which is what the endpoint sends.
+        return wait({ 'Linux ISOs': ['ubuntu-24.04.2-desktop-amd64.iso'] } as T)
+      }
       if (path === 'search/status') {
         return wait(
           [...jobs.entries()].map(([id, job]) => ({
@@ -760,6 +885,37 @@ export function createMockTransport({
           categories[name] = { name, savePath: String(body?.savePath ?? '') }
           pendingCategories.add(name)
         }
+      }
+      if (path === 'rss/markAsRead') {
+        const itemPath = String(body?.['itemPath'] ?? '')
+        const articleId = body?.['articleId'] === undefined ? null : String(body['articleId'])
+        const node = nodeAt(rssTree, itemPath) as { articles?: { id: string; isRead?: boolean }[] }
+        for (const article of node?.articles ?? []) {
+          if (articleId === null || article.id === articleId) article.isRead = true
+        }
+      }
+      if (path === 'rss/removeItem') {
+        removeAt(rssTree, String(body?.['path'] ?? ''))
+      }
+      if (path === 'rss/addFeed') {
+        const at = String(body?.['path'] ?? '')
+        const name = at.split('\\').pop() ?? at
+        rssTree[name] = {
+          uid: `{mock-${name}}`,
+          url: String(body?.['url'] ?? ''),
+          title: name,
+          lastBuildDate: '',
+          isLoading: false,
+          hasError: false,
+          articles: [],
+        }
+      }
+      if (path === 'rss/setRule') {
+        const name = String(body?.['ruleName'] ?? '')
+        if (name) rssRules[name] = JSON.parse(String(body?.['ruleDef'] ?? '{}')) as RssRule
+      }
+      if (path === 'rss/removeRule') {
+        delete rssRules[String(body?.['ruleName'] ?? '')]
       }
       if (path === 'search/start') {
         const id = nextJobId++

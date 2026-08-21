@@ -4,6 +4,7 @@ import {
   ArrowUpFromLine,
   BookOpen,
   CircleCheck,
+  Filter,
   Hourglass,
   Layers,
   Brush,
@@ -50,6 +51,8 @@ export const icons = {
   complete: CircleCheck,
   active: Activity,
   stalled: Hourglass,
+  /** Auto-download rules, which are a filter over a feed. */
+  filter: Filter,
   palette: Palette,
   resume: Play,
   pause: Pause,
