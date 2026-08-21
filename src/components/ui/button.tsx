@@ -17,7 +17,11 @@ const buttonVariants = cva(
     'inline-flex shrink-0 items-center justify-center gap-[7px] whitespace-nowrap',
     'rounded-lg border font-sans',
     'transition-[background-color,color,border-color,filter,transform] duration-fast',
-    'active:scale-[0.96]',
+    // motion-safe, because the press-scale is decoration. The motion tokens
+    // handle overshoot and duration on their own, but a transform has no
+    // token to flatten it, so the variant is the only place it can be
+    // dropped for somebody who asked for less movement.
+    'motion-safe:active:scale-[0.96]',
     'disabled:pointer-events-none disabled:opacity-45',
   ],
   {

@@ -90,7 +90,7 @@ export function AddFab({ onSelect, className }: AddFabProps) {
                   'flex size-[42px] items-center justify-center border-line bg-surface text-text-dim',
                   'rounded-full border shadow-[var(--shadow-float)] backdrop-blur-[8px]',
                   'transition-[background-color,color,transform] duration-quick',
-                  'hover:scale-[1.08] hover:bg-accent-hover hover:text-accent',
+                  'hover:bg-accent-hover hover:text-accent motion-safe:hover:scale-[1.08]',
                 )}
               >
                 <option.Icon className="size-[17px]" strokeWidth={2} />
@@ -108,8 +108,9 @@ export function AddFab({ onSelect, className }: AddFabProps) {
           className={cn(
             'flex size-[58px] items-center justify-center rounded-full bg-accent text-accent-on',
             'shadow-[var(--shadow-fab)] transition-[transform,box-shadow] duration-quick',
-            'hover:scale-[1.09] hover:shadow-[var(--shadow-fab-hover)] active:scale-[0.96]',
-            open && 'scale-[1.04]',
+            'hover:shadow-[var(--shadow-fab-hover)]',
+            'motion-safe:hover:scale-[1.09] motion-safe:active:scale-[0.96]',
+            open && 'motion-safe:scale-[1.04]',
           )}
         >
           <Plus
