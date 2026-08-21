@@ -16,6 +16,11 @@ export interface FeedColumnProps {
   onAddFeed: () => void
   /** From `rss_refresh_interval`, in minutes. */
   refreshMinutes: number
+  /**
+   * `rss_processing_enabled`. While it is off the daemon never refreshes a
+   * feed, and a list that quietly never updates is the worst version of that.
+   */
+  processing: boolean
   className?: string
 }
 
@@ -53,6 +58,7 @@ export function FeedColumn({
   onRefreshAll,
   onAddFeed,
   refreshMinutes,
+  processing,
   className,
 }: FeedColumnProps) {
   const totalUnread = feeds.reduce((sum, feed) => sum + unreadCount(feed), 0)
@@ -170,7 +176,16 @@ export function FeedColumn({
           {feeds.length} feed{feeds.length === 1 ? '' : 's'} · {totalUnread} unread
         </span>
         <span className="flex-1" />
-        <span className="font-mono text-[10.5px] text-text-dimmer">every {refreshMinutes} min</span>
+        <span
+          className={cn('font-mono text-[10.5px]', processing ? 'text-text-dimmer' : 'text-warn')}
+          title={
+            processing
+              ? undefined
+              : 'RSS processing is off in Settings, so nothing refreshes on its own.'
+          }
+        >
+          {processing ? `every ${refreshMinutes} min` : 'refresh is off'}
+        </span>
       </div>
     </div>
   )

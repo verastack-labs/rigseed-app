@@ -343,6 +343,18 @@ export interface Preferences {
   max_ratio_enabled: boolean
   max_ratio: number
 
+  /**
+   * RSS.
+   *
+   * `rss_processing_enabled` is off by default, and while it is off the daemon
+   * never refreshes a feed. A feed list that quietly never updates is the
+   * worst version of that, so the screen says it.
+   */
+  rss_processing_enabled: boolean
+  rss_auto_downloading_enabled: boolean
+  /** Minutes. */
+  rss_refresh_interval: number
+
   // Web UI
   web_ui_port: number
   web_ui_csrf_protection_enabled: boolean

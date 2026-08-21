@@ -92,6 +92,10 @@ const PREFERENCES: Preferences = {
   max_ratio_enabled: false,
   max_ratio: -1,
 
+  rss_processing_enabled: true,
+  rss_auto_downloading_enabled: true,
+  rss_refresh_interval: 30,
+
   web_ui_port: 8080,
   web_ui_csrf_protection_enabled: true,
   web_ui_clickjacking_protection_enabled: true,

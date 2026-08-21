@@ -81,6 +81,7 @@ const setup = (props: Partial<React.ComponentProps<typeof FeedColumn>> = {}) =>
       onRefreshAll={vi.fn()}
       onAddFeed={vi.fn()}
       refreshMinutes={30}
+      processing
       {...props}
     />,
   )
@@ -134,6 +135,14 @@ describe('FeedColumn', () => {
   it('states the refresh interval rather than leaving it a mystery', () => {
     setup()
     expect(screen.getByText('every 30 min')).toBeInTheDocument()
+  })
+
+  it('says refresh is off rather than quoting an interval nothing honours', () => {
+    // rss_processing_enabled is off by default, and while it is off the
+    // daemon never refreshes a feed. Quoting an interval then is a lie.
+    setup({ processing: false })
+    expect(screen.getByText('refresh is off')).toBeInTheDocument()
+    expect(screen.queryByText('every 30 min')).not.toBeInTheDocument()
   })
 
   it('explains what a feed is when there are none', () => {
