@@ -128,6 +128,24 @@ describe('isPaused', () => {
   })
 })
 
+describe('STATE_LABEL', () => {
+  it('does not give two states the same word and different colours', () => {
+    // uploading and stalledUP both read "seeding", separated only by the dot:
+    // accent for one, grey for the other. That reads as a paused torrent to
+    // anybody who has not learned the palette, and it is what the status
+    // rules exist to prevent.
+    expect(STATE_LABEL.uploading).toBe('seeding')
+    expect(STATE_LABEL.stalledUP).toBe('idle')
+    expect(STATE_LABEL.stalledUP).not.toBe(STATE_LABEL.uploading)
+  })
+
+  it('does not call an idle seed stalled either', () => {
+    // Wrong in the other direction. Nothing is wrong with a seed nobody
+    // wants right now, and "stalled" is what a broken download says.
+    expect(STATE_LABEL.stalledUP).not.toBe(STATE_LABEL.stalledDL)
+  })
+})
+
 describe('stateTone', () => {
   it('never gives paused or stalled the accent', () => {
     // The design rule: attention is spent on live things only.

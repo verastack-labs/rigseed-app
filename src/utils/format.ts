@@ -76,7 +76,21 @@ export const STATE_LABEL: Record<TorrentState, string> = {
   metaDL: 'fetching metadata',
   forcedDL: 'downloading',
   uploading: 'seeding',
-  stalledUP: 'seeding',
+  /**
+   * Idle, not stalled and not the same as seeding.
+   *
+   * `stalledUP` is a complete torrent with nobody currently downloading from
+   * it, which is the ordinary resting state of a finished torrent rather than
+   * a fault. It used to read `seeding`, the same word `uploading` gets, with
+   * only the dot colour telling them apart: grey for this one, accent for the
+   * live one. Two states sharing a word and differing by colour is the thing
+   * the status rules exist to prevent, and it reads as a paused torrent to
+   * anybody who has not learned the palette.
+   *
+   * `stalled` would be wrong in the other direction. Nothing is wrong with a
+   * seed nobody wants right now.
+   */
+  stalledUP: 'idle',
   forcedUP: 'seeding',
   pausedDL: 'paused',
   pausedUP: 'paused',
@@ -106,7 +120,7 @@ export const STATE_PLAIN: Record<TorrentState, string> = {
   metaDL: 'looking up details',
   forcedDL: 'downloading',
   uploading: 'sharing with others',
-  stalledUP: 'sharing with others',
+  stalledUP: 'ready to share, nobody wants it right now',
   forcedUP: 'sharing with others',
   pausedDL: 'paused',
   pausedUP: 'paused',
