@@ -7,6 +7,9 @@ import {
   formatPercent,
   formatRatio,
   formatSpeed,
+  isPaused,
+  STATE_LABEL,
+  STATE_PLAIN,
   stateTone,
 } from '@/utils/format'
 import { ETA_INFINITE } from '@/types/qbittorrent'
@@ -99,11 +102,57 @@ describe('formatSpeed', () => {
   })
 })
 
+describe('isPaused', () => {
+  it('has a word for a stopped torrent in both label maps', () => {
+    // A state with no entry renders a status dot with nothing beside it,
+    // which the design rules forbid outright: never encode state by colour
+    // alone. That is exactly what a real 5.x daemon produced.
+    expect(STATE_LABEL.stoppedUP).toBe('paused')
+    expect(STATE_PLAIN.stoppedDL).toBe('paused')
+  })
+
+  it('knows both names for the same state', () => {
+    // 5.x renamed paused* to stopped* alongside the endpoint rename. Matching
+    // only the old spelling made every stopped torrent on a modern daemon
+    // read as running, with no word beside its dot and no muted tone.
+    expect(isPaused('pausedDL')).toBe(true)
+    expect(isPaused('pausedUP')).toBe(true)
+    expect(isPaused('stoppedDL')).toBe(true)
+    expect(isPaused('stoppedUP')).toBe(true)
+  })
+
+  it('does not catch anything else', () => {
+    expect(isPaused('stalledUP')).toBe(false)
+    expect(isPaused('downloading')).toBe(false)
+    expect(isPaused('queuedDL')).toBe(false)
+  })
+})
+
+describe('STATE_LABEL', () => {
+  it('does not give two states the same word and different colours', () => {
+    // uploading and stalledUP both read "seeding", separated only by the dot:
+    // accent for one, grey for the other. That reads as a paused torrent to
+    // anybody who has not learned the palette, and it is what the status
+    // rules exist to prevent.
+    expect(STATE_LABEL.uploading).toBe('seeding')
+    expect(STATE_LABEL.stalledUP).toBe('idle')
+    expect(STATE_LABEL.stalledUP).not.toBe(STATE_LABEL.uploading)
+  })
+
+  it('does not call an idle seed stalled either', () => {
+    // Wrong in the other direction. Nothing is wrong with a seed nobody
+    // wants right now, and "stalled" is what a broken download says.
+    expect(STATE_LABEL.stalledUP).not.toBe(STATE_LABEL.stalledDL)
+  })
+})
+
 describe('stateTone', () => {
   it('never gives paused or stalled the accent', () => {
     // The design rule: attention is spent on live things only.
     expect(stateTone('pausedDL')).toBe('muted')
     expect(stateTone('pausedUP')).toBe('muted')
+    expect(stateTone('stoppedDL')).toBe('muted')
+    expect(stateTone('stoppedUP')).toBe('muted')
     expect(stateTone('stalledDL')).toBe('muted')
   })
 

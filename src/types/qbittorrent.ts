@@ -19,6 +19,17 @@ export type TorrentState =
   | 'forcedUP'
   | 'pausedDL'
   | 'pausedUP'
+  /**
+   * What 5.x calls a paused torrent.
+   *
+   * The same rename that turned `torrents/pause` into `torrents/stop`, which
+   * the client already handles through `capabilitiesFor`. The state strings
+   * went with it and were missed: a 5.x daemon reports `stoppedUP` where a
+   * 4.x one reports `pausedUP`. Both are listed because rigseed connects to
+   * whatever is on the other end, not only to the daemon it bundles.
+   */
+  | 'stoppedDL'
+  | 'stoppedUP'
   | 'queuedDL'
   | 'queuedUP'
   | 'checkingDL'

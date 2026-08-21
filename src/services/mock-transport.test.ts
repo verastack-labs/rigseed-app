@@ -81,7 +81,9 @@ describe('mock transport', () => {
 
     await api.torrents.pause([hash])
     const info = await api.torrents.info()
-    expect(info.find((t) => t.hash === hash)!.state).toMatch(/^paused/)
+    // stopped, not paused. The mock answers 2.11.2 to app/webapiVersion, and
+    // a daemon on that version reports the renamed states.
+    expect(info.find((t) => t.hash === hash)!.state).toMatch(/^stopped/)
   })
 
   it('deleting removes the torrent', async () => {

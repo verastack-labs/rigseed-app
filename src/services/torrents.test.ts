@@ -113,7 +113,7 @@ describe('adding against the mock', () => {
     await api.torrents.add({ urls: ['magnet:?xt=urn:btih:c0ffee'], paused: true })
 
     const next = await poll(api, first.rid)
-    expect(next.torrents?.['c0ffee']).toMatchObject({ name: 'c0ffee', state: 'pausedDL' })
+    expect(next.torrents?.['c0ffee']).toMatchObject({ name: 'c0ffee', state: 'stoppedDL' })
   })
 
   it('makes a category usable immediately after creating it', async () => {

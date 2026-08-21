@@ -361,7 +361,12 @@ function makeTorrent(index: number, rand: () => number): Torrent {
   const progress = index === 1 ? 1 : Math.min(0.98, rand())
   const done = progress >= 1
   const paused = index === 2
-  const state: TorrentState = paused ? 'pausedDL' : done ? 'uploading' : 'downloading'
+  // stopped* rather than paused*, because this mock answers 2.11.2 to
+  // app/webapiVersion and a daemon on that version reports the new names.
+  // Emitting the old ones made the mock agree with code that only understood
+  // the old ones, which is how a real 5.x daemon showing stopped torrents as
+  // running got past a green suite.
+  const state: TorrentState = paused ? 'stoppedDL' : done ? 'uploading' : 'downloading'
 
   const size = Math.round((1 + rand() * 8) * 1_000_000_000)
   const hash = `hash${index.toString().padStart(2, '0')}`
@@ -644,7 +649,7 @@ export function createMockTransport({
   function tick(): Record<string, Partial<Torrent>> {
     const changed: Record<string, Partial<Torrent>> = {}
     for (const t of torrents.values()) {
-      if (t.state === 'pausedDL' || t.state === 'pausedUP') continue
+      if (t.state === 'stoppedDL' || t.state === 'stoppedUP') continue
 
       if (t.progress < 1) {
         const step = (t.dlspeed || 4_000_000) / t.size
@@ -863,7 +868,7 @@ export function createMockTransport({
       if (path === 'torrents/pause' || path === 'torrents/stop') {
         for (const h of hashes) {
           const t = torrents.get(h)
-          if (t) t.state = t.progress >= 1 ? 'pausedUP' : 'pausedDL'
+          if (t) t.state = t.progress >= 1 ? 'stoppedUP' : 'stoppedDL'
         }
       }
       if (path === 'torrents/resume' || path === 'torrents/start') {
@@ -1159,7 +1164,7 @@ export function createMockTransport({
           // Straight from the form, so what the modal collected is what shows
           // up in the list a tick later. That round trip is the whole point of
           // the mock.
-          state: paused ? 'pausedDL' : 'downloading',
+          state: paused ? 'stoppedDL' : 'downloading',
           dlspeed: paused ? 0 : seed.dlspeed,
           upspeed: 0,
           category: text('category'),
