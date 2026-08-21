@@ -1,30 +1,46 @@
-import { StatusDot } from '@/components/ui/status-dot'
+import { StatusDot, type StatusTone } from '@/components/ui/status-dot'
 import { cn } from '@/lib/utils'
+import type { ConnectionState } from '@/services/connect'
 
 export interface FooterProps {
   /** Counts for the current screen, already formatted. */
   counts?: string
   /** The endpoints this screen exercises. Keep accurate: it is documentation. */
   api?: string
-  connected?: boolean
-  /** From app/version and app/webapiVersion at runtime. */
+  /**
+   * The app's connection.
+   *
+   * Not a boolean, because there are four answers and two of them are not
+   * "connected or reconnecting": sitting on sample data is a different thing
+   * from a dropped connection, and the footer used to call both of them
+   * connected.
+   */
+  status?: ConnectionState['status']
+  /** From app/version and app/webapiVersion at runtime. Omitted when unknown. */
   daemon?: string
   className?: string
+}
+
+const STATUS: Record<ConnectionState['status'], { tone: StatusTone; label: string }> = {
+  connected: { tone: 'accent2', label: 'connected' },
+  connecting: { tone: 'muted', label: 'connecting' },
+  mock: { tone: 'warn', label: 'sample data' },
+  failed: { tone: 'warn', label: 'not connected' },
 }
 
 /**
  * The status footer.
  *
- * On connection loss the tick turns warn and reads "reconnecting", and the app
- * keeps the last known data on screen rather than blanking it.
+ * Both slots used to be fabricated: the tick read "connected" from a default
+ * argument and the version read `qbittorrent-nox 5.2.3 / api 2.11.2` from a
+ * string in this file, on every screen, whether or not a daemon had ever
+ * answered. Measured against a real daemon the hardcoded version was wrong as
+ * well as invented. Neither has a default now, so a caller that says nothing
+ * gets "connecting" and an empty version rather than a confident lie.
  */
-export function Footer({
-  counts,
-  api,
-  connected = true,
-  daemon = 'qbittorrent-nox 5.2.3 / api 2.11.2',
-  className,
-}: FooterProps) {
+export function Footer({ counts, api, status = 'connecting', daemon, className }: FooterProps) {
+  const { tone, label } = STATUS[status]
+
   return (
     <footer
       className={cn(
@@ -33,16 +49,11 @@ export function Footer({
         className,
       )}
     >
-      <StatusDot
-        tone={connected ? 'accent2' : 'warn'}
-        label={connected ? 'connected' : 'reconnecting'}
-        pulse={!connected}
-        mono
-      />
+      <StatusDot tone={tone} label={label} pulse={status === 'connecting'} mono />
       {counts ? <span>{counts}</span> : null}
       {api ? <span className="truncate">{api}</span> : null}
       <span className="flex-1" />
-      <span className="shrink-0">{daemon}</span>
+      {daemon ? <span className="shrink-0">{daemon}</span> : null}
     </footer>
   )
 }

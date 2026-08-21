@@ -159,7 +159,7 @@ export function Connections() {
   const problem = problemWith(draft, connections)
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex h-full min-h-0">
       <InstanceColumn
         builtIn={{ label: 'Built into rigseed', address: builtInAddress }}
         connections={connections}

@@ -9,6 +9,7 @@ import { NavRail } from '@/components/ui/nav-rail'
 import { RailItem } from '@/components/ui/rail-item'
 import { BrandMark } from '@/components/brand-mark'
 import { icons } from '@/lib/icons'
+import { useConnection } from '@/services/api-context'
 import { useThemeAttributes } from '@/state/use-theme-attributes'
 import { useWindowIcon } from '@/state/use-window-icon'
 
@@ -36,6 +37,7 @@ export function AppShell() {
   const [railExpanded, setRailExpanded] = useState(false)
   const { pathname } = useLocation()
   const current = DESTINATIONS.find((d) => d.to === pathname)
+  const connection = useConnection()
 
 
   return (
@@ -80,7 +82,14 @@ export function AppShell() {
         <main className="min-h-0 flex-1 overflow-auto">
           <Outlet />
         </main>
-        <Footer counts={current?.label.toLowerCase() ?? ''} api="sync/maindata" />
+        <Footer
+          counts={current?.label.toLowerCase() ?? ''}
+          api="sync/maindata"
+          status={connection.status}
+          {...(connection.status === 'connected'
+            ? { daemon: `qbittorrent ${connection.version} / api ${connection.webApiVersion}` }
+            : {})}
+        />
       </div>
 
       <SetupModal />
