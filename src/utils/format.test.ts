@@ -7,6 +7,9 @@ import {
   formatPercent,
   formatRatio,
   formatSpeed,
+  isPaused,
+  STATE_LABEL,
+  STATE_PLAIN,
   stateTone,
 } from '@/utils/format'
 import { ETA_INFINITE } from '@/types/qbittorrent'
@@ -99,11 +102,39 @@ describe('formatSpeed', () => {
   })
 })
 
+describe('isPaused', () => {
+  it('has a word for a stopped torrent in both label maps', () => {
+    // A state with no entry renders a status dot with nothing beside it,
+    // which the design rules forbid outright: never encode state by colour
+    // alone. That is exactly what a real 5.x daemon produced.
+    expect(STATE_LABEL.stoppedUP).toBe('paused')
+    expect(STATE_PLAIN.stoppedDL).toBe('paused')
+  })
+
+  it('knows both names for the same state', () => {
+    // 5.x renamed paused* to stopped* alongside the endpoint rename. Matching
+    // only the old spelling made every stopped torrent on a modern daemon
+    // read as running, with no word beside its dot and no muted tone.
+    expect(isPaused('pausedDL')).toBe(true)
+    expect(isPaused('pausedUP')).toBe(true)
+    expect(isPaused('stoppedDL')).toBe(true)
+    expect(isPaused('stoppedUP')).toBe(true)
+  })
+
+  it('does not catch anything else', () => {
+    expect(isPaused('stalledUP')).toBe(false)
+    expect(isPaused('downloading')).toBe(false)
+    expect(isPaused('queuedDL')).toBe(false)
+  })
+})
+
 describe('stateTone', () => {
   it('never gives paused or stalled the accent', () => {
     // The design rule: attention is spent on live things only.
     expect(stateTone('pausedDL')).toBe('muted')
     expect(stateTone('pausedUP')).toBe('muted')
+    expect(stateTone('stoppedDL')).toBe('muted')
+    expect(stateTone('stoppedUP')).toBe('muted')
     expect(stateTone('stalledDL')).toBe('muted')
   })
 

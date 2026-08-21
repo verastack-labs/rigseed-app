@@ -80,6 +80,8 @@ export const STATE_LABEL: Record<TorrentState, string> = {
   forcedUP: 'seeding',
   pausedDL: 'paused',
   pausedUP: 'paused',
+  stoppedDL: 'paused',
+  stoppedUP: 'paused',
   queuedDL: 'queued',
   queuedUP: 'queued',
   checkingDL: 'checking',
@@ -108,6 +110,8 @@ export const STATE_PLAIN: Record<TorrentState, string> = {
   forcedUP: 'sharing with others',
   pausedDL: 'paused',
   pausedUP: 'paused',
+  stoppedDL: 'paused',
+  stoppedUP: 'paused',
   queuedDL: 'waiting its turn',
   queuedUP: 'waiting its turn',
   checkingDL: 'checking the files',
@@ -120,7 +124,21 @@ export const STATE_PLAIN: Record<TorrentState, string> = {
   unknown: 'unknown',
 }
 
-export const isPaused = (state: TorrentState) => state.startsWith('paused')
+/**
+ * Paused, by either name.
+ *
+ * 5.x renamed the state to `stopped*` alongside the endpoint rename this
+ * client already handles. Matching only `paused*` made every stopped torrent
+ * on a modern daemon read as running: no word beside its status dot, since
+ * the label maps had no entry; no muted tone; excluded from the Paused
+ * filter; and the pause control offering to pause something already stopped.
+ *
+ * Both prefixes rather than a version check, because the state arrives on the
+ * torrent and does not need one, and a user can point rigseed at a 4.x daemon
+ * from the Connections screen at any time.
+ */
+export const isPaused = (state: TorrentState) =>
+  state.startsWith('paused') || state.startsWith('stopped')
 export const isSeeding = (state: TorrentState) =>
   state === 'uploading' || state === 'stalledUP' || state === 'forcedUP'
 export const isComplete = (progress: number) => progress >= 1
