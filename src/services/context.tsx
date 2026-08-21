@@ -8,14 +8,17 @@ import {
   type ConnectionState,
   type DaemonTarget,
 } from '@/services/connect'
+import { read } from '@/services/secrets'
+import { addressOf, baseUrlOf, useConnectionStore } from '@/state/connection-store'
 
 export interface ApiProviderProps {
   /**
    * Where to connect, or omitted to work it out.
    *
    * Passed explicitly by tests and by anything that already knows. Left off,
-   * the provider asks the environment: the Tauri side for the bundled
-   * instance's credentials, or the dev proxy if one was configured.
+   * the provider follows the connection the user chose on the Connections
+   * screen, and falls back to asking the environment when that is the
+   * built-in daemon.
    */
   target?: DaemonTarget
   children: ReactNode
@@ -84,9 +87,27 @@ async function findTarget(): Promise<DaemonTarget | null> {
  * null client and every one of them works before a daemon exists. If a real
  * daemon answers, the client is swapped and the screens do not notice: both
  * sides implement the same transport.
+ *
+ * Which daemon is the store's answer, not this component's. Switching is
+ * therefore a state change like any other, and every hook that polls already
+ * treats a new client as a new session: the sync loop starts a fresh rid and
+ * the first response carries `full_update`, which replaces the store rather
+ * than merging one daemon's torrents into another's.
  */
 export function ApiProvider({ target, children }: ApiProviderProps) {
+  const activeId = useConnectionStore((state) => state.activeId)
+
+  /**
+   * Which daemon this provider is meant to be on.
+   *
+   * An explicit `target` wins and pins the provider, which is what tests and
+   * any caller that already knows the answer expect. Otherwise the store
+   * decides, and null means the built-in one.
+   */
+  const key = target ? 'explicit' : (activeId ?? 'built-in')
+
   const [state, setState] = useState<ConnectionState>(() => mockConnection('Looking for a daemon.'))
+
   /**
    * The connection attempt itself, not a "have we started" flag.
    *
@@ -98,47 +119,72 @@ export function ApiProvider({ target, children }: ApiProviderProps) {
    * a healthy daemon on the other end and nothing in the console to say so.
    *
    * Holding the promise means the second run awaits the same work rather than
-   * skipping it or logging in twice.
+   * skipping it or logging in twice. It is stored with the key it belongs to,
+   * so a genuine switch starts a new attempt instead of handing back the
+   * previous daemon's answer.
    */
-  const attempt = useRef<Promise<ConnectionState> | null>(null)
+  const attempt = useRef<{ key: string; promise: Promise<ConnectionState> } | null>(null)
+
+  /**
+   * Shows "connecting" the moment the choice changes.
+   *
+   * Adjusted during render rather than in an effect: an effect would paint a
+   * frame still claiming a healthy connection to the daemon just switched
+   * away from.
+   */
+  const [owner, setOwner] = useState(key)
+  if (owner !== key) {
+    setOwner(key)
+    setState({ status: 'connecting' })
+  }
 
   useEffect(() => {
     let live = true
 
-    attempt.current ??= (async () => {
-      const found = target ?? (await findTarget())
-      if (!found) return mockConnection('No daemon configured. Showing sample data.')
+    if (attempt.current?.key !== key) {
+      attempt.current = {
+        key,
+        promise: (async () => {
+          const found = target ?? (await targetFor(activeId))
+          if (!found) return mockConnection('No daemon configured. Showing sample data.')
 
-      // Only our own daemon is worth waiting for. It is spawned as the window
-      // opens and has not bound its port yet; anything else is already running
-      // or it is not.
-      const result = await connect(found, { waitMs: found.spawned ? 10_000 : 0 })
+          // Only our own daemon is worth waiting for. It is spawned as the
+          // window opens and has not bound its port yet; anything else is
+          // already running or it is not.
+          const result = await connect(found, { waitMs: found.spawned ? 10_000 : 0 })
 
-      // Told to Rust, which is the only place it can be read afterwards. A
-      // packaged app has no console, so a silent fall back to sample data
-      // otherwise leaves nothing behind to explain itself.
-      void report(
-        result.status,
-        result.status === 'connected'
-          ? `${result.label}, qBittorrent ${result.version}`
-          : result.status === 'failed'
-            ? result.reason
-            : '',
-      )
+          // Told to Rust, which is the only place it can be read afterwards. A
+          // packaged app has no console, so a silent fall back to sample data
+          // otherwise leaves nothing behind to explain itself.
+          void report(
+            result.status,
+            result.status === 'connected'
+              ? `${result.label}, qBittorrent ${result.version}`
+              : result.status === 'failed'
+                ? result.reason
+                : '',
+          )
 
-      return result.status === 'failed'
-        ? mockConnection(`${result.reason} Showing sample data.`)
-        : result
-    })()
+          return result.status === 'failed'
+            ? mockConnection(`${result.reason} Showing sample data.`)
+            : result
+        })(),
+      }
+    }
 
-    void attempt.current.then((result) => {
+    void attempt.current.promise.then((result) => {
       if (live) setState(result)
     })
 
     return () => {
       live = false
     }
-  }, [target])
+    // activeId is redundant with key and listed for the linter's benefit. The
+    // connection list is deliberately not a trigger: it is read from the store
+    // when the attempt runs, so editing the address of the connection already
+    // in use does not reconnect on every keystroke. Switching away and back
+    // applies an edit, and is also how to retry one that failed.
+  }, [key, target, activeId])
 
   return (
     <ConnectionContext.Provider value={state}>
@@ -147,4 +193,30 @@ export function ApiProvider({ target, children }: ApiProviderProps) {
       </ClientContext.Provider>
     </ConnectionContext.Provider>
   )
+}
+
+/**
+ * The chosen connection as something `connect` can use.
+ *
+ * The password is fetched here rather than held anywhere: it lives in the OS
+ * keychain and this is the one moment it is needed. A connection that says it
+ * needs no login sends neither a username nor a password, rather than sending
+ * empty ones.
+ */
+async function targetFor(activeId: string | null): Promise<DaemonTarget | null> {
+  if (activeId === null) return findTarget()
+
+  // Read when the attempt runs rather than captured, so a connection edited
+  // between the click and the login is used as it stands now.
+  const connection = useConnectionStore.getState().connections.find((one) => one.id === activeId)
+  if (!connection) return null
+
+  const password = connection.requiresAuth ? ((await read(activeId)) ?? '') : ''
+
+  return {
+    baseUrl: baseUrlOf(connection),
+    username: connection.requiresAuth ? connection.username : '',
+    password,
+    label: addressOf(connection),
+  }
 }
