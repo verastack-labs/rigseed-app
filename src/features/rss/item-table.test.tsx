@@ -99,7 +99,10 @@ describe('ItemTable', () => {
   })
 
   it('shows a dash rather than 0 B when the feed gave no size', () => {
-    setup({ feed: feed([article({ size: undefined })]) })
+    // Built by omission rather than by passing undefined, because
+    // exactOptionalPropertyTypes is right that those are different things.
+    const { size: _size, ...noSize } = article()
+    setup({ feed: feed([noSize]) })
     expect(screen.getByText('—')).toBeInTheDocument()
   })
 
