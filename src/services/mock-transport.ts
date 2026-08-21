@@ -5,6 +5,8 @@ import type {
   LogEntry,
   PeerBan,
   Preferences,
+  SearchPlugin,
+  SearchResult,
   MainData,
   Peer,
   Torrent,
@@ -150,6 +152,78 @@ const BANS: PeerBan[] = [
   { id: 2, ip: '2001:db8::9f2', timestamp: 1_787_249_301, blocked: true, reason: 'IP filter' },
 ]
 
+/**
+ * Two plugins and a handful of hits.
+ *
+ * Enough to exercise the engine chips, the per-engine counts and the swarm
+ * bar. `siteUrl` matches a plugin `url` on purpose: that match is the only
+ * way a result can be attributed to an engine, since the API does not say.
+ */
+const PLUGINS: SearchPlugin[] = [
+  {
+    name: 'linuxtracker',
+    fullName: 'LinuxTracker',
+    url: 'https://linuxtracker.org',
+    version: '1.02',
+    enabled: true,
+    supportedCategories: [
+      { id: 'all', name: 'All categories' },
+      { id: 'software', name: 'Software' },
+    ],
+  },
+  {
+    name: 'archivedotorg',
+    fullName: 'Internet Archive',
+    url: 'https://archive.org',
+    version: '2.11',
+    enabled: true,
+    supportedCategories: [
+      { id: 'all', name: 'All categories' },
+      { id: 'books', name: 'Books' },
+      { id: 'music', name: 'Music' },
+    ],
+  },
+]
+
+const HITS: SearchResult[] = [
+  {
+    fileName: 'ubuntu-24.04.2-desktop-amd64.iso',
+    fileSize: 5_700_000_000,
+    fileUrl: 'magnet:?xt=urn:btih:aaaa1111&dn=ubuntu-24.04.2-desktop-amd64.iso',
+    descrLink: 'https://linuxtracker.org/index.php?page=torrent-details&id=aaaa1111',
+    siteUrl: 'https://linuxtracker.org',
+    nbSeeders: 1842,
+    nbLeechers: 96,
+  },
+  {
+    fileName: 'debian-12.9.0-amd64-netinst.iso',
+    fileSize: 661_000_000,
+    fileUrl: 'magnet:?xt=urn:btih:bbbb2222&dn=debian-12.9.0-amd64-netinst.iso',
+    descrLink: 'https://linuxtracker.org/index.php?page=torrent-details&id=bbbb2222',
+    siteUrl: 'https://linuxtracker.org',
+    nbSeeders: 640,
+    nbLeechers: 12,
+  },
+  {
+    fileName: 'The Blue Danube - 1867 recording restoration',
+    fileSize: 148_000_000,
+    fileUrl: 'magnet:?xt=urn:btih:cccc3333&dn=blue-danube',
+    descrLink: 'https://archive.org/details/blue-danube',
+    siteUrl: 'https://archive.org',
+    nbSeeders: 4,
+    nbLeechers: 31,
+  },
+  {
+    fileName: 'Project Gutenberg 2025 complete archive',
+    fileSize: 82_000_000_000,
+    fileUrl: 'magnet:?xt=urn:btih:dddd4444&dn=gutenberg-2025',
+    descrLink: 'https://archive.org/details/gutenberg-2025',
+    siteUrl: 'https://archive.org',
+    nbSeeders: 0,
+    nbLeechers: 0,
+  },
+]
+
 const CATEGORIES: Record<string, Category> = {
   Linux: { name: 'Linux', savePath: '/downloads/linux' },
   Archives: { name: 'Archives', savePath: '/downloads/archives' },
@@ -265,6 +339,16 @@ export function createMockTransport({
   // test file cannot see each other's created categories.
   const categories: Record<string, Category> = { ...CATEGORIES }
   const preferences: Preferences = { ...PREFERENCES }
+  const plugins: SearchPlugin[] = PLUGINS.map((p) => ({ ...p }))
+  /**
+   * Search jobs, keyed by id.
+   *
+   * `ticks` is how many times the job has been polled. A job that answered in
+   * full on the first poll would never exercise the searching state, and that
+   * state is half of what this screen has to get right.
+   */
+  const jobs = new Map<number, { ticks: number; stopped: boolean }>()
+  let nextJobId = 1
   const tags = [...TAGS]
 
   let rid = 0
@@ -587,6 +671,29 @@ export function createMockTransport({
       if (path === 'torrents/tags') return wait(tags as T)
       if (path === 'app/version') return wait('v5.2.3' as T)
       if (path === 'app/preferences') return wait(preferences as T)
+      if (path === 'search/plugins') return wait(plugins as T)
+      if (path === 'search/status') {
+        return wait(
+          [...jobs.entries()].map(([id, job]) => ({
+            id,
+            status: job.stopped || job.ticks >= 2 ? 'Stopped' : 'Running',
+            total: job.stopped || job.ticks >= 2 ? HITS.length : Math.min(job.ticks, HITS.length),
+          })) as T,
+        )
+      }
+      if (path === 'search/results') {
+        const id = Number(params?.['id'] ?? 0)
+        const job = jobs.get(id)
+        if (!job) return wait({ results: [], status: 'Stopped', total: 0 } as T)
+        job.ticks += 1
+        const done = job.stopped || job.ticks >= 2
+        const shown = done ? HITS : HITS.slice(0, 2)
+        return wait({
+          results: shown.map((h) => ({ ...h })),
+          status: done ? 'Stopped' : 'Running',
+          total: shown.length,
+        } as T)
+      }
       if (path === 'log/main') {
         // The tail cursor, honoured rather than ignored: a Follow loop that
         // gets the whole log back every tick would prepend duplicates for
@@ -652,6 +759,35 @@ export function createMockTransport({
         if (name) {
           categories[name] = { name, savePath: String(body?.savePath ?? '') }
           pendingCategories.add(name)
+        }
+      }
+      if (path === 'search/start') {
+        const id = nextJobId++
+        jobs.set(id, { ticks: 0, stopped: false })
+        return wait({ id } as T)
+      }
+      if (path === 'search/stop') {
+        const job = jobs.get(Number(body?.['id'] ?? 0))
+        if (job) job.stopped = true
+      }
+      if (path === 'search/delete') {
+        // The slot is freed here and nowhere else. A screen that forgets stops
+        // being able to search after the fifth query.
+        jobs.delete(Number(body?.['id'] ?? 0))
+      }
+      if (path === 'search/enablePlugin') {
+        const wanted = String(body?.['names'] ?? '')
+          .split('|')
+          .filter(Boolean)
+        const enable = String(body?.['enable'] ?? 'false') === 'true'
+        for (const p of plugins) if (wanted.includes(p.name)) p.enabled = enable
+      }
+      if (path === 'search/uninstallPlugin') {
+        for (const name of String(body?.['names'] ?? '')
+          .split('|')
+          .filter(Boolean)) {
+          const at = plugins.findIndex((p) => p.name === name)
+          if (at !== -1) plugins.splice(at, 1)
         }
       }
       if (path === 'app/setPreferences') {
