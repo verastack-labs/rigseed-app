@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 
+import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { SectionHeader } from '@/components/ui/section-header'
@@ -9,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { StatusDot } from '@/components/ui/status-dot'
 import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
-import { levelOf } from '@/services/log'
+import { filteredOutReason, levelOf } from '@/services/log'
 import { useLogTail } from '@/state/use-log-tail'
 import type { LogLevel } from '@/types/qbittorrent'
 
@@ -61,6 +63,12 @@ export function Logs() {
       return needle === '' || e.message.toLowerCase().includes(needle)
     })
   }, [entries, muted, query])
+
+  /** Undoes every filter at once, which is what the empty state offers. */
+  const showEverything = () => {
+    setMuted([])
+    setQuery('')
+  }
 
   const toggleLevel = (level: LogLevel) =>
     setMuted((prev) => (prev.includes(level) ? prev.filter((l) => l !== level) : [...prev, level]))
@@ -187,11 +195,27 @@ export function Logs() {
               <span>Message</span>
             </div>
             {shown.length === 0 ? (
-              <p className="px-4 py-6 text-[12.5px] text-text-dim">
-                {entries.length === 0
-                  ? 'The daemon has not said anything yet.'
-                  : 'Nothing matches the current filters.'}
-              </p>
+              entries.length === 0 ? (
+                <EmptyState
+                  icon={<icons.logs className="size-6" strokeWidth={1.7} />}
+                  title="Nothing logged yet"
+                  body="The daemon writes here as it works. Add a torrent or change a setting and the first lines will arrive."
+                />
+              ) : (
+                <EmptyState
+                  icon={<icons.filter className="size-6" strokeWidth={1.7} />}
+                  title="Nothing to show with these filters"
+                  body={filteredOutReason(
+                    LEVELS.filter((l) => muted.includes(l.key)).map((l) => l.label.toLowerCase()),
+                    query,
+                  )}
+                  action={
+                    <Button variant="secondary" size="sm" onClick={showEverything}>
+                      Show everything
+                    </Button>
+                  }
+                />
+              )
             ) : (
               shown.map((e, i) => {
                 const level = levelOf(e.type)
@@ -244,9 +268,11 @@ export function Logs() {
               <span>Reason</span>
             </div>
             {bans.length === 0 ? (
-              <p className="px-4 py-6 text-[12.5px] text-text-dim">
-                Nothing has been blocked since the daemon started.
-              </p>
+              <EmptyState
+                icon={<icons.complete className="size-6" strokeWidth={1.7} />}
+                title="Nothing has been blocked"
+                body="Peers land here when the daemon refuses them, either from the IP filter or from a ban you set."
+              />
             ) : (
               bans.map((b, i) => (
                 <div

@@ -236,7 +236,7 @@ export function Transfers() {
           ) : visible.length === 0 ? (
             <EmptyState
               icon={<icons.folder className="size-6" strokeWidth={1.7} />}
-              title={filtersActive ? 'No torrents match these filters' : 'Nothing here yet'}
+              title={filtersActive ? 'No torrents match these filters' : 'No torrents yet'}
               body={
                 filtersActive
                   ? 'Nothing matches every filter you have applied at once. Clearing them brings the rest of the list back.'
