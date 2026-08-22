@@ -6,6 +6,7 @@ import { Dialog } from '@/components/ui/dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import { PluginSource } from '@/features/search/plugin-source'
 import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import type { SearchPlugin } from '@/types/qbittorrent'
@@ -82,14 +83,22 @@ export function PluginManager({
           </Button>
         </div>
 
+        {plugins.length > 0 ? (
+          <div className="flex items-center justify-center border-b border-line px-[18px] py-2.5">
+            <PluginSource />
+          </div>
+        ) : null}
+
         <div className="max-h-[360px] min-h-0 overflow-y-auto">
           {plugins.length === 0 ? (
-            <div className="flex flex-col gap-1.5 px-[18px] py-8 text-center">
+            <div className="flex flex-col items-center gap-1.5 px-[18px] py-8 text-center">
               <p className="text-[13px] font-semibold text-text">No plugins installed</p>
               <p className="mx-auto max-w-[420px] text-[11.5px] leading-[1.6] text-text-dim">
                 Searching needs at least one plugin. Each plugin is a Python file that teaches the
-                client how to query one site.
+                client how to query one site. qBittorrent ships none, so this list starts empty
+                everywhere, not only here.
               </p>
+              <PluginSource />
             </div>
           ) : (
             plugins.map((plugin) => (

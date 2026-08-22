@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { SectionHeader } from '@/components/ui/section-header'
 import { SegmentedControl } from '@/components/ui/segmented-control'
 import { PluginManager } from '@/features/search/plugin-manager'
+import { PluginSource } from '@/features/search/plugin-source'
 import { RESULT_COLUMNS, ResultRow } from '@/features/search/result-row'
 import { icons } from '@/lib/icons'
 import { swatchColor, swatchFor } from '@/lib/labels'
@@ -151,8 +152,9 @@ export function Search() {
               <p className="text-[11.5px] leading-[1.6] text-text-dim">
                 {noPython
                   ? 'The search engine runs on Python 3. Install it on the host, then restart qbittorrent-nox and this panel will enable itself.'
-                  : 'Searching needs at least one plugin. Each plugin is a Python file that teaches the client how to query one site.'}
+                  : 'Searching needs at least one plugin. Each plugin is a Python file that teaches the client how to query one site. qBittorrent ships none, so this starts empty everywhere, not only here.'}
               </p>
+              {noPython ? null : <PluginSource className="justify-start pt-0.5" />}
               <span className="font-mono text-[10.5px] text-text-dimmer">
                 {noPython ? 'search/start → 409' : 'search/plugins → []'}
               </span>
