@@ -13,8 +13,8 @@ import { RESULT_COLUMNS, ResultRow } from '@/features/search/result-row'
 import { icons } from '@/lib/icons'
 import { swatchColor, swatchFor } from '@/lib/labels'
 import { cn } from '@/lib/utils'
-import { useApi } from '@/services/api-context'
-import { probePython, type PythonState } from '@/services/search'
+import { useApi, useConnection } from '@/services/api-context'
+import { awaitInstalled, checkPython, pluginNameFor, type PythonCheck } from '@/services/search'
 import { useSearchJob } from '@/state/use-search-job'
 import type { SearchPlugin } from '@/types/qbittorrent'
 
@@ -28,6 +28,32 @@ const CATEGORIES = [
 ]
 
 /**
+ * The three ways search can be blocked before a query is even typed.
+ *
+ * Separate entries rather than one "search unavailable", because they have
+ * three different answers: install Python, point the daemon at a different
+ * Python, or install a plugin. A single message would send everyone to check
+ * the same wrong thing.
+ */
+const BLOCKED = {
+  'python-missing': {
+    title: 'Search is unavailable, Python was not found',
+    body: 'The search engine runs on Python 3, which rigseed does not bundle. Install it, then reopen rigseed so the daemon it starts can find it.',
+    api: 'search/start → 409',
+  },
+  'python-unusable': {
+    title: 'Search is unavailable, the Python it found cannot read rigseed’s files',
+    body: 'Python is installed, and the copy the daemon found runs in a sandbox that cannot open rigseed’s data folder. On Windows that is usually the Microsoft Store build. Installing Python from python.org fixes it, and rigseed will use it automatically.',
+    api: 'nova2.py → could not be opened',
+  },
+  'no-plugins': {
+    title: 'No search plugins installed',
+    body: 'Searching needs at least one plugin. Each plugin is a Python file that teaches the client how to query one site. qBittorrent ships none, so this starts empty everywhere, not only here.',
+    api: 'search/plugins → []',
+  },
+} as const
+
+/**
  * Search.
  *
  * Five states, and only two of them are about results. The other three say
@@ -38,6 +64,7 @@ const CATEGORIES = [
  */
 export function Search() {
   const api = useApi()
+  const connection = useConnection()
   const { results, phase, error, run, stop } = useSearchJob()
 
   const [query, setQuery] = useState('')
@@ -79,23 +106,45 @@ export function Search() {
   }, [api])
 
   /**
-   * Whether Python is there, asked before anybody tries to search.
+   * Whether search can run at all, asked before anybody tries.
    *
    * The screen used to find out only from a failed search, which on a fresh
    * install is a message nobody ever sees: with no plugins installed there is
    * nothing worth searching for, so the attempt that would have reported it
    * never happens.
+   *
+   * It also used to accept the daemon's own answer, which on Windows is
+   * routinely wrong in the one direction that matters. See `checkPython`.
    */
-  const [python, setPython] = useState<PythonState>('unknown')
+  const [python, setPython] = useState<PythonCheck>({ state: 'unknown' })
   useEffect(() => {
     let live = true
-    void probePython(api.search).then((state) => {
-      if (live) setPython(state)
-    })
+    void (async () => {
+      const spawned = connection.status === 'connected' && connection.spawned
+      const first = await checkPython(api.search, { spawned })
+
+      // Repointing the daemon at an interpreter that works is rigseed's own
+      // housekeeping, not a decision to put to somebody. It is a daemon we
+      // started, the value was verified by running it, and the alternative is
+      // a screen that explains at length why a feature it could have fixed
+      // does not work. Never for a daemon we merely connected to: `spawned`
+      // is what keeps this off somebody else's machine.
+      if (live && first.state === 'unusable' && first.fix) {
+        try {
+          await api.app.setPreferences({ python_executable_path: first.fix })
+          if (live) setPython({ state: 'ok' })
+          return
+        } catch {
+          // Fall through and report it. A daemon that will not take the
+          // preference is exactly the case the banner exists for.
+        }
+      }
+      if (live) setPython(first)
+    })()
     return () => {
       live = false
     }
-  }, [api])
+  }, [api, connection])
 
   /** How many hits each engine returned, for the chips. */
   const perEngine = useMemo(() => {
@@ -124,7 +173,21 @@ export function Search() {
   // blocks a search is reported as itself rather than guessed at. The probe
   // gets the same answer without waiting for somebody to try.
   const noPython =
-    python === 'missing' || (phase === 'blocked' && (error?.includes('409') ?? false))
+    python.state === 'missing' || (phase === 'blocked' && (error?.includes('409') ?? false))
+
+  /**
+   * Which of the three is in the way, most fundamental first.
+   *
+   * Ordered rather than combined: with no Python at all, having no plugins is
+   * true and is not the thing to fix.
+   */
+  const problem: keyof typeof BLOCKED | null = noPython
+    ? 'python-missing'
+    : python.state === 'unusable'
+      ? 'python-unusable'
+      : noPlugins
+        ? 'no-plugins'
+        : null
 
   /**
    * Every write the plugin dialog makes, and the one place they can fail.
@@ -147,6 +210,34 @@ export function Search() {
     try {
       await job()
       await refreshPlugins()
+    } catch (cause) {
+      setFailure(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * Installing, which is the one write that cannot be believed.
+   *
+   * Every other call in this dialog has done what it says by the time it
+   * answers. `installPlugin` answers first and fetches afterwards, so success
+   * here means the plugin appeared in a later `search/plugins`, not that a
+   * request returned 200.
+   */
+  const install = async (sources: readonly string[]) => {
+    const wanted = sources.map(pluginNameFor).filter(Boolean)
+    setBusy(true)
+    setFailure(null)
+    try {
+      await api.search.installPlugin(sources)
+      const { missing } = await awaitInstalled(api.search, wanted)
+      await refreshPlugins()
+      if (missing.length > 0) {
+        setFailure(
+          `${missing.join(', ')} did not install. The daemon accepted the request and then rejected the plugin; its log says why.`,
+        )
+      }
     } catch (cause) {
       setFailure(cause instanceof Error ? cause.message : String(cause))
     } finally {
@@ -179,37 +270,43 @@ export function Search() {
         </Button>
       </header>
 
-      {noPython || noPlugins ? (
+      {problem ? (
         <div className="shrink-0 px-6 pt-5">
           <div className="flex items-start gap-3 rounded-xl border border-warn bg-warn-soft px-4 py-3.5">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-warn/15 text-warn">
               <icons.logs className="size-4" strokeWidth={2} />
             </span>
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <p className="text-[12.5px] font-semibold text-text">
-                {noPython
-                  ? 'Search is unavailable, Python was not found'
-                  : 'No search plugins installed'}
-              </p>
-              <p className="text-[11.5px] leading-[1.6] text-text-dim">
-                {noPython
-                  ? 'The search engine runs on Python 3, which rigseed does not bundle. Install it, then reopen rigseed so the daemon it starts can find it.'
-                  : 'Searching needs at least one plugin. Each plugin is a Python file that teaches the client how to query one site. qBittorrent ships none, so this starts empty everywhere, not only here.'}
-              </p>
-              {noPython ? (
-                <PythonSource className="justify-start pt-0.5" />
-              ) : (
+              <p className="text-[12.5px] font-semibold text-text">{BLOCKED[problem].title}</p>
+              <p className="text-[11.5px] leading-[1.6] text-text-dim">{BLOCKED[problem].body}</p>
+              {problem === 'no-plugins' ? (
                 <PluginSource className="justify-start pt-0.5" />
+              ) : (
+                <PythonSource className="justify-start pt-0.5" />
               )}
-              <span className="font-mono text-[10.5px] text-text-dimmer">
-                {noPython ? 'search/start → 409' : 'search/plugins → []'}
-              </span>
+              {/* What was tried, when the answer is "your Python cannot read
+                  our files". Without it the message is unfalsifiable: the one
+                  thing somebody will check is whether Python is installed,
+                  and it is. */}
+              {problem === 'python-unusable' && python.tried?.length ? (
+                <ul className="flex flex-col gap-0.5 pt-0.5">
+                  {python.tried.map((line) => (
+                    <li key={line} className="font-mono text-[10.5px] break-all text-text-dimmer">
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <span className="font-mono text-[10.5px] text-text-dimmer">
+                  {BLOCKED[problem].api}
+                </span>
+              )}
             </div>
-            {noPython ? null : (
+            {problem === 'no-plugins' ? (
               <Button variant="secondary" size="sm" onClick={() => setManaging(true)}>
                 Install a plugin
               </Button>
-            )}
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -219,7 +316,7 @@ export function Search() {
           <Input
             size="lg"
             value={query}
-            disabled={noPython || noPlugins}
+            disabled={problem !== null}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') submit()
@@ -236,7 +333,7 @@ export function Search() {
           <Button
             variant="primary"
             size="lg"
-            disabled={noPython || noPlugins || (phase !== 'searching' && !query.trim())}
+            disabled={problem !== null || (phase !== 'searching' && !query.trim())}
             onClick={submit}
           >
             {phase === 'searching' ? 'Stop' : 'Search'}
@@ -393,7 +490,7 @@ export function Search() {
         busy={busy}
         failure={failure}
         onDismissFailure={() => setFailure(null)}
-        onInstall={(sources) => void write(() => api.search.installPlugin(sources))}
+        onInstall={(sources) => void install(sources)}
         onToggle={(name, enable) => void write(() => api.search.enablePlugin([name], enable))}
         onUninstall={(name) => void write(() => api.search.uninstallPlugin([name]))}
         onCheckUpdates={() => void write(() => api.search.updatePlugins())}

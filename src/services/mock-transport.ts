@@ -100,6 +100,9 @@ const PREFERENCES: Preferences = {
   web_ui_csrf_protection_enabled: true,
   web_ui_clickjacking_protection_enabled: true,
   web_ui_host_header_validation_enabled: true,
+
+  // Empty, which is qBittorrent's default and means `python3` off PATH.
+  python_executable_path: '',
 }
 
 /**

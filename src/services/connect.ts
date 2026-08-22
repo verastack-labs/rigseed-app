@@ -37,6 +37,14 @@ export type ConnectionState =
       webApiVersion: string
       /** Host and port, for the top bar. */
       label: string
+      /**
+       * True when rigseed started this daemon itself.
+       *
+       * Carried through from the target because some fixes are only ours to
+       * apply. Search's Python resolution is one: it is decided by files on
+       * this machine, which say nothing about a daemon running on another.
+       */
+      spawned: boolean
     }
   | { status: 'failed'; reason: string }
 
@@ -197,6 +205,7 @@ export async function connect(
       version,
       webApiVersion,
       label: target.label ?? hostOf(target.baseUrl),
+      spawned: target.spawned ?? false,
     }
   } catch (error) {
     // Logged in but cannot be asked what it is, which is stranger than being
