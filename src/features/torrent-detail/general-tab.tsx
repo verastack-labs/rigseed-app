@@ -54,9 +54,16 @@ export function GeneralTab({ torrent, properties }: GeneralTabProps) {
       sub: isPaused(torrent.state) ? 'not connected' : `${torrent.num_seeds} seeds connected`,
     },
     {
+      // `size` counts selected files only. On a torrent with nothing skipped
+      // it is the whole thing and the distinction never surfaces; on one with
+      // files deselected it is smaller than the size the torrent is known by
+      // everywhere else, and the label alone gave no hint of that.
       label: 'Size',
       value: formatBytes(torrent.size),
-      sub: `${formatBytes(torrent.downloaded)} downloaded`,
+      sub:
+        torrent.total_size > torrent.size
+          ? `of ${formatBytes(torrent.total_size)} selected`
+          : `${formatBytes(torrent.downloaded)} downloaded`,
     },
     {
       label: 'Down speed',

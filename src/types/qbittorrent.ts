@@ -69,6 +69,14 @@ export interface Torrent {
   /** -1 is unlimited. */
   dl_limit: number
   up_limit: number
+  /**
+   * Every file, including the ones set to skip.
+   *
+   * `size` counts selected files only, so the two agree on a torrent with
+   * nothing deselected and diverge on one with files skipped. Anything that
+   * means "how big is this torrent" wants this one.
+   */
+  total_size: number
   /** All time, across every session the torrent has ever run in. */
   downloaded: number
   uploaded: number

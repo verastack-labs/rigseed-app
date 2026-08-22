@@ -396,6 +396,10 @@ function makeTorrent(index: number, rand: () => number): Torrent {
     added_on: 1_770_000_000 - index * 86_400,
     completion_on: done ? 1_780_000_000 : 0,
     save_path: '/downloads',
+    // Larger than `size` on every third torrent, so the mock exercises a
+    // torrent with files deselected rather than one where the two are always
+    // equal and reading the wrong one still looks right.
+    total_size: index % 3 === 0 ? Math.round(size * 1.4) : size,
     dl_limit: -1,
     up_limit: -1,
     downloaded: Math.round(progress * 4_000_000_000),

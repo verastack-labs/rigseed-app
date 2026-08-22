@@ -53,9 +53,12 @@ describe('FilesTab', () => {
     expect(screen.queryByText('ubuntu.iso')).not.toBeInTheDocument()
   })
 
-  it('counts only what is not skipped in the summary', () => {
+  it('counts only what is not skipped in the summary, and names the whole', () => {
+    // The selected total is what will be downloaded; the second figure is the
+    // size the torrent is known by everywhere else. Printing only the first
+    // next to a file count invited reading one as the other.
     setup()
-    expect(screen.getByText('3 files · 2 selected · 5.60 GB')).toBeInTheDocument()
+    expect(screen.getByText(/3 files · 2 selected · 5\.60 GB of 5\.74 GB/)).toBeInTheDocument()
   })
 
   it('shows the last path segment, not the whole path', () => {
@@ -168,5 +171,33 @@ describe('FilesTab', () => {
     setup({ onToggle })
     fireEvent.click(screen.getByLabelText('Select SHA256SUMS'))
     expect(onToggle).toHaveBeenCalledWith(2)
+  })
+})
+
+/** A file list built inline, so a test can control what is skipped. */
+const listOf = (...entries: readonly [number, TorrentFile['priority']][]): TorrentFile[] =>
+  entries.map(([size, priority], index) => ({
+    index,
+    name: `f${index}.iso`,
+    size,
+    progress: 1,
+    priority,
+    is_seed: false,
+    piece_range: [0, 1],
+  }))
+
+describe('FilesTab size line', () => {
+  it('names the full size when something is skipped', () => {
+    // Without it there was no way to see the real size of a torrent with
+    // files deselected, and the selected total sat next to a file count
+    // inviting one to be read as the other.
+    setup({ files: listOf([3_000_000_000, 1], [1_700_000_000, 0]) })
+    expect(screen.getByText(/3\.00 GB of 4\.70 GB/)).toBeInTheDocument()
+  })
+
+  it('says it once when nothing is skipped', () => {
+    setup({ files: listOf([3_000_000_000, 1], [1_700_000_000, 1]) })
+    expect(screen.getByText(/4\.70 GB/)).toBeInTheDocument()
+    expect(screen.queryByText(/ of /)).not.toBeInTheDocument()
   })
 })

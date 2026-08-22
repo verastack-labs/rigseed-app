@@ -67,6 +67,16 @@ export function FilesTab({ files, selected, onToggle, onPriority, savePath }: Fi
 
   const wanted = files.filter((f) => f.priority !== 0)
   const total = wanted.reduce((sum, f) => sum + f.size, 0)
+  /**
+   * Every file, skipped ones included.
+   *
+   * Shown only when it differs, and it is the number a torrent is described by
+   * everywhere else: the tracker's size, the size in the add dialog, the size
+   * a friend quotes. Printing only the selected total next to a file count
+   * invites reading one as the other, and there was no way to see the real
+   * size of a torrent with anything deselected.
+   */
+  const everything = files.reduce((sum, f) => sum + f.size, 0)
 
   return (
     <div className="flex flex-col gap-2.5 p-6">
@@ -74,6 +84,7 @@ export function FilesTab({ files, selected, onToggle, onPriority, savePath }: Fi
         <SectionHeader>Contents</SectionHeader>
         <span className="font-mono text-[10.5px] text-text-dimmer">
           {files.length} files · {wanted.length} selected · {formatBytes(total)}
+          {everything !== total ? ` of ${formatBytes(everything)}` : ''}
         </span>
         <span className="flex-1" />
         <div className="flex items-center gap-1.5">
