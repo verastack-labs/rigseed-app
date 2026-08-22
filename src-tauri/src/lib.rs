@@ -2,8 +2,8 @@ pub mod daemon;
 pub mod http;
 pub mod icon;
 pub mod python;
-pub mod tray;
 mod secrets;
+pub mod tray;
 
 use std::sync::Mutex;
 

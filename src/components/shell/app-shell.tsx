@@ -4,6 +4,8 @@ import { NavLink, Outlet, useLocation } from 'react-router'
 
 import { Footer } from '@/components/shell/footer'
 import { Toaster } from '@/components/shell/toaster'
+import { CloseChoice } from '@/features/shell/close-choice'
+import { useCloseRequest } from '@/state/use-close-request'
 import { useTorrentAlerts } from '@/state/use-torrent-alerts'
 import { SetupModal } from '@/components/shell/setup-modal'
 import { TopBar } from '@/components/shell/top-bar'
@@ -42,6 +44,9 @@ export function AppShell() {
   // on Transfers, because the whole point is what happens while nobody is
   // looking at that screen.
   useTorrentAlerts()
+  // Rust prevents every close and asks here, because the preference lives on
+  // this side and a dialog can only be drawn on this side.
+  const closing = useCloseRequest()
   const [railExpanded, setRailExpanded] = useState(false)
   const { pathname } = useLocation()
   const current = DESTINATIONS.find((d) => d.to === pathname)
@@ -96,6 +101,11 @@ export function AppShell() {
             after it, so it is last in the tab order rather than sitting
             between the top bar and the page. */}
         <Toaster />
+        <CloseChoice
+          open={closing.asking}
+          onKeepRunning={closing.keepRunning}
+          onQuit={closing.quit}
+        />
         <Footer
           counts={current?.label.toLowerCase() ?? ''}
           api="sync/maindata"
