@@ -22,6 +22,7 @@ import {
   Package,
   Palette,
   Pause,
+  Rabbit,
   Play,
   Rss,
   Search,
@@ -29,6 +30,7 @@ import {
   Signal,
   Tags,
   Trash2,
+  Turtle,
   Waves,
   X,
 } from 'lucide-react'
@@ -66,6 +68,10 @@ export const icons = {
   remove: Trash2,
   clear: X,
   add: Plus,
+  // The alternative-limits pair. Full speed is the rabbit; the throttled mode
+  // is the turtle, which is the icon qBittorrent has used for it for years.
+  rabbit: Rabbit,
+  turtle: Turtle,
   check: Check,
   alert: AlertCircle,
   /** The test-connection glyph: signal arcs, not the nav rail's bars. */

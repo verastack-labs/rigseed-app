@@ -13,6 +13,7 @@ import { TransfersToolbar } from '@/components/shell/transfers-toolbar'
 import { AddTorrentDialog } from '@/features/add-torrent/add-torrent-dialog'
 import type { Source } from '@/features/add-torrent/source-picker'
 import { AddFab, type AddSource } from '@/features/transfers/add-fab'
+import { AltSpeedToggle } from '@/features/transfers/alt-speed-toggle'
 import { Sidebar } from '@/features/transfers/sidebar'
 import { TorrentEasy } from '@/features/transfers/torrent-easy'
 import { TorrentGrid } from '@/features/transfers/torrent-grid'
@@ -227,6 +228,16 @@ export function Transfers() {
               ]}
               value={activeLayout}
               onChange={(next) => setLayout(next as Layout)}
+            />
+
+            {/* A divider, then the alternative-limits switch, per the screen
+                doc. It is global rather than per-selection, which is why it
+                sits with the view controls and not in the action toolbar. */}
+            <span className="h-5 w-px shrink-0 bg-line" />
+            <AltSpeedToggle
+              active={serverState.use_alt_speed_limits === true}
+              offline={!reachable}
+              onToggle={() => void api.transfer.toggleSpeedLimitsMode()}
             />
           </div>
         </div>
