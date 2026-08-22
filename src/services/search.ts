@@ -1,4 +1,4 @@
-import type { Transport } from '@/services/transport'
+import { ApiError, type Transport } from '@/services/transport'
 import type { SearchJobStatus, SearchPlugin, SearchResults } from '@/types/qbittorrent'
 
 /**
@@ -49,6 +49,45 @@ export function createSearchApi(transport: Transport) {
 }
 
 export type SearchApi = ReturnType<typeof createSearchApi>
+
+/** Whether the daemon can run a search at all. */
+export type PythonState = 'ok' | 'missing' | 'unknown'
+
+/**
+ * Ask whether Python is there, before anybody tries to search.
+ *
+ * The search engine runs on Python 3 and the daemon answers 409 "Python must
+ * be installed to use the Search Engine" when it cannot find one. There is no
+ * endpoint that reports this: the only component that knows is the search
+ * engine, and the only way to ask it is to start something.
+ *
+ * So this starts a search against a plugin name that cannot exist. The daemon
+ * checks for Python before it resolves plugins, so the answer arrives without
+ * a single request leaving the machine, which a real query would not manage.
+ * The job is deleted either way; five is the concurrent limit and leaking one
+ * per visit would reach it.
+ *
+ * `unknown` rather than a guess when the call fails for some other reason. A
+ * screen that announces a missing Python because the daemon was briefly busy
+ * sends somebody to install something they already have.
+ */
+export async function probePython(api: SearchApi): Promise<PythonState> {
+  // A name no plugin can carry: the daemon matches on plugin names, and none
+  // of them look like this.
+  const nothing = '__rigseed_probe__'
+
+  try {
+    const { id } = await api.start('rigseed', nothing)
+    void api.remove(id).catch(() => {
+      // Nothing to do about a probe job that will not delete. It expires with
+      // the session and the screen has its answer either way.
+    })
+    return 'ok'
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) return 'missing'
+    return 'unknown'
+  }
+}
 
 /**
  * Which engine a hit came from.
