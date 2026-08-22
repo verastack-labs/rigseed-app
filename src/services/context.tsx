@@ -10,6 +10,7 @@ import {
 } from '@/services/connect'
 import { read } from '@/services/secrets'
 import { addressOf, baseUrlOf, useConnectionStore } from '@/state/connection-store'
+import { useTorrentStore } from '@/state/torrent-store'
 
 export interface ApiProviderProps {
   /**
@@ -137,6 +138,73 @@ export function ApiProvider({ target, children }: ApiProviderProps) {
     setOwner(key)
     setState({ status: 'connecting' })
   }
+
+  /**
+   * How many times this connection has been rebuilt since it went quiet.
+   *
+   * Doubles as the backoff clock. Reset the moment the daemon answers, so a
+   * long outage followed by a short one does not start the second one at
+   * thirty second intervals.
+   */
+  const reachable = useTorrentStore((s) => s.reachable)
+  const [retry, setRetry] = useState(0)
+  if (reachable && retry !== 0) setRetry(0)
+
+  /**
+   * Schedules the next attempt to log in again.
+   *
+   * Only while the app believes it is connected and nothing is answering. The
+   * other statuses have their own story: `mock` and `failed` were decided at
+   * startup and a screen already says so, and retrying those would swap sample
+   * data for real data underneath somebody without being asked.
+   *
+   * Backoff because qBittorrent bans an address after a handful of failed
+   * logins. The credentials are right in the case this exists for, a daemon
+   * that restarted, but a loop that hammers a daemon it cannot satisfy would
+   * eventually lock rigseed out of a daemon that was merely misconfigured.
+   */
+  useEffect(() => {
+    if (reachable || state.status !== 'connected') return
+    const delay = Math.min(30_000, 3_000 * 2 ** Math.min(retry, 4))
+    const timer = setTimeout(() => setRetry((n) => n + 1), delay)
+    return () => clearTimeout(timer)
+  }, [reachable, state.status, retry])
+
+  /**
+   * Logs in again, keeping what is on screen if it does not work.
+   *
+   * Separate from the first attempt above, and deliberately not sharing its
+   * failure path. That one falls back to the mock, which is right at startup
+   * and catastrophic here: it would replace a running app's real torrents
+   * with sample data because a daemon was restarting.
+   *
+   * A dead session is the case this exists for. The cookie dies with the
+   * daemon process, every request after that is a 403, and nothing else in
+   * the app ever logs in again: the first attempt runs on mount and only on
+   * mount. `connect` performs a fresh login, so the client it returns carries
+   * a session the new daemon knows about.
+   */
+  useEffect(() => {
+    if (retry === 0) return
+    let live = true
+
+    void (async () => {
+      const found = target ?? (await targetFor(activeId))
+      if (!found || !live) return
+
+      const result = await connect(found, { waitMs: 0 })
+      if (!live || result.status !== 'connected') return
+
+      // The poll loop marks the daemon reachable again on its next success,
+      // which is a second away. Setting it here as well would claim the
+      // connection works before anything has used it.
+      setState(result)
+    })()
+
+    return () => {
+      live = false
+    }
+  }, [retry, target, activeId])
 
   useEffect(() => {
     let live = true
