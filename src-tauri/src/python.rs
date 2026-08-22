@@ -177,3 +177,76 @@ pub async fn search_python(app: tauri::AppHandle) -> Result<PythonReport, String
             .map_err(|e| e.to_string())?,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn looks_for_nova2_where_qbittorrent_keeps_it() {
+        // The layout is qBittorrent's, not ours, and it is the reason the
+        // script sits under AppData at all. Getting it wrong would report
+        // `runtime_missing` on a perfectly good profile and give up.
+        let path = nova2(Path::new("/profile"));
+        assert!(
+            path.ends_with("qBittorrent/data/nova3/nova2.py")
+                || path.ends_with(r"qBittorrent\data\nova3\nova2.py")
+        );
+    }
+
+    #[test]
+    fn says_the_runtime_is_missing_rather_than_blaming_python() {
+        // A profile the daemon has never started in has no nova3 at all.
+        // Reporting that as "no working interpreter" would send somebody to
+        // reinstall Python over a problem Python has nothing to do with.
+        let report = probe(Path::new("/no/such/profile"));
+        assert!(report.runtime_missing);
+        assert!(report.interpreter.is_none());
+        assert!(!report.default_works);
+    }
+
+    #[test]
+    fn tries_the_launcher_before_the_path() {
+        // The whole point. PATH is what produced the sandboxed alias on the
+        // machine this was found on, so a probe that trusts it first finds the
+        // broken interpreter, confirms it is broken, and only then looks for a
+        // working one. Cheap to get backwards and invisible when you do.
+        let all = candidates();
+        let path_first = all.iter().position(|c| c == "python3");
+        assert!(path_first.is_some(), "PATH is still a candidate");
+        if cfg!(windows) && all.len() > 2 {
+            assert_eq!(path_first, Some(1), "the launcher result comes first");
+        }
+    }
+
+    #[test]
+    fn does_not_offer_the_same_interpreter_twice() {
+        let all = candidates();
+        let mut unique = all.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(all.len(), unique.len());
+    }
+
+    /// Runs the real probe against a real profile.
+    ///
+    /// Ignored by default: it depends on which interpreters this machine has,
+    /// which is the one thing a test cannot assume. Kept because it is the
+    /// only way to see the actual verdict on a machine that is misbehaving.
+    ///
+    /// `RIGSEED_PROFILE=... cargo test --lib real_profile -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn real_profile() {
+        let Ok(profile) = std::env::var("RIGSEED_PROFILE") else {
+            panic!("set RIGSEED_PROFILE to a daemon profile directory");
+        };
+        let report = probe(Path::new(&profile));
+        println!("interpreter:     {:?}", report.interpreter);
+        println!("default_works:   {}", report.default_works);
+        println!("runtime_missing: {}", report.runtime_missing);
+        for line in &report.tried {
+            println!("tried:           {line}");
+        }
+    }
+}
