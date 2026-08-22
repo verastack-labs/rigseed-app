@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import { GeneralTab } from '@/features/torrent-detail/general-tab'
 import { makeTorrent } from '@/test/torrent'
-import type { TorrentProperties } from '@/types/qbittorrent'
+import type { Torrent, TorrentProperties } from '@/types/qbittorrent'
 
 const torrent = makeTorrent({ name: 'ubuntu-24.04.2-desktop-amd64.iso' })
 
@@ -133,5 +133,26 @@ describe('GeneralTab detail card', () => {
   it('shows a skeleton inside the card while properties are still loading', () => {
     setup(null)
     expect(screen.queryByText('mktorrent 1.1')).not.toBeInTheDocument()
+  })
+})
+
+/** Renders with a torrent override rather than a properties one. */
+const withTorrent = (over: Partial<Torrent>) =>
+  render(<GeneralTab torrent={makeTorrent({ ...over })} properties={properties} />)
+
+describe('GeneralTab size', () => {
+  it('says what the size refers to when files are skipped', () => {
+    // `size` counts selected files only. On a torrent with files deselected
+    // it is smaller than the size the torrent is known by everywhere else,
+    // and the label alone gave no hint of that.
+    withTorrent({ size: 3_200_000_000, total_size: 4_700_000_000 })
+    expect(screen.getByText('3.20 GB')).toBeInTheDocument()
+    expect(screen.getByText('of 4.70 GB selected')).toBeInTheDocument()
+  })
+
+  it('says nothing extra when nothing is skipped', () => {
+    // The ordinary case, and it must not grow a line that reads as a warning.
+    withTorrent({ size: 4_700_000_000, total_size: 4_700_000_000 })
+    expect(screen.queryByText(/selected/)).not.toBeInTheDocument()
   })
 })

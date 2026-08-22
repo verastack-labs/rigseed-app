@@ -135,13 +135,32 @@ interface RateCardProps {
   label: string
   tone: 'accent' | 'accent2'
   current: number
-  average: number
+  /**
+   * This run only, from `*_session`.
+   *
+   * Not the all-time total, which is what this used to show under the word
+   * Session. The two are not close: a long-seeded torrent reads 8 MB here
+   * against 2.3 GB all time.
+   */
   session: number
   history: readonly number[]
   children: React.ReactNode
 }
 
-function RateCard({ label, tone, current, average, session, history, children }: RateCardProps) {
+/**
+ * The mean of the window the card already draws.
+ *
+ * The Average slot used to show the current speed a second time, which the
+ * card prints in 20px directly above it. The sparkline holds sixty samples
+ * and the card is already labelled "last 60s", so the honest number was
+ * sitting there unread.
+ */
+function averageOf(history: readonly number[]): number {
+  if (history.length === 0) return 0
+  return history.reduce((sum, sample) => sum + sample, 0) / history.length
+}
+
+function RateCard({ label, tone, current, session, history, children }: RateCardProps) {
   return (
     <div className="overflow-hidden rounded-[11px] border border-line">
       <div className="flex flex-col gap-3 p-4">
@@ -163,7 +182,9 @@ function RateCard({ label, tone, current, average, session, history, children }:
         <div className="flex items-center gap-5">
           <div className="flex flex-col gap-0.5">
             <SectionHeader>Average</SectionHeader>
-            <span className="font-mono text-[11.5px] text-text-dim">{formatSpeed(average)}</span>
+            <span className="font-mono text-[11.5px] text-text-dim">
+              {formatSpeed(averageOf(history))}
+            </span>
           </div>
           <div className="flex flex-col gap-0.5">
             <SectionHeader>Session</SectionHeader>
@@ -226,8 +247,7 @@ export function SpeedTab({
           label="Download"
           tone="accent"
           current={torrent.dlspeed}
-          average={torrent.downloaded > 0 ? torrent.dlspeed : 0}
-          session={torrent.downloaded}
+          session={torrent.downloaded_session}
           history={downHistory}
         >
           <LimitField
@@ -243,8 +263,7 @@ export function SpeedTab({
           label="Upload"
           tone="accent2"
           current={torrent.upspeed}
-          average={torrent.uploaded > 0 ? torrent.upspeed : 0}
-          session={torrent.uploaded}
+          session={torrent.uploaded_session}
           history={upHistory}
         >
           <LimitField

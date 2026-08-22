@@ -396,10 +396,19 @@ function makeTorrent(index: number, rand: () => number): Torrent {
     added_on: 1_770_000_000 - index * 86_400,
     completion_on: done ? 1_780_000_000 : 0,
     save_path: '/downloads',
+    // Larger than `size` on every third torrent, so the mock exercises a
+    // torrent with files deselected rather than one where the two are always
+    // equal and reading the wrong one still looks right.
+    total_size: index % 3 === 0 ? Math.round(size * 1.4) : size,
     dl_limit: -1,
     up_limit: -1,
     downloaded: Math.round(progress * 4_000_000_000),
     uploaded: Math.round(rand() * 2_000_000_000),
+    // A fraction of the all-time totals, never equal to them. Equal values
+    // would let a screen read the wrong field and still look right, which is
+    // exactly how the Speed tab showed all-time under the word Session.
+    downloaded_session: Math.round(progress * 4_000_000_000 * 0.12),
+    uploaded_session: Math.round(rand() * 2_000_000_000 * 0.08),
     seeding_time: done ? 86_400 : 0,
     auto_tmm: false,
     seq_dl: false,
@@ -1159,6 +1168,8 @@ export function createMockTransport({
           progress: 0,
           downloaded: 0,
           uploaded: 0,
+          downloaded_session: 0,
+          uploaded_session: 0,
           ratio: 0,
           completion_on: 0,
           // Straight from the form, so what the modal collected is what shows

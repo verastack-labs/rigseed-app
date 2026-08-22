@@ -20,6 +20,9 @@ export function makeTorrent(overrides: Partial<Torrent> = {}): Torrent {
     hash: 'a1b2c3',
     name: 'ubuntu.iso',
     size,
+    // Equal by default: the ordinary torrent has nothing deselected, and a
+    // test that wants the other case overrides it.
+    total_size: size,
     progress,
     dlspeed: 13_000_000,
     upspeed: 1_800_000,
@@ -39,6 +42,10 @@ export function makeTorrent(overrides: Partial<Torrent> = {}): Torrent {
     dl_limit: -1,
     up_limit: -1,
     downloaded: 3_648_000_000,
+    // Deliberately not a round fraction of the all-time figures, so a test
+    // reading the wrong field fails on the number rather than passing.
+    downloaded_session: 402_000_000,
+    uploaded_session: 91_000_000,
     uploaded: 1_000_000_000,
     seeding_time: 0,
     auto_tmm: false,
