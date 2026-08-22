@@ -108,3 +108,25 @@ export async function openPath(path: string): Promise<void> {
     complain('open', path, error)
   }
 }
+
+/**
+ * Open a link in the system browser.
+ *
+ * Never in the webview. rigseed's window has no address bar, no back button
+ * and no way to tell the user where they have ended up, so navigating it to a
+ * third-party page would strand them in something that looks like the app and
+ * is not.
+ *
+ * Outside Tauri this does nothing rather than falling back to `window.open`,
+ * which is the same rule the rest of this module follows: the caller checks
+ * `canReachDesktop()` and does not offer what cannot happen.
+ */
+export async function openUrl(url: string): Promise<void> {
+  const mod = await opener()
+  if (!mod || !url) return
+  try {
+    await mod.openUrl(url)
+  } catch (error) {
+    complain('open', url, error)
+  }
+}

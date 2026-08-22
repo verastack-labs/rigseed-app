@@ -7,11 +7,14 @@ import { Input } from '@/components/ui/input'
 import { SectionHeader } from '@/components/ui/section-header'
 import { SegmentedControl } from '@/components/ui/segmented-control'
 import { PluginManager } from '@/features/search/plugin-manager'
+import { PluginSource } from '@/features/search/plugin-source'
+import { PythonSource } from '@/features/search/python-source'
 import { RESULT_COLUMNS, ResultRow } from '@/features/search/result-row'
 import { icons } from '@/lib/icons'
 import { swatchColor, swatchFor } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 import { useApi } from '@/services/api-context'
+import { probePython, type PythonState } from '@/services/search'
 import { useSearchJob } from '@/state/use-search-job'
 import type { SearchPlugin } from '@/types/qbittorrent'
 
@@ -74,6 +77,25 @@ export function Search() {
     }
   }, [api])
 
+  /**
+   * Whether Python is there, asked before anybody tries to search.
+   *
+   * The screen used to find out only from a failed search, which on a fresh
+   * install is a message nobody ever sees: with no plugins installed there is
+   * nothing worth searching for, so the attempt that would have reported it
+   * never happens.
+   */
+  const [python, setPython] = useState<PythonState>('unknown')
+  useEffect(() => {
+    let live = true
+    void probePython(api.search).then((state) => {
+      if (live) setPython(state)
+    })
+    return () => {
+      live = false
+    }
+  }, [api])
+
   /** How many hits each engine returned, for the chips. */
   const perEngine = useMemo(() => {
     const tally = new Map<string, number>()
@@ -98,8 +120,10 @@ export function Search() {
   const enabledCount = (plugins ?? []).filter((p) => p.enabled).length
   const noPlugins = plugins !== null && plugins.length === 0
   // 409 is what the daemon answers when Python is missing. Anything else that
-  // blocks a search is reported as itself rather than guessed at.
-  const noPython = phase === 'blocked' && (error?.includes('409') ?? false)
+  // blocks a search is reported as itself rather than guessed at. The probe
+  // gets the same answer without waiting for somebody to try.
+  const noPython =
+    python === 'missing' || (phase === 'blocked' && (error?.includes('409') ?? false))
 
   const write = async (job: () => Promise<unknown>) => {
     setBusy(true)
@@ -150,9 +174,14 @@ export function Search() {
               </p>
               <p className="text-[11.5px] leading-[1.6] text-text-dim">
                 {noPython
-                  ? 'The search engine runs on Python 3. Install it on the host, then restart qbittorrent-nox and this panel will enable itself.'
-                  : 'Searching needs at least one plugin. Each plugin is a Python file that teaches the client how to query one site.'}
+                  ? 'The search engine runs on Python 3, which rigseed does not bundle. Install it, then reopen rigseed so the daemon it starts can find it.'
+                  : 'Searching needs at least one plugin. Each plugin is a Python file that teaches the client how to query one site. qBittorrent ships none, so this starts empty everywhere, not only here.'}
               </p>
+              {noPython ? (
+                <PythonSource className="justify-start pt-0.5" />
+              ) : (
+                <PluginSource className="justify-start pt-0.5" />
+              )}
               <span className="font-mono text-[10.5px] text-text-dimmer">
                 {noPython ? 'search/start → 409' : 'search/plugins → []'}
               </span>
