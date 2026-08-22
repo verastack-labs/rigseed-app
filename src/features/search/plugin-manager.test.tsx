@@ -78,7 +78,7 @@ describe('PluginManager', () => {
     fireEvent.change(field(), { target: { value: 'https://example.org/x.py' } })
     fireEvent.keyDown(field(), { key: 'Enter' })
 
-    expect(onInstall).toHaveBeenCalledWith('https://example.org/x.py')
+    expect(onInstall).toHaveBeenCalledWith(['https://example.org/x.py'])
     expect(field()).toHaveValue('')
   })
 
@@ -107,5 +107,32 @@ describe('PluginManager', () => {
   it('locks the write actions while one is in flight', () => {
     setup({ busy: true })
     expect(screen.getByRole('button', { name: 'Check updates' })).toBeDisabled()
+  })
+})
+
+describe('PluginManager failures', () => {
+  it('says nothing while nothing has failed', () => {
+    setup()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('announces a write that did not go through', () => {
+    // Nothing else on screen moves when a write fails: the list is re-read
+    // and comes back exactly as it was. Without this the click looks ignored.
+    setup({ failure: 'search/installPlugin failed with 400' })
+    expect(screen.getByRole('alert')).toHaveTextContent('That did not go through')
+    expect(screen.getByRole('alert')).toHaveTextContent('search/installPlugin failed with 400')
+  })
+
+  it('can be dismissed', () => {
+    const onDismissFailure = vi.fn()
+    setup({ failure: 'nope', onDismissFailure })
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    expect(onDismissFailure).toHaveBeenCalledOnce()
+  })
+
+  it('offers no dismiss when the caller cannot clear it', () => {
+    setup({ failure: 'nope' })
+    expect(screen.queryByRole('button', { name: 'Dismiss' })).not.toBeInTheDocument()
   })
 })

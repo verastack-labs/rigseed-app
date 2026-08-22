@@ -7,6 +7,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { PluginSource } from '@/features/search/plugin-source'
+import { StarterPlugins } from '@/features/search/starter-plugins'
 import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import type { SearchPlugin } from '@/types/qbittorrent'
@@ -15,11 +16,15 @@ export interface PluginManagerProps {
   open: boolean
   onClose: () => void
   plugins: readonly SearchPlugin[]
-  onInstall: (source: string) => void
+  /** Given raw `.py` URLs. `installPlugin` takes any number in one call. */
+  onInstall: (sources: readonly string[]) => void
   onToggle: (name: string, enable: boolean) => void
   onUninstall: (name: string) => void
   onCheckUpdates: () => void
   busy?: boolean
+  /** Why the last write did not happen, if it did not. */
+  failure?: string | null
+  onDismissFailure?: () => void
 }
 
 /**
@@ -43,13 +48,15 @@ export function PluginManager({
   onUninstall,
   onCheckUpdates,
   busy,
+  failure,
+  onDismissFailure,
 }: PluginManagerProps) {
   const [source, setSource] = useState('')
 
   const install = () => {
     const trimmed = source.trim()
     if (!trimmed) return
-    onInstall(trimmed)
+    onInstall([trimmed])
     setSource('')
   }
 
@@ -83,22 +90,35 @@ export function PluginManager({
           </Button>
         </div>
 
-        {plugins.length > 0 ? (
-          <div className="flex items-center justify-center border-b border-line px-[18px] py-2.5">
-            <PluginSource />
+        {/* An alert rather than a quiet line. Nothing else on screen changes
+            when a write fails, so if this is not announced it is not noticed:
+            the list looks exactly as it did before the click. */}
+        {failure ? (
+          <div
+            role="alert"
+            className="flex items-start gap-2.5 border-b border-warn bg-warn-soft px-[18px] py-2.5"
+          >
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="text-[11.5px] font-semibold text-text">That did not go through</span>
+              <span className="font-mono text-[10.5px] break-words text-text-dim">{failure}</span>
+            </span>
+            {onDismissFailure ? (
+              <IconButton title="Dismiss" onClick={onDismissFailure}>
+                <icons.clear className="size-[14px]" strokeWidth={2} />
+              </IconButton>
+            ) : null}
           </div>
         ) : null}
 
-        <div className="max-h-[360px] min-h-0 overflow-y-auto">
+        <div className="max-h-[420px] min-h-0 overflow-y-auto">
           {plugins.length === 0 ? (
-            <div className="flex flex-col items-center gap-1.5 px-[18px] py-8 text-center">
+            <div className="flex flex-col items-center gap-1.5 px-[18px] py-6 text-center">
               <p className="text-[13px] font-semibold text-text">No plugins installed</p>
-              <p className="mx-auto max-w-[420px] text-[11.5px] leading-[1.6] text-text-dim">
+              <p className="mx-auto max-w-[440px] text-[11.5px] leading-[1.6] text-text-dim">
                 Searching needs at least one plugin. Each plugin is a Python file that teaches the
                 client how to query one site. qBittorrent ships none, so this list starts empty
                 everywhere, not only here.
               </p>
-              <PluginSource />
             </div>
           ) : (
             plugins.map((plugin) => (
@@ -134,6 +154,22 @@ export function PluginManager({
               </div>
             ))
           )}
+
+          {/* Under the installed list rather than above it. Once anything is
+              installed this is a suggestion, and a suggestion does not belong
+              in front of what somebody came here to manage. On an empty list
+              it is the first thing under the explanation, which is where it
+              is actually needed. */}
+          <StarterPlugins
+            installed={plugins.map((plugin) => plugin.name)}
+            onInstall={onInstall}
+            busy={busy ?? false}
+            className="border-t border-line bg-surface2"
+          />
+
+          <div className="flex items-center justify-center border-t border-line px-[18px] py-2.5">
+            <PluginSource />
+          </div>
         </div>
 
         <div className={cn('flex items-center gap-2 border-t border-line px-[18px] py-3')}>

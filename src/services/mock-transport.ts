@@ -1,5 +1,5 @@
 import { PRIORITY, type Priority } from '@/lib/priority'
-import type { Transport } from '@/services/transport'
+import { ApiError, type Transport } from '@/services/transport'
 import type {
   Category,
   LogEntry,
@@ -955,6 +955,35 @@ export function createMockTransport({
           .filter(Boolean)
         const enable = String(body?.['enable'] ?? 'false') === 'true'
         for (const p of plugins) if (wanted.includes(p.name)) p.enabled = enable
+      }
+      if (path === 'search/installPlugin') {
+        // The daemon fetches each source and reads the plugin's own name and
+        // url out of the Python file. Nothing here can fetch anything, so the
+        // entry is built from the file name, which is what the daemon uses
+        // for `name` anyway. `.example` is reserved for exactly this, so the
+        // fabricated host cannot collide with a real one.
+        for (const source of String(body?.['sources'] ?? '')
+          .split('\n')
+          .filter(Boolean)) {
+          // The daemon fetches the source and fails when what comes back is
+          // not a plugin. The mock cannot fetch, so the one check it can
+          // honestly make is the extension. Worth making: without it the mock
+          // has no failing write anywhere, and the dialog's error state could
+          // not be reached in sample-data mode at all.
+          if (!source.endsWith('.py')) {
+            throw new ApiError(400, 'search/installPlugin', `${source} is not a Python plugin file`)
+          }
+          const stem = (source.split('/').pop() ?? '').replace(/\.py$/, '')
+          if (!stem || plugins.some((p) => p.name === stem)) continue
+          plugins.push({
+            name: stem,
+            fullName: stem.charAt(0).toUpperCase() + stem.slice(1),
+            url: `https://${stem}.example`,
+            version: '1.00',
+            enabled: true,
+            supportedCategories: [{ id: 'all', name: 'All categories' }],
+          })
+        }
       }
       if (path === 'search/uninstallPlugin') {
         for (const name of String(body?.['names'] ?? '')
