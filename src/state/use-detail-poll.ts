@@ -35,7 +35,6 @@ export function useDetailPoll(hash: string, tab: DetailTabKey, intervalMs = 2000
   const [trackers, setTrackers] = useState<readonly Tracker[] | null>(null)
   const [peers, setPeers] = useState<Record<string, Peer> | null>(null)
 
-
   /**
    * Which torrent the data in state belongs to.
    *

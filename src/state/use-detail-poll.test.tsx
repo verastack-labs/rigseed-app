@@ -101,7 +101,10 @@ describe('useDetailPoll when the client is swapped', () => {
     // its skeleton every other poll.
     let releaseMock: (value: unknown) => void = () => {}
     const mockProperties = vi.fn(
-      () => new Promise((resolve) => { releaseMock = resolve }),
+      () =>
+        new Promise((resolve) => {
+          releaseMock = resolve
+        }),
     )
     const realProperties = vi.fn(() => Promise.resolve({ save_path: '/downloads/real' }))
 
