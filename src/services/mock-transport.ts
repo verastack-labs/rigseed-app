@@ -396,6 +396,10 @@ function makeTorrent(index: number, rand: () => number): Torrent {
     added_on: 1_770_000_000 - index * 86_400,
     completion_on: done ? 1_780_000_000 : 0,
     save_path: '/downloads',
+    // Three real trackers in seedTrackers, and the count excludes the three
+    // synthetic rows exactly as the daemon's own does. Getting this wrong in
+    // the mock would let the badge disagree with the tab and still pass.
+    trackers_count: 3,
     // Larger than `size` on every third torrent, so the mock exercises a
     // torrent with files deselected rather than one where the two are always
     // equal and reading the wrong one still looks right.

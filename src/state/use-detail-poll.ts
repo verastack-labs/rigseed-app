@@ -98,14 +98,26 @@ export function useDetailPoll(hash: string, tab: DetailTabKey, intervalMs = 2000
     [api, hash],
   )
 
-  // The Files tab carries its count in the tab bar, so the count has to exist
-  // before anybody opens the tab. It used to appear only once the tab had been
-  // visited, which made the badge look like it was still loading on a screen
-  // that had finished loading. One request on mount rather than a second
-  // poller: the tab's own poll keeps it current once it is open.
+  /**
+   * The counts the tab bar shows, fetched once on mount.
+   *
+   * A badge that appears only after its tab has been visited reads as still
+   * loading on a screen that has finished loading, and a count in a tab
+   * exists precisely to answer the question without going there.
+   *
+   * Files and Peers only. Trackers is covered by `trackers_count` on the
+   * torrent itself, which costs nothing; there is no equivalent for these two,
+   * since `num_seeds + num_leechs` counts something slightly different from
+   * what the Peers tab lists.
+   *
+   * One request each rather than a second poller. The tab's own poll keeps it
+   * current once open, and polling a peer list nobody is looking at is the
+   * bandwidth this hook exists to avoid.
+   */
   useEffect(() => {
     if (!hash) return
     let cancelled = false
+
     void (async () => {
       try {
         const data = await api.torrents.files(hash)
@@ -114,6 +126,16 @@ export function useDetailPoll(hash: string, tab: DetailTabKey, intervalMs = 2000
         // The tab fetches it again when it opens.
       }
     })()
+
+    void (async () => {
+      try {
+        const data = await api.sync.torrentPeers(hash, 0)
+        if (!cancelled) setPeers((data.peers ?? {}) as Record<string, Peer>)
+      } catch {
+        // Same: the tab fetches it again when it opens.
+      }
+    })()
+
     return () => {
       cancelled = true
     }

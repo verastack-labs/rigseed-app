@@ -47,13 +47,31 @@ export function TorrentDetail() {
 
   const { properties, files, trackers, peers, refresh } = useDetailPoll(hash, tab)
 
+  /**
+   * The numbers in the tab bar.
+   *
+   * Every one has to exist before its tab is opened. A badge that appears
+   * only after a visit reads as still loading on a screen that has finished
+   * loading, and the whole point of a count in a tab is to answer the
+   * question without going there.
+   *
+   * Trackers needs no request: `trackers_count` rides on the sync payload and
+   * already excludes the DHT, PeX and LSD rows, which is exactly what the tab
+   * counts. Files and Peers are fetched once on mount, because neither has a
+   * field that matches what its tab lists: `num_seeds + num_leechs` was 2
+   * against a peer list of 1 on the daemon this was checked against.
+   */
   const counts = useMemo(
     () => ({
       ...(files ? { files: files.length } : {}),
-      ...(trackers ? { trackers: trackers.filter((t) => !isSynthetic(t.url)).length } : {}),
+      ...(trackers
+        ? { trackers: trackers.filter((t) => !isSynthetic(t.url)).length }
+        : torrent
+          ? { trackers: torrent.trackers_count }
+          : {}),
       ...(peers ? { peers: Object.keys(peers).length } : {}),
     }),
-    [files, trackers, peers],
+    [files, trackers, peers, torrent],
   )
 
   // The store is still empty on a cold load, or on a reload straight onto this
@@ -115,6 +133,9 @@ export function TorrentDetail() {
         {tab === 'files' ? (
           <FilesTab
             files={files}
+            // `has_metadata` is 5.x only. Falling back to the state covers an
+            // older daemon, which reports metaDL for the same situation.
+            awaitingMetadata={torrent.has_metadata === false || torrent.state === 'metaDL'}
             // Where the content actually landed, so a double click can open a
             // file. The daemon's own path, not one rebuilt from the name.
             {...(properties?.save_path ? { savePath: properties.save_path } : {})}
