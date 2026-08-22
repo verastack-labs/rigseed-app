@@ -3,6 +3,7 @@ import { Menu } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router'
 
 import { Footer } from '@/components/shell/footer'
+import { Toaster } from '@/components/shell/toaster'
 import { SetupModal } from '@/components/shell/setup-modal'
 import { TopBar } from '@/components/shell/top-bar'
 import { NavRail } from '@/components/ui/nav-rail'
@@ -85,6 +86,10 @@ export function AppShell() {
         <main className="min-h-0 flex-1 overflow-auto">
           <Outlet />
         </main>
+        {/* Outside main, so a page that scrolls does not carry it away, and
+            after it, so it is last in the tab order rather than sitting
+            between the top bar and the page. */}
+        <Toaster />
         <Footer
           counts={current?.label.toLowerCase() ?? ''}
           api="sync/maindata"

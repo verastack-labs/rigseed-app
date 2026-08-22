@@ -13,6 +13,7 @@ import { RESULT_COLUMNS, ResultRow } from '@/features/search/result-row'
 import { icons } from '@/lib/icons'
 import { swatchColor, swatchFor } from '@/lib/labels'
 import { cn } from '@/lib/utils'
+import { write } from '@/lib/write'
 import { useApi, useConnection } from '@/services/api-context'
 import { awaitInstalled, checkPython, pluginNameFor, type PythonCheck } from '@/services/search'
 import { useSearchJob } from '@/state/use-search-job'
@@ -204,7 +205,7 @@ export function Search() {
    * not exist here yet. The failure belongs next to the list it failed to
    * change either way.
    */
-  const write = async (job: () => Promise<unknown>) => {
+  const pluginWrite = async (job: () => Promise<unknown>) => {
     setBusy(true)
     setFailure(null)
     try {
@@ -445,7 +446,11 @@ export function Search() {
                 onToggle={() =>
                   setExpanded((prev) => (prev === result.fileUrl ? null : result.fileUrl))
                 }
-                onAdd={() => void api.torrents.add({ urls: [result.fileUrl] })}
+                onAdd={() =>
+                  void write('Add torrent', () => api.torrents.add({ urls: [result.fileUrl] }), {
+                    announce: 'Torrent added',
+                  })
+                }
                 onCopyMagnet={() => void navigator.clipboard?.writeText(result.fileUrl)}
               />
             ))
@@ -491,9 +496,9 @@ export function Search() {
         failure={failure}
         onDismissFailure={() => setFailure(null)}
         onInstall={(sources) => void install(sources)}
-        onToggle={(name, enable) => void write(() => api.search.enablePlugin([name], enable))}
-        onUninstall={(name) => void write(() => api.search.uninstallPlugin([name]))}
-        onCheckUpdates={() => void write(() => api.search.updatePlugins())}
+        onToggle={(name, enable) => void pluginWrite(() => api.search.enablePlugin([name], enable))}
+        onUninstall={(name) => void pluginWrite(() => api.search.uninstallPlugin([name]))}
+        onCheckUpdates={() => void pluginWrite(() => api.search.updatePlugins())}
       />
     </div>
   )

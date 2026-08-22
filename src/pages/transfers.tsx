@@ -17,6 +17,7 @@ import { AltSpeedToggle } from '@/features/transfers/alt-speed-toggle'
 import { Sidebar } from '@/features/transfers/sidebar'
 import { TorrentEasy } from '@/features/transfers/torrent-easy'
 import { TorrentGrid } from '@/features/transfers/torrent-grid'
+import { write } from '@/lib/write'
 import { TorrentList } from '@/features/transfers/torrent-list'
 import {
   categoryCounts,
@@ -94,8 +95,9 @@ export function Transfers() {
   const tags = useMemo(() => tagCounts(torrents), [torrents])
 
   const act = {
-    onResume: (hashes: readonly string[]) => void api.torrents.resume(hashes),
-    onPause: (hashes: readonly string[]) => void api.torrents.pause(hashes),
+    onResume: (hashes: readonly string[]) =>
+      void write('Resume', () => api.torrents.resume(hashes)),
+    onPause: (hashes: readonly string[]) => void write('Pause', () => api.torrents.pause(hashes)),
     onRemove: (hashes: readonly string[]) => setConfirmRemove(hashes),
   }
 
@@ -237,7 +239,9 @@ export function Transfers() {
             <AltSpeedToggle
               active={serverState.use_alt_speed_limits === true}
               offline={!reachable}
-              onToggle={() => void api.transfer.toggleSpeedLimitsMode()}
+              onToggle={() =>
+                void write('Switch speed limits', () => api.transfer.toggleSpeedLimitsMode())
+              }
             />
           </div>
         </div>
@@ -299,7 +303,8 @@ export function Transfers() {
         open={confirmRemove !== null}
         onCancel={() => setConfirmRemove(null)}
         onConfirm={(alsoDeleteFiles) => {
-          if (confirmRemove) void api.torrents.delete(confirmRemove, alsoDeleteFiles)
+          if (confirmRemove)
+            void write('Remove torrent', () => api.torrents.delete(confirmRemove, alsoDeleteFiles))
           setConfirmRemove(null)
           clearSelection()
         }}
