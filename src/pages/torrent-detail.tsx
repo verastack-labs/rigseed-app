@@ -15,6 +15,7 @@ import { TrackersTab } from '@/features/torrent-detail/trackers-tab'
 import { TitleBlock } from '@/features/torrent-detail/title-block'
 import { isSynthetic } from '@/features/torrent-detail/tracker-status'
 import { icons } from '@/lib/icons'
+import { write } from '@/lib/write'
 import { useApi } from '@/services/api-context'
 import { selectTorrent, useTorrentStore } from '@/state/torrent-store'
 import { useDetailPoll } from '@/state/use-detail-poll'
@@ -99,8 +100,8 @@ export function TorrentDetail() {
   const act = {
     onPauseResume: () =>
       void (isPaused(torrent.state) ? api.torrents.resume([hash]) : api.torrents.pause([hash])),
-    onRecheck: () => void api.torrents.recheck([hash]),
-    onReannounce: () => void api.torrents.reannounce([hash]),
+    onRecheck: () => void write('Recheck', () => api.torrents.recheck([hash])),
+    onReannounce: () => void write('Reannounce', () => api.torrents.reannounce([hash])),
     // The daemon's own magnet, which carries the display name and trackers.
     // Rebuilding one from the info hash produces a valid link that has lost
     // everything a client needs to find peers without waiting on DHT.
@@ -152,8 +153,14 @@ export function TorrentDetail() {
         {tab === 'trackers' ? (
           <TrackersTab
             trackers={trackers}
-            onAdd={(urls) => void api.torrents.addTrackers(hash, urls).then(refresh)}
-            onRemove={(url) => void api.torrents.removeTrackers(hash, [url]).then(refresh)}
+            onAdd={(urls) =>
+              void write('Add tracker', () => api.torrents.addTrackers(hash, urls)).then(refresh)
+            }
+            onRemove={(url) =>
+              void write('Remove tracker', () => api.torrents.removeTrackers(hash, [url])).then(
+                refresh,
+              )
+            }
           />
         ) : null}
 
@@ -161,7 +168,14 @@ export function TorrentDetail() {
           // The key is `ip:port`, which is exactly what transfer/banPeers
           // takes. The ban is session-wide rather than per torrent, which is
           // the daemon's design and not something this screen can scope.
-          <PeersTab peers={peers} onBan={(key) => void api.transfer.banPeers([key])} />
+          <PeersTab
+            peers={peers}
+            onBan={(key) =>
+              void write('Ban peer', () => api.transfer.banPeers([key]), {
+                announce: 'Peer banned',
+              })
+            }
+          />
         ) : null}
 
         {tab === 'speed' ? (
@@ -174,9 +188,19 @@ export function TorrentDetail() {
                 ? api.torrents.setDownloadLimit([hash], bytes)
                 : api.torrents.setUploadLimit([hash], bytes))
             }
-            onToggleSequential={() => void api.torrents.toggleSequentialDownload([hash])}
-            onToggleFirstLast={() => void api.torrents.toggleFirstLastPiecePrio([hash])}
-            onAutoManagement={(enable) => void api.torrents.setAutoManagement([hash], enable)}
+            onToggleSequential={() =>
+              void write('Sequential download', () => api.torrents.toggleSequentialDownload([hash]))
+            }
+            onToggleFirstLast={() =>
+              void write('First and last pieces first', () =>
+                api.torrents.toggleFirstLastPiecePrio([hash]),
+              )
+            }
+            onAutoManagement={(enable) =>
+              void write('Automatic torrent management', () =>
+                api.torrents.setAutoManagement([hash], enable),
+              )
+            }
           />
         ) : null}
       </div>
@@ -186,7 +210,11 @@ export function TorrentDetail() {
         onCancel={() => setConfirmRemove(false)}
         onConfirm={(alsoDeleteFiles) => {
           setConfirmRemove(false)
-          void api.torrents.delete([hash], alsoDeleteFiles).then(() => navigate('/'))
+          void write('Remove torrent', () => api.torrents.delete([hash], alsoDeleteFiles)).then(
+            (ok) => {
+              if (ok) navigate('/')
+            },
+          )
         }}
         title="Remove this torrent?"
         body="The torrent stops and leaves the list. The files it already downloaded stay on disk unless you also tick the option below."
