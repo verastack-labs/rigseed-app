@@ -201,3 +201,31 @@ describe('FilesTab size line', () => {
     expect(screen.queryByText(/ of /)).not.toBeInTheDocument()
   })
 })
+
+describe('FilesTab while a magnet resolves', () => {
+  it('explains the empty list rather than showing an empty table', () => {
+    // The daemon has answered; the honest answer is that no peer has sent
+    // the file list yet. Without this the tab renders a header row over
+    // nothing, under a Set priority row that can act on nothing.
+    setup({ files: [], awaitingMetadata: true })
+    expect(screen.getByText('Waiting for the file list')).toBeInTheDocument()
+    expect(screen.getByText(/comes from other peers/)).toBeInTheDocument()
+  })
+
+  it('offers no priority controls while there is nothing to prioritise', () => {
+    setup({ files: [], awaitingMetadata: true })
+    expect(screen.queryByText('Set priority')).not.toBeInTheDocument()
+  })
+
+  it('keeps showing the skeleton while the request is still out', () => {
+    // Null is a slow request, which is a different thing from an empty
+    // answer and must not be relabelled as a magnet problem.
+    setup({ files: null, awaitingMetadata: true })
+    expect(screen.queryByText('Waiting for the file list')).not.toBeInTheDocument()
+  })
+
+  it('does not claim a magnet problem for an ordinary torrent', () => {
+    setup({ files: [], awaitingMetadata: false })
+    expect(screen.queryByText('Waiting for the file list')).not.toBeInTheDocument()
+  })
+})
