@@ -23,6 +23,7 @@ export function makeTorrent(overrides: Partial<Torrent> = {}): Torrent {
     // Equal by default: the ordinary torrent has nothing deselected, and a
     // test that wants the other case overrides it.
     total_size: size,
+    trackers_count: 3,
     progress,
     dlspeed: 13_000_000,
     upspeed: 1_800_000,

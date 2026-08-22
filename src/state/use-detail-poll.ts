@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { useApi } from '@/services/api-context'
 import type { Peer, TorrentFile, TorrentProperties, Tracker } from '@/types/qbittorrent'
@@ -36,16 +36,6 @@ export function useDetailPoll(hash: string, tab: DetailTabKey, intervalMs = 2000
   const [peers, setPeers] = useState<Record<string, Peer> | null>(null)
 
   /**
-   * Whether the *current* run is still wanted.
-   *
-   * Read through a ref so `fetchFor` does not have to be rebuilt for it, and
-   * reset by each effect run rather than shared: the sync loop had the shared
-   * version and a superseded generation's response was waved through by the
-   * generation that replaced it.
-   */
-  const stopped = useRef(false)
-
-  /**
    * Which torrent the data in state belongs to.
    *
    * Without this, opening a second torrent showed the first one's save path,
@@ -72,40 +62,66 @@ export function useDetailPoll(hash: string, tab: DetailTabKey, intervalMs = 2000
     setPeers(null)
   }
 
+  /**
+   * Fetch one tab's data.
+   *
+   * `alive` belongs to the loop that called this, not to the hook. A ref
+   * shared across runs is how the old version broke: when the provider swapped
+   * the mock client for the real one, the new run set the shared flag back to
+   * false and un-stopped the previous run's loop. Both then polled forever,
+   * and the mock one answers `undefined` for a hash it has never heard of, so
+   * the General tab dropped to its skeleton every other poll.
+   *
+   * An empty body becomes null rather than undefined. `undefined` is not a
+   * state this hook has: it reads as loaded-but-empty at every call site while
+   * being neither, which is what made that flicker so hard to place.
+   */
   const fetchFor = useCallback(
-    async (which: DetailTabKey) => {
+    async (which: DetailTabKey, alive: () => boolean = () => true) => {
       if (!hash) return
       if (which === 'general') {
         const data = await api.torrents.properties(hash)
-        if (!stopped.current) setProperties(data)
+        if (alive()) setProperties(data ?? null)
       }
       if (which === 'files') {
         const data = await api.torrents.files(hash)
-        if (!stopped.current) setFiles(data)
+        if (alive()) setFiles(data ?? null)
       }
       if (which === 'trackers') {
         const data = await api.torrents.trackers(hash)
-        if (!stopped.current) setTrackers(data)
+        if (alive()) setTrackers(data ?? null)
       }
       if (which === 'peers') {
         // rid 0 every time, so the answer is a full snapshot rather than a
         // diff of partials. A per-screen diff cursor would be a second sync
         // protocol to keep correct, for one torrent's worth of peers.
         const data = await api.sync.torrentPeers(hash, 0)
-        if (!stopped.current) setPeers((data.peers ?? {}) as Record<string, Peer>)
+        if (alive()) setPeers((data?.peers ?? {}) as Record<string, Peer>)
       }
     },
     [api, hash],
   )
 
-  // The Files tab carries its count in the tab bar, so the count has to exist
-  // before anybody opens the tab. It used to appear only once the tab had been
-  // visited, which made the badge look like it was still loading on a screen
-  // that had finished loading. One request on mount rather than a second
-  // poller: the tab's own poll keeps it current once it is open.
+  /**
+   * The counts the tab bar shows, fetched once on mount.
+   *
+   * A badge that appears only after its tab has been visited reads as still
+   * loading on a screen that has finished loading, and a count in a tab
+   * exists precisely to answer the question without going there.
+   *
+   * Files and Peers only. Trackers is covered by `trackers_count` on the
+   * torrent itself, which costs nothing; there is no equivalent for these two,
+   * since `num_seeds + num_leechs` counts something slightly different from
+   * what the Peers tab lists.
+   *
+   * One request each rather than a second poller. The tab's own poll keeps it
+   * current once open, and polling a peer list nobody is looking at is the
+   * bandwidth this hook exists to avoid.
+   */
   useEffect(() => {
     if (!hash) return
     let cancelled = false
+
     void (async () => {
       try {
         const data = await api.torrents.files(hash)
@@ -114,29 +130,41 @@ export function useDetailPoll(hash: string, tab: DetailTabKey, intervalMs = 2000
         // The tab fetches it again when it opens.
       }
     })()
+
+    void (async () => {
+      try {
+        const data = await api.sync.torrentPeers(hash, 0)
+        if (!cancelled) setPeers((data.peers ?? {}) as Record<string, Peer>)
+      } catch {
+        // Same: the tab fetches it again when it opens.
+      }
+    })()
+
     return () => {
       cancelled = true
     }
   }, [api, hash])
 
   useEffect(() => {
-    stopped.current = false
+    // Local to this run. Every superseded loop keeps its own false and stops
+    // for good, which a shared ref cannot promise.
+    let stopped = false
     let timer: ReturnType<typeof setTimeout> | undefined
 
     const tick = async () => {
       try {
-        await fetchFor(tab)
+        await fetchFor(tab, () => !stopped)
       } catch {
         // A failed poll is not fatal. What is on screen stays rather than
         // blanking, and the next tick retries.
       }
-      if (!stopped.current) timer = setTimeout(() => void tick(), intervalMs)
+      if (!stopped) timer = setTimeout(() => void tick(), intervalMs)
     }
 
     void tick()
 
     return () => {
-      stopped.current = true
+      stopped = true
       if (timer) clearTimeout(timer)
     }
   }, [fetchFor, tab, intervalMs])

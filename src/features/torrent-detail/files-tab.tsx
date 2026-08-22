@@ -1,6 +1,7 @@
 import { Checkbox } from '@/components/ui/checkbox'
 import { ProgressBar } from '@/components/ui/progress-bar'
 import { SectionHeader } from '@/components/ui/section-header'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { icons } from '@/lib/icons'
 import { PRIORITY_CHOICES, type Priority } from '@/lib/priority'
@@ -12,6 +13,16 @@ import { formatBytes, formatPercent } from '@/utils/format'
 export interface FilesTabProps {
   /** Null until `torrents/files` answers. */
   files: readonly TorrentFile[] | null
+  /**
+   * True while a magnet has not resolved yet.
+   *
+   * Distinct from a slow request, which is what null files means. Here the
+   * daemon has answered and the honest answer is an empty list, because the
+   * file list comes from other peers and none have sent it. Without this the
+   * tab renders an empty table under a Set priority row that can act on
+   * nothing, and never says why.
+   */
+  awaitingMetadata?: boolean
   selected: readonly number[]
   onToggle: (index: number) => void
   onPriority: (indices: readonly number[], priority: Priority) => void
@@ -54,7 +65,14 @@ function join(base: string, relative: string): string {
   return `${base.replace(/[\\/]+$/, '')}/${relative.replace(/^[\\/]+/, '')}`
 }
 
-export function FilesTab({ files, selected, onToggle, onPriority, savePath }: FilesTabProps) {
+export function FilesTab({
+  files,
+  awaitingMetadata,
+  selected,
+  onToggle,
+  onPriority,
+  savePath,
+}: FilesTabProps) {
   const openable = Boolean(savePath) && canReachDesktop()
   const base = files ? shallowest(files) : 0
   if (!files) {
@@ -62,6 +80,16 @@ export function FilesTab({ files, selected, onToggle, onPriority, savePath }: Fi
       <div className="p-6">
         <Skeleton rows={5} rowHeight={38} />
       </div>
+    )
+  }
+
+  if (files.length === 0 && awaitingMetadata) {
+    return (
+      <EmptyState
+        icon={<icons.download className="size-6" strokeWidth={1.7} />}
+        title="Waiting for the file list"
+        body="A magnet link carries an identifier and nothing else. The list of files comes from other peers, and until one answers there is nothing here to choose."
+      />
     )
   }
 

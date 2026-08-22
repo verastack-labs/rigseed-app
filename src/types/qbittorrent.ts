@@ -70,6 +70,28 @@ export interface Torrent {
   dl_limit: number
   up_limit: number
   /**
+   * How many trackers the torrent has.
+   *
+   * Excludes the DHT, PeX and LSD rows that `torrents/trackers` reports
+   * alongside real ones, which is what the Trackers tab counts too: measured
+   * at 12 against a list of 15 with 3 synthetic. So the badge can be right
+   * without fetching the list at all.
+   */
+  trackers_count: number
+  /**
+   * Whether the torrent's file list has arrived.
+   *
+   * False for a magnet that has not resolved yet. A magnet carries an
+   * identifier and nothing else: the file list comes from other peers, so
+   * until it does there is no size, no files and nothing to choose. The
+   * daemon reports `size: 0` and `total_size: -1` in that state, and
+   * `torrents/files` answers with an empty array.
+   *
+   * 5.x only. Absent on older daemons, where it reads as undefined and the
+   * screens fall back to what they did before.
+   */
+  has_metadata?: boolean
+  /**
    * Every file, including the ones set to skip.
    *
    * `size` counts selected files only, so the two agree on a torrent with
