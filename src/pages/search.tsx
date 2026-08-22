@@ -47,6 +47,7 @@ export function Search() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [managing, setManaging] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
 
   const refreshPlugins = useCallback(async () => {
     try {
@@ -125,11 +126,29 @@ export function Search() {
   const noPython =
     python === 'missing' || (phase === 'blocked' && (error?.includes('409') ?? false))
 
+  /**
+   * Every write the plugin dialog makes, and the one place they can fail.
+   *
+   * These used to run uncaught behind `void`, so a rejected install cleared
+   * the busy flag, left the list exactly as it was, and said nothing. That was
+   * survivable while the only way in was pasting a URL, because somebody who
+   * has just pasted something knows what they were trying. It is not
+   * survivable now: installing from the starter list is a fetch the daemon
+   * makes over the network, and a plugin that quietly does not appear reads as
+   * rigseed ignoring the click.
+   *
+   * Reported inside the dialog rather than through a global notice, which does
+   * not exist here yet. The failure belongs next to the list it failed to
+   * change either way.
+   */
   const write = async (job: () => Promise<unknown>) => {
     setBusy(true)
+    setFailure(null)
     try {
       await job()
       await refreshPlugins()
+    } catch (cause) {
+      setFailure(cause instanceof Error ? cause.message : String(cause))
     } finally {
       setBusy(false)
     }
@@ -372,6 +391,8 @@ export function Search() {
         onClose={() => setManaging(false)}
         plugins={plugins ?? []}
         busy={busy}
+        failure={failure}
+        onDismissFailure={() => setFailure(null)}
         onInstall={(sources) => void write(() => api.search.installPlugin(sources))}
         onToggle={(name, enable) => void write(() => api.search.enablePlugin([name], enable))}
         onUninstall={(name) => void write(() => api.search.uninstallPlugin([name]))}

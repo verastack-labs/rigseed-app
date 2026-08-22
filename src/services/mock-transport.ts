@@ -1,5 +1,5 @@
 import { PRIORITY, type Priority } from '@/lib/priority'
-import type { Transport } from '@/services/transport'
+import { ApiError, type Transport } from '@/services/transport'
 import type {
   Category,
   LogEntry,
@@ -965,6 +965,14 @@ export function createMockTransport({
         for (const source of String(body?.['sources'] ?? '')
           .split('\n')
           .filter(Boolean)) {
+          // The daemon fetches the source and fails when what comes back is
+          // not a plugin. The mock cannot fetch, so the one check it can
+          // honestly make is the extension. Worth making: without it the mock
+          // has no failing write anywhere, and the dialog's error state could
+          // not be reached in sample-data mode at all.
+          if (!source.endsWith('.py')) {
+            throw new ApiError(400, 'search/installPlugin', `${source} is not a Python plugin file`)
+          }
           const stem = (source.split('/').pop() ?? '').replace(/\.py$/, '')
           if (!stem || plugins.some((p) => p.name === stem)) continue
           plugins.push({

@@ -22,6 +22,9 @@ export interface PluginManagerProps {
   onUninstall: (name: string) => void
   onCheckUpdates: () => void
   busy?: boolean
+  /** Why the last write did not happen, if it did not. */
+  failure?: string | null
+  onDismissFailure?: () => void
 }
 
 /**
@@ -45,6 +48,8 @@ export function PluginManager({
   onUninstall,
   onCheckUpdates,
   busy,
+  failure,
+  onDismissFailure,
 }: PluginManagerProps) {
   const [source, setSource] = useState('')
 
@@ -84,6 +89,26 @@ export function PluginManager({
             Check updates
           </Button>
         </div>
+
+        {/* An alert rather than a quiet line. Nothing else on screen changes
+            when a write fails, so if this is not announced it is not noticed:
+            the list looks exactly as it did before the click. */}
+        {failure ? (
+          <div
+            role="alert"
+            className="flex items-start gap-2.5 border-b border-warn bg-warn-soft px-[18px] py-2.5"
+          >
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="text-[11.5px] font-semibold text-text">That did not go through</span>
+              <span className="font-mono text-[10.5px] break-words text-text-dim">{failure}</span>
+            </span>
+            {onDismissFailure ? (
+              <IconButton title="Dismiss" onClick={onDismissFailure}>
+                <icons.clear className="size-[14px]" strokeWidth={2} />
+              </IconButton>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="max-h-[420px] min-h-0 overflow-y-auto">
           {plugins.length === 0 ? (
