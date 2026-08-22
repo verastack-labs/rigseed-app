@@ -52,11 +52,18 @@ function Probe() {
 const shown = () => screen.getByTestId('state').textContent
 
 /**
- * Advance in slices, letting React render between them.
+ * Advance in slices, so the retry chain can move one link per slice.
  *
- * One long jump fires every pending timer before React has re-rendered from
- * the store change, so the effect schedules its timeout into a clock that has
- * already moved past it and nothing ever runs.
+ * Each retry is a link: a timer fires, `setRetry` runs, React renders, and
+ * only then does the effect schedule the next timer and fire the attempt.
+ * React flushes that render on a MessageChannel task, which is a macrotask,
+ * and `advanceTimersByTimeAsync` only yields microtasks between the timers it
+ * runs. So one long jump never gets past the first link.
+ *
+ * Measured rather than assumed, because the obvious explanation is wrong:
+ * flushing React before the jump does not help, and neither do fifty
+ * microtask ticks after it. One real macrotask after the jump advances the
+ * chain by exactly one link. Slicing gives it one boundary per slice.
  */
 async function advance(ms: number) {
   for (let left = ms; left > 0; left -= 1_000) await vi.advanceTimersByTimeAsync(1_000)
