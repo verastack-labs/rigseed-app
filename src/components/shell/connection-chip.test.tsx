@@ -14,6 +14,7 @@ const connected: ConnectionState = {
   version: 'v5.2.3',
   webApiVersion: '2.11.2',
   label: '127.0.0.1:8080',
+  spawned: false,
 }
 
 describe('ConnectionChip', () => {

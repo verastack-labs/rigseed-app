@@ -412,6 +412,16 @@ export interface Preferences {
   web_ui_csrf_protection_enabled: boolean
   web_ui_clickjacking_protection_enabled: boolean
   web_ui_host_header_validation_enabled: boolean
+
+  // Search
+  /**
+   * Which interpreter runs the search engine. Empty means `python3` off PATH,
+   * which is the default and is not always the right one: see `checkPython`.
+   *
+   * Writable and honoured without a daemon restart, verified by pointing it at
+   * a path that does not exist, getting the 409, and clearing it again.
+   */
+  python_executable_path: string
 }
 
 /** What can be written back. Every key optional, since only changes are sent. */
