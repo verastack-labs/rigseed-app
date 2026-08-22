@@ -2,6 +2,7 @@ pub mod daemon;
 pub mod http;
 pub mod icon;
 pub mod python;
+pub mod tray;
 mod secrets;
 
 use std::sync::Mutex;
@@ -128,9 +129,28 @@ struct WebUiPort(std::sync::Mutex<u16>);
 /// have to be the same string or the login fails against a healthy daemon.
 const DAEMON_USER: &str = "rigseed";
 
-/// The sidecar handle, so the daemon can be stopped when the window closes.
+/// The sidecar handle, so the daemon can be stopped when rigseed exits.
 #[derive(Default)]
 struct Daemon(Mutex<Option<CommandChild>>);
+
+/// Stops the bundled daemon, if we started one and it is still running.
+///
+/// One function rather than a block inside the close handler, because there
+/// are two ways out now and only one of them destroys a window. Closing to the
+/// tray must not come through here; quitting from the tray must.
+///
+/// Takes the child out of the slot, so calling it twice is harmless. Both
+/// paths can fire during a normal exit.
+pub(crate) fn stop_daemon<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(state) = app.try_state::<Daemon>() {
+        if let Ok(mut slot) = state.0.lock() {
+            if let Some(child) = slot.take() {
+                let _ = child.kill();
+                log::info!("qbittorrent-nox stopped");
+            }
+        }
+    }
+}
 
 /// What the frontend needs to reach the local daemon.
 ///
@@ -344,11 +364,19 @@ pub fn run() {
             http::api_get,
             http::api_post,
             http::api_post_form,
-            python::search_python
+            python::search_python,
+            tray::hide_to_tray,
+            tray::quit_app
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 fit_within_screen(&window);
+            }
+
+            // Before anything that can fail, so a daemon that will not start
+            // still leaves a way to quit a window that will not close.
+            if let Err(error) = tray::install(app.handle()) {
+                log::warn!("no system tray: {error}");
             }
 
             // The config has to exist and hold our credentials before the
@@ -431,17 +459,23 @@ pub fn run() {
 
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Destroyed = event {
-                // The daemon is ours, so it goes down with the window rather
-                // than being left running headless after the UI closes.
-                if let Ok(mut slot) = window.state::<Daemon>().0.lock() {
-                    if let Some(child) = slot.take() {
-                        let _ = child.kill();
-                        log::info!("qbittorrent-nox stopped");
-                    }
-                }
+        .on_window_event(|window, event| match event {
+            // Never closed here. The frontend owns the choice, because that is
+            // where the preference lives and where a dialog can be drawn, and
+            // it answers with `hide_to_tray` or `quit_app`.
+            //
+            // Killing the daemon on close was the old behaviour and it stopped
+            // every transfer, seeding included, which for a torrent client is
+            // the one thing closing a window must not do.
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                api.prevent_close();
+                let _ = tauri::Emitter::emit(window, tray::CLOSE_REQUESTED, ());
             }
+            // Still the backstop. A window destroyed some other way, by the
+            // OS or by a crash of the webview, must not leave the daemon
+            // running headless with nothing to stop it.
+            tauri::WindowEvent::Destroyed => stop_daemon(&window.app_handle().clone()),
+            _ => {}
         })
         .run(tauri::generate_context!())
         .expect("error while running rigseed");
