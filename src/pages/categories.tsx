@@ -3,9 +3,11 @@ import { useShallow } from 'zustand/react/shallow'
 
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { EmptyState } from '@/components/ui/empty-state'
 import { SegmentedControl } from '@/components/ui/segmented-control'
 import { LabelEditor, type LabelDraft } from '@/features/labels/label-editor'
 import { LabelList, type LabelSummary } from '@/features/labels/label-list'
+import { icons } from '@/lib/icons'
 import { DEFAULT_CATEGORY_ICON, swatchFor } from '@/lib/labels'
 import { useApi } from '@/services/api-context'
 import { categoryStyle, tagColor, useLabelStore } from '@/state/label-store'
@@ -228,6 +230,30 @@ export function Categories() {
             onSave={() => void save()}
             onCancel={() => setDraft(original)}
             onDelete={() => setConfirmDelete(true)}
+          />
+        ) : items.length === 0 ? (
+          // Nothing to pick, so "pick one" is not an instruction anybody can
+          // follow. An empty list is an invitation to make the first one.
+          <EmptyState
+            className="min-w-0"
+            icon={
+              isCategory ? (
+                <icons.categories className="size-6" strokeWidth={1.7} />
+              ) : (
+                <icons.palette className="size-6" strokeWidth={1.7} />
+              )
+            }
+            title={isCategory ? 'No categories yet' : 'No tags yet'}
+            body={
+              isCategory
+                ? 'A category names a group of torrents and can give them a save path of their own. Torrents keep their files when a category changes.'
+                : 'A tag is a label a torrent can carry any number of. Nothing about the files changes when you add or remove one.'
+            }
+            action={
+              <Button variant="primary" size="sm" onClick={startNew}>
+                New {kind}
+              </Button>
+            }
           />
         ) : (
           <div className="flex min-w-0 flex-1 items-center justify-center px-6">

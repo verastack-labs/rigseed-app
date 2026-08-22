@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { createLogApi, levelOf } from '@/services/log'
+import { createLogApi, filteredOutReason, levelOf } from '@/services/log'
 import { createMockTransport } from '@/services/mock-transport'
 
 const api = () => createLogApi(createMockTransport())
@@ -54,5 +54,37 @@ describe('log through the mock', () => {
     expect(bans[0]).toHaveProperty('ip')
     expect(bans.some((b) => b.reason === 'banned by user')).toBe(true)
     expect(bans.some((b) => b.reason === 'IP filter')).toBe(true)
+  })
+})
+
+describe('filteredOutReason', () => {
+  it('names the one muted level rather than saying "filters"', () => {
+    // The toggles are four small dots. They are the filter people forget
+    // they set, so the empty state has to say which one is doing it.
+    expect(filteredOutReason(['warning'], '')).toBe(
+      'warning is hidden, and that is everything the daemon has said.',
+    )
+  })
+
+  it('lists several muted levels in plain English', () => {
+    expect(filteredOutReason(['normal', 'info', 'warning'], '')).toBe(
+      'normal, info and warning are hidden, and that is everything the daemon has said.',
+    )
+  })
+
+  it('names the search when that is the only filter on', () => {
+    expect(filteredOutReason([], 'tracker')).toBe('Nothing the daemon has said matches "tracker".')
+  })
+
+  it('says both when both are on', () => {
+    expect(filteredOutReason(['critical'], 'tracker')).toBe(
+      'critical is hidden, and nothing left matches "tracker".',
+    )
+  })
+
+  it('does not claim a filter when none is set', () => {
+    // The caller should have shown the never-logged-anything state instead,
+    // and inventing a filter to blame would send somebody looking for it.
+    expect(filteredOutReason([], '')).toBe('Nothing to show.')
   })
 })

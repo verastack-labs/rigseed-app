@@ -54,3 +54,32 @@ export function levelOf(type: number): LogLevel {
   if (type === 2) return 'info'
   return 'normal'
 }
+
+/**
+ * Why the log list is empty, in terms the reader can act on.
+ *
+ * "Nothing matches the current filters" is true and useless. The filters are
+ * four level toggles and a search box, and the toggles are the ones people
+ * forget they set: a muted level is a small grey dot in a row of them. Naming
+ * what is hidden is the difference between a dead end and a thing to undo,
+ * and it is what the design asks this state to do.
+ *
+ * `hidden` is the muted levels already in display case, so the caller keeps
+ * ownership of the level vocabulary.
+ */
+export function filteredOutReason(hidden: readonly string[], query: string): string {
+  const needle = query.trim()
+  const levels =
+    hidden.length === 0
+      ? null
+      : hidden.length === 1
+        ? `${hidden[0]} is hidden`
+        : `${hidden.slice(0, -1).join(', ')} and ${hidden[hidden.length - 1]} are hidden`
+
+  if (levels && needle) return `${levels}, and nothing left matches "${needle}".`
+  if (levels) return `${levels}, and that is everything the daemon has said.`
+  if (needle) return `Nothing the daemon has said matches "${needle}".`
+  // Neither filter is on and the list is still empty, which the caller should
+  // have answered with the never-logged-anything state instead.
+  return 'Nothing to show.'
+}
