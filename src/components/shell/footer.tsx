@@ -15,14 +15,25 @@ export interface FooterProps {
    * from a dropped connection, and the footer used to call both of them
    * connected.
    */
-  status?: ConnectionState['status']
+  status?: ConnectionState['status'] | 'reconnecting'
   /** From app/version and app/webapiVersion at runtime. Omitted when unknown. */
   daemon?: string
   className?: string
 }
 
-const STATUS: Record<ConnectionState['status'], { tone: StatusTone; label: string }> = {
+const STATUS: Record<
+  ConnectionState['status'] | 'reconnecting',
+  { tone: StatusTone; label: string }
+> = {
   connected: { tone: 'accent2', label: 'connected' },
+  /**
+   * Connected once, not answering now.
+   *
+   * The connection state is decided at startup and never revisited, so a
+   * daemon that dies mid-session leaves it saying "connected" forever. This
+   * comes from the poll loop instead, which is the only thing that finds out.
+   */
+  reconnecting: { tone: 'warn', label: 'reconnecting…' },
   connecting: { tone: 'muted', label: 'connecting' },
   mock: { tone: 'warn', label: 'sample data' },
   failed: { tone: 'warn', label: 'not connected' },
@@ -49,7 +60,12 @@ export function Footer({ counts, api, status = 'connecting', daemon, className }
         className,
       )}
     >
-      <StatusDot tone={tone} label={label} pulse={status === 'connecting'} mono />
+      <StatusDot
+        tone={tone}
+        label={label}
+        pulse={status === 'connecting' || status === 'reconnecting'}
+        mono
+      />
       {counts ? <span>{counts}</span> : null}
       {api ? <span className="truncate">{api}</span> : null}
       <span className="flex-1" />

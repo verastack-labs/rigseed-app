@@ -20,8 +20,22 @@ export interface TorrentState {
   rid: number
   /** True once any response has been merged. Drives the skeleton state. */
   loaded: boolean
+  /**
+   * Whether the daemon is answering right now.
+   *
+   * Distinct from the connection state, which is decided once at startup and
+   * then never revisited: a daemon that dies mid-session leaves that saying
+   * "connected" forever. This is the live answer, and it is what the footer
+   * and the mutating controls read.
+   *
+   * The data on screen is deliberately left alone when this goes false. The
+   * last known state is the best available answer and blanking it would
+   * throw away the only thing the user still has.
+   */
+  reachable: boolean
 
   applyMainData: (data: MainData) => void
+  setReachable: (next: boolean) => void
   reset: () => void
 }
 
@@ -36,6 +50,9 @@ const EMPTY = {
   speedHistory: { down: [] as number[], up: [] as number[] },
   rid: 0,
   loaded: false,
+  // Optimistic. Nothing has failed yet, and starting on "unreachable" would
+  // grey out the toolbar for the first second of every launch.
+  reachable: true,
 }
 
 /**
@@ -58,6 +75,8 @@ const EMPTY = {
  */
 export const useTorrentStore = create<TorrentState>()((set) => ({
   ...EMPTY,
+
+  setReachable: (next) => set((prev) => (prev.reachable === next ? prev : { reachable: next })),
 
   applyMainData: (data) =>
     set((prev) => {

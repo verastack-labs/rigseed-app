@@ -14,6 +14,7 @@ import { useTorrentStore } from '@/state/torrent-store'
 export function useSyncPoll(intervalMs = 1000) {
   const api = useApi()
   const applyMainData = useTorrentStore((s) => s.applyMainData)
+  const setReachable = useTorrentStore((s) => s.setReachable)
 
   useEffect(() => {
     // Local to this run, not a ref. A ref is shared across runs, so when the
@@ -28,16 +29,31 @@ export function useSyncPoll(intervalMs = 1000) {
     // first response is a full update.
     let rid = 0
 
+    /**
+     * Consecutive failures, loop-scoped like the rid and for the same reason.
+     *
+     * Two rather than one: at a one second interval a single dropped poll is
+     * a blip, and greying the toolbar out for it would flicker. Two failures
+     * is two seconds of silence, which is a daemon that has gone away.
+     */
+    let failures = 0
+
     const tick = async () => {
       try {
         const data = await api.sync.maindata(rid)
         if (stopped) return
         rid = data.rid
         applyMainData(data)
+        failures = 0
+        setReachable(true)
       } catch {
         // A failed poll is not fatal. The store keeps the last known data on
         // screen rather than blanking it, per the connection-loss rule, and
-        // the next tick retries.
+        // the next tick retries. What does change is that the app stops
+        // claiming to be connected and stops offering to write.
+        if (stopped) return
+        failures += 1
+        if (failures >= 2) setReachable(false)
       }
       if (!stopped) timer = setTimeout(() => void tick(), intervalMs)
     }
@@ -48,5 +64,5 @@ export function useSyncPoll(intervalMs = 1000) {
       stopped = true
       if (timer) clearTimeout(timer)
     }
-  }, [api, applyMainData, intervalMs])
+  }, [api, applyMainData, setReachable, intervalMs])
 }
