@@ -372,7 +372,7 @@ export function Search() {
         onClose={() => setManaging(false)}
         plugins={plugins ?? []}
         busy={busy}
-        onInstall={(source) => void write(() => api.search.installPlugin([source]))}
+        onInstall={(sources) => void write(() => api.search.installPlugin(sources))}
         onToggle={(name, enable) => void write(() => api.search.enablePlugin([name], enable))}
         onUninstall={(name) => void write(() => api.search.uninstallPlugin([name]))}
         onCheckUpdates={() => void write(() => api.search.updatePlugins())}

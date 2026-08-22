@@ -78,7 +78,7 @@ describe('PluginManager', () => {
     fireEvent.change(field(), { target: { value: 'https://example.org/x.py' } })
     fireEvent.keyDown(field(), { key: 'Enter' })
 
-    expect(onInstall).toHaveBeenCalledWith('https://example.org/x.py')
+    expect(onInstall).toHaveBeenCalledWith(['https://example.org/x.py'])
     expect(field()).toHaveValue('')
   })
 
