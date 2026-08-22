@@ -956,6 +956,27 @@ export function createMockTransport({
         const enable = String(body?.['enable'] ?? 'false') === 'true'
         for (const p of plugins) if (wanted.includes(p.name)) p.enabled = enable
       }
+      if (path === 'search/installPlugin') {
+        // The daemon fetches each source and reads the plugin's own name and
+        // url out of the Python file. Nothing here can fetch anything, so the
+        // entry is built from the file name, which is what the daemon uses
+        // for `name` anyway. `.example` is reserved for exactly this, so the
+        // fabricated host cannot collide with a real one.
+        for (const source of String(body?.['sources'] ?? '')
+          .split('\n')
+          .filter(Boolean)) {
+          const stem = (source.split('/').pop() ?? '').replace(/\.py$/, '')
+          if (!stem || plugins.some((p) => p.name === stem)) continue
+          plugins.push({
+            name: stem,
+            fullName: stem.charAt(0).toUpperCase() + stem.slice(1),
+            url: `https://${stem}.example`,
+            version: '1.00',
+            enabled: true,
+            supportedCategories: [{ id: 'all', name: 'All categories' }],
+          })
+        }
+      }
       if (path === 'search/uninstallPlugin') {
         for (const name of String(body?.['names'] ?? '')
           .split('|')
