@@ -9,6 +9,7 @@
     "opener:default",
     "shell:allow-execute",
     "store:default",
+    "notification:default",
     {
       "identifier": "opener:allow-open-path",
       "allow": [{ "path": "**" }]

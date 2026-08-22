@@ -4,6 +4,7 @@ import { NavLink, Outlet, useLocation } from 'react-router'
 
 import { Footer } from '@/components/shell/footer'
 import { Toaster } from '@/components/shell/toaster'
+import { useTorrentAlerts } from '@/state/use-torrent-alerts'
 import { SetupModal } from '@/components/shell/setup-modal'
 import { TopBar } from '@/components/shell/top-bar'
 import { NavRail } from '@/components/ui/nav-rail'
@@ -36,6 +37,11 @@ export function AppShell() {
   // The same theme, applied to the one piece of chrome the CSS cascade cannot
   // reach. Does nothing outside Tauri.
   useWindowIcon()
+  // Watches the torrent store for finishes and failures, and raises an OS
+  // notification for each if that has been turned on. In the shell rather than
+  // on Transfers, because the whole point is what happens while nobody is
+  // looking at that screen.
+  useTorrentAlerts()
   const [railExpanded, setRailExpanded] = useState(false)
   const { pathname } = useLocation()
   const current = DESTINATIONS.find((d) => d.to === pathname)

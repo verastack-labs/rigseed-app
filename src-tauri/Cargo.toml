@@ -26,6 +26,7 @@ tauri-plugin-log = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-store = "2"
 tauri-plugin-opener = "2"
+tauri-plugin-notification = "2"
 rand = "0.8"
 keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service"] }
 thiserror = "2"

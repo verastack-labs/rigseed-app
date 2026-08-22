@@ -8,13 +8,15 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { NumberField } from '@/features/settings/number-field'
 import { SettingRow } from '@/features/settings/setting-row'
+import { askForAlerts } from '@/services/desktop-alert'
+import { useAlertStore } from '@/state/alert-store'
 import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { canReachDesktop, pickFolder } from '@/services/shell'
 import { usePreferences } from '@/state/use-preferences'
 import type { Preferences } from '@/types/qbittorrent'
 
-type SectionKey = 'downloads' | 'connection' | 'speed' | 'bittorrent' | 'webui'
+type SectionKey = 'downloads' | 'connection' | 'speed' | 'bittorrent' | 'webui' | 'app'
 
 /**
  * Which keys belong to which section.
@@ -28,6 +30,14 @@ const SECTIONS: {
   label: string
   hint: string
   icon: keyof typeof icons
+  /**
+   * The daemon preferences this section owns, for the unsaved-changes dot and
+   * the save bar.
+   *
+   * Empty for a section that is not about the daemon at all. `This app` holds
+   * choices that live on this machine, take effect the moment they are made,
+   * and have nothing to save.
+   */
   keys: readonly (keyof Preferences)[]
 }[] = [
   {
@@ -104,6 +114,13 @@ const SECTIONS: {
       'web_ui_host_header_validation_enabled',
     ],
   },
+  {
+    key: 'app',
+    label: 'This app',
+    hint: 'Choices that live on this machine rather than in the daemon.',
+    icon: 'desktop',
+    keys: [],
+  },
 ]
 
 const DAY_OPTIONS = [
@@ -118,6 +135,30 @@ const HOURS = Array.from({ length: 24 }, (_, h) => String(h))
 export function Settings() {
   const { draft, changes, dirtyKeys, saving, error, set, apply, revert } = usePreferences()
   const [section, setSection] = useState<SectionKey>('downloads')
+
+  const alerts = useAlertStore()
+  /**
+   * Turning one on is what asks the operating system, never startup.
+   *
+   * A permission prompt on first launch arrives before there is any reason for
+   * it, gets refused on reflex, and on most systems cannot be asked a second
+   * time. Asking at the moment somebody says they want notifications spends
+   * the one ask on somebody who will say yes.
+   *
+   * A refusal leaves the switch off rather than on and silent, which is the
+   * failure mode worth avoiding: a setting that says it is on while nothing
+   * is ever shown.
+   */
+  const [refused, setRefused] = useState(false)
+  const setAlert = async (which: 'onComplete' | 'onError', next: boolean) => {
+    if (!next) {
+      alerts.set({ [which]: false })
+      return
+    }
+    const allowed = await askForAlerts()
+    setRefused(!allowed)
+    if (allowed) alerts.set({ [which]: true })
+  }
 
   const dirtyIn = (keys: readonly (keyof Preferences)[]) => keys.some((k) => k in changes)
 
@@ -200,7 +241,7 @@ export function Settings() {
               <p className="text-[12.5px] text-text-dim">{current.hint}</p>
             </div>
             <span className="shrink-0 font-mono text-[10.5px] text-text-dimmer">
-              app/setPreferences
+              {current.keys.length > 0 ? 'app/setPreferences' : 'this machine'}
             </span>
           </header>
 
@@ -565,6 +606,39 @@ export function Settings() {
                   </SettingRow>
                 </Card>
               </>
+            ) : null}
+
+            {section === 'app' ? (
+              <Card title="Desktop notifications" api="this machine" padding="none">
+                <SettingRow
+                  label="When a download finishes"
+                  hint="A notification from the operating system, so it arrives whether or not rigseed is the window in front."
+                >
+                  <Switch
+                    checked={alerts.onComplete}
+                    onChange={(next) => void setAlert('onComplete', next)}
+                    label="Notify when a download finishes"
+                  />
+                </SettingRow>
+                <SettingRow
+                  label="When a torrent stops with an error"
+                  hint="A missing file or a disk that filled up stops a torrent silently otherwise."
+                >
+                  <Switch
+                    checked={alerts.onError}
+                    onChange={(next) => void setAlert('onError', next)}
+                    label="Notify when a torrent stops with an error"
+                  />
+                </SettingRow>
+                {refused ? (
+                  <div className="border-t border-line px-4 py-3">
+                    <p className="text-[11.5px] leading-[1.6] text-text-dim">
+                      The operating system refused. rigseed asks once and cannot ask again, so this
+                      has to be turned back on in the system&rsquo;s own notification settings.
+                    </p>
+                  </div>
+                ) : null}
+              </Card>
             ) : null}
 
             {section === 'webui' ? (
