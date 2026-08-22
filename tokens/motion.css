@@ -30,3 +30,19 @@
     --dur-slow: 0.01s;
   }
 }
+
+/* The only keyframe in the system, and it earns its place.
+   Everything else animates between two states the element already has, so a
+   transition covers it. A toast has no "before": it is inserted, and something
+   inserted at full opacity in the corner of the eye reads as a glitch.
+   Gated at the call site with Tailwind's motion-safe, so reduce skips it. */
+@keyframes rigseed-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
