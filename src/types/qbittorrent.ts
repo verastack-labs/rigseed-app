@@ -69,8 +69,19 @@ export interface Torrent {
   /** -1 is unlimited. */
   dl_limit: number
   up_limit: number
+  /** All time, across every session the torrent has ever run in. */
   downloaded: number
   uploaded: number
+  /**
+   * This run only, reset when the daemon restarts.
+   *
+   * Not the same number as `downloaded` and not close to it: a long-seeded
+   * torrent can show 8 MB here against 2.3 GB all time. Anything labelled
+   * "session" has to read these, and the Speed tab used to read the pair
+   * above.
+   */
+  downloaded_session: number
+  uploaded_session: number
   seeding_time: number
   auto_tmm: boolean
   /**

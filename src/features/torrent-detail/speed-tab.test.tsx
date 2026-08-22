@@ -20,6 +20,29 @@ const base: SpeedTabProps = {
 const setup = (overrides: Partial<Torrent> = {}, props: Partial<SpeedTabProps> = {}) =>
   render(<SpeedTab {...base} {...props} torrent={{ ...torrent, ...overrides }} />)
 
+describe('SpeedTab totals', () => {
+  it('shows this session under Session, not the all-time total', () => {
+    // These are not close on a long-seeded torrent: 8 MB this run against
+    // 2.3 GB all time on the daemon this was found on. The card read the
+    // all-time pair and called it Session.
+    setup({ downloaded_session: 402_000_000, downloaded: 3_648_000_000 })
+    expect(screen.getByText('402.0 MB')).toBeInTheDocument()
+    expect(screen.queryByText('3.65 GB')).not.toBeInTheDocument()
+  })
+
+  it('averages the window it draws rather than repeating the current speed', () => {
+    // Average used to be the current speed a second time, which the card
+    // already prints in 20px directly above it.
+    setup({ dlspeed: 900 }, { downHistory: [0, 100, 200] })
+    expect(screen.getByText('100 B/s')).toBeInTheDocument()
+  })
+
+  it('has no average to report before any samples arrive', () => {
+    setup({ dlspeed: 900 }, { downHistory: [], upHistory: [] })
+    expect(screen.getAllByText('0 B/s').length).toBeGreaterThan(0)
+  })
+})
+
 describe('SpeedTab limits', () => {
   it('shows unlimited as an empty, disabled field', () => {
     setup()
