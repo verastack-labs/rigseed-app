@@ -1,6 +1,7 @@
 pub mod daemon;
 pub mod http;
 pub mod icon;
+pub mod python;
 mod secrets;
 
 use std::sync::Mutex;
@@ -341,7 +342,8 @@ pub fn run() {
             set_window_icon,
             http::api_get,
             http::api_post,
-            http::api_post_form
+            http::api_post_form,
+            python::search_python
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
