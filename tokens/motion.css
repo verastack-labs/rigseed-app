@@ -35,11 +35,13 @@
    Everything else animates between two states the element already has, so a
    transition covers it. A toast has no "before": it is inserted, and something
    inserted at full opacity in the corner of the eye reads as a glitch.
-   Gated at the call site with Tailwind's motion-safe, so reduce skips it. */
+   Gated at the call site with Tailwind's motion-safe, so reduce skips it.
+   Rises rather than drops, because the stack is anchored to the bottom and
+   motion that runs against the anchor reads as a correction. */
 @keyframes rigseed-arrive {
   from {
     opacity: 0;
-    transform: translateY(-6px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;

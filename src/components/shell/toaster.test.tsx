@@ -98,3 +98,17 @@ describe('the countdown', () => {
     expect(screen.getByText(/Second/)).toBeInTheDocument()
   })
 })
+
+describe('placement', () => {
+  it('clears the add-torrent button and the footer rather than the toolbar', () => {
+    // It was top right first, and a screenshot of the running window showed
+    // the second toast sitting on the view switcher and the speed limits
+    // toggle. Covering a control somebody might reach for after a failed
+    // action is worse than covering empty space.
+    render(<Toaster />)
+    const region = screen.getByRole('status')
+    expect(region.className).toContain('bottom-[46px]')
+    expect(region.className).toContain('right-[100px]')
+    expect(region.className).not.toContain('top-4')
+  })
+})
