@@ -75,9 +75,21 @@ function Toast({ notice, onDismiss }: { notice: Notice; onDismiss: () => void })
 /**
  * Where a failed action gets said out loud.
  *
- * Top right, under the top bar, rather than the conventional bottom right: the
- * add-torrent button lives down there and a toast over it would cover the
- * control somebody is most likely to reach for next.
+ * Bottom right, in the gap between the add-torrent button and the footer.
+ *
+ * It was top right first, on the reasoning that the add-torrent button owns the
+ * bottom right corner. That traded one collision for a worse one: a screenshot
+ * of the running window showed the second toast sitting squarely on the view
+ * switcher and the speed limits toggle, measured at 24px from the right edge
+ * and 66px from the top. Covering the controls somebody might reach for after
+ * a failed action is worse than covering empty space, and the toolbar is
+ * pinned where a scrolling list is not.
+ *
+ * So it goes back to the corner, offset to clear both obstacles rather than
+ * either. The button and everything it unfolds occupy a 58px column 26px in
+ * from the right, so 100px of inset clears the whole column including the
+ * options that rise out of it. The footer is 34px tall, so 46px of bottom
+ * leaves a 12px gap over it.
  *
  * `aria-live="polite"` rather than `assertive`. These are reports on something
  * the user just did, so they are already expecting an outcome, and interrupting
@@ -97,7 +109,7 @@ export function Toaster({ className }: { className?: string }) {
       role="status"
       aria-live="polite"
       className={cn(
-        'pointer-events-none fixed top-4 right-4 z-50 flex flex-col items-end gap-2',
+        'pointer-events-none fixed right-[100px] bottom-[46px] z-50 flex flex-col items-end gap-2',
         className,
       )}
     >
