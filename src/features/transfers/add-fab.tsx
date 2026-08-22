@@ -14,6 +14,8 @@ export type AddSource = (typeof OPTIONS)[number]['key']
 
 export interface AddFabProps {
   onSelect: (source: AddSource) => void
+  /** True while the daemon is not answering. Adding is a write like any other. */
+  offline?: boolean
   className?: string
 }
 
@@ -27,8 +29,18 @@ export interface AddFabProps {
  * translucent tint. A translucent hover let the page show through the option
  * circles and read as broken, which the spec calls out specifically.
  */
-export function AddFab({ onSelect, className }: AddFabProps) {
+export function AddFab({ onSelect, offline, className }: AddFabProps) {
   const [open, setOpen] = useState(false)
+
+  /**
+   * Whether the menu is actually showing.
+   *
+   * Not the same as `open`. The daemon can go away while the menu is up, and
+   * a menu whose every option is a write that cannot land is worse than no
+   * menu. Deriving it rather than closing on a change keeps the state honest:
+   * the menu reopens on its own if the daemon comes back.
+   */
+  const showing = open && !offline
 
   return (
     <>
@@ -45,14 +57,14 @@ export function AddFab({ onSelect, className }: AddFabProps) {
         onClick={() => setOpen(false)}
         className={cn(
           'fixed inset-0 z-30 backdrop-blur-[3px] transition-opacity duration-base',
-          open ? 'opacity-100' : 'pointer-events-none opacity-0',
+          showing ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
         style={{ background: 'var(--scrim)' }}
       />
 
       <div
         onKeyDown={(e) => {
-          if (e.key === 'Escape' && open) setOpen(false)
+          if (e.key === 'Escape' && showing) setOpen(false)
         }}
         className={cn(
           'absolute right-[26px] bottom-[26px] z-40 flex flex-col items-end',
@@ -65,13 +77,13 @@ export function AddFab({ onSelect, className }: AddFabProps) {
               key={option.key}
               className={cn(
                 'flex items-center gap-2.5 transition-all duration-spring ease-spring',
-                open
+                showing
                   ? 'pointer-events-auto translate-y-0 opacity-100'
                   : 'pointer-events-none translate-y-3 opacity-0',
               )}
               style={{
                 // Closest to the button first, so the stagger reads as rising.
-                transitionDelay: open ? `${(OPTIONS.length - 1 - i) * 30}ms` : `${i * 20}ms`,
+                transitionDelay: showing ? `${(OPTIONS.length - 1 - i) * 30}ms` : `${i * 20}ms`,
               }}
             >
               <span className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12px] font-semibold whitespace-nowrap text-text">
@@ -81,7 +93,7 @@ export function AddFab({ onSelect, className }: AddFabProps) {
                 type="button"
                 title={option.label}
                 aria-label={option.label}
-                tabIndex={open ? 0 : -1}
+                tabIndex={showing ? 0 : -1}
                 onClick={() => {
                   onSelect(option.key)
                   setOpen(false)
@@ -101,16 +113,17 @@ export function AddFab({ onSelect, className }: AddFabProps) {
 
         <button
           type="button"
-          title="Add torrent"
+          title={offline ? 'The daemon is not answering' : 'Add torrent'}
           aria-label="Add torrent"
-          aria-expanded={open}
+          aria-expanded={showing}
+          disabled={offline}
           onClick={() => setOpen((v) => !v)}
           className={cn(
             'flex size-[58px] items-center justify-center rounded-full bg-accent text-accent-on',
             'shadow-[var(--shadow-fab)] transition-[transform,box-shadow] duration-quick',
             'hover:shadow-[var(--shadow-fab-hover)]',
             'motion-safe:hover:scale-[1.09] motion-safe:active:scale-[0.96]',
-            open && 'motion-safe:scale-[1.04]',
+            showing && 'motion-safe:scale-[1.04]',
           )}
         >
           <Plus
@@ -121,7 +134,7 @@ export function AddFab({ onSelect, className }: AddFabProps) {
               // closed button offered to close something that was not open, and
               // 135 degrees is 45 plus a quarter turn, which put it back to a
               // plus once the menu was showing.
-              open ? 'rotate-45' : 'rotate-0',
+              showing ? 'rotate-45' : 'rotate-0',
             )}
             strokeWidth={2.4}
           />

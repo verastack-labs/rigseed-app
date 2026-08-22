@@ -10,6 +10,7 @@ import { RailItem } from '@/components/ui/rail-item'
 import { BrandMark } from '@/components/brand-mark'
 import { icons } from '@/lib/icons'
 import { useConnection } from '@/services/api-context'
+import { useTorrentStore } from '@/state/torrent-store'
 import { useThemeAttributes } from '@/state/use-theme-attributes'
 import { useWindowIcon } from '@/state/use-window-icon'
 
@@ -38,6 +39,8 @@ export function AppShell() {
   const { pathname } = useLocation()
   const current = DESTINATIONS.find((d) => d.to === pathname)
   const connection = useConnection()
+  // Live, from the poll loop. The connection state only knows how startup went.
+  const reachable = useTorrentStore((s) => s.reachable)
 
 
   return (
@@ -85,7 +88,7 @@ export function AppShell() {
         <Footer
           counts={current?.label.toLowerCase() ?? ''}
           api="sync/maindata"
-          status={connection.status}
+          status={connection.status === 'connected' && !reachable ? 'reconnecting' : connection.status}
           {...(connection.status === 'connected'
             ? { daemon: `qbittorrent ${connection.version} / api ${connection.webApiVersion}` }
             : {})}

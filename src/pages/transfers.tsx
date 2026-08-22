@@ -41,6 +41,8 @@ export function Transfers() {
   const torrents = useTorrentStore(useShallow(selectTorrentList))
   const serverState = useTorrentStore((s) => s.serverState)
   const loaded = useTorrentStore((s) => s.loaded)
+  // Live, from the poll loop. Every write below is pointless while it is false.
+  const reachable = useTorrentStore((s) => s.reachable)
 
   // Every category and tag the daemon knows, not only the ones currently in
   // use. The sidebar counts what is on screen; Add Torrent has to offer the
@@ -152,7 +154,7 @@ export function Transfers() {
     {
       key: ' ',
       run: () => {
-        if (!selected.length) return
+        if (!selected.length || !reachable) return
         // Resume only when every selected torrent is already paused. A mixed
         // selection pauses, which is the reversible half of the pair.
         const chosen = visible.filter((t) => selected.includes(t.hash))
@@ -164,7 +166,7 @@ export function Transfers() {
     {
       key: 'Delete',
       run: () => {
-        if (selected.length) act.onRemove(selected)
+        if (selected.length && reachable) act.onRemove(selected)
       },
     },
     { key: 'Escape', run: clearSelection },
@@ -196,6 +198,7 @@ export function Transfers() {
             className="flex-1 border-b-0"
             selectedCount={selected.length}
             totalCount={visible.length}
+            offline={!reachable}
             onClearSelection={clearSelection}
             onResume={() => act.onResume(scope)}
             onPause={() => act.onPause(scope)}
@@ -264,7 +267,10 @@ export function Transfers() {
         </div>
       </div>
 
-      <AddFab onSelect={(picked: AddSource) => setAdding(picked === 'file' ? 'file' : 'magnet')} />
+      <AddFab
+        offline={!reachable}
+        onSelect={(picked: AddSource) => setAdding(picked === 'file' ? 'file' : 'magnet')}
+      />
 
       {/* Mounted only while open, so every field starts fresh rather than
           carrying the last attempt's choices into the next torrent. */}

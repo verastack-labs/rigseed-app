@@ -11,6 +11,14 @@ export interface TransfersToolbarProps {
   onResume: () => void
   onPause: () => void
   onRemove: () => void
+  /**
+   * True while the daemon is not answering.
+   *
+   * Every one of these buttons is a write. Offering them while nothing can
+   * reach the daemon means a click that silently does nothing, and the user
+   * has no way to tell that from a torrent that refused to pause.
+   */
+  offline?: boolean
   className?: string
 }
 
@@ -37,10 +45,12 @@ export function TransfersToolbar({
   onResume,
   onPause,
   onRemove,
+  offline,
   className,
 }: TransfersToolbarProps) {
   const hasSelection = selectedCount > 0
-  const disabled = !hasSelection && totalCount === 0
+  const disabled = offline || (!hasSelection && totalCount === 0)
+  const why = offline ? 'The daemon is not answering' : undefined
 
   return (
     <div
@@ -51,6 +61,7 @@ export function TransfersToolbar({
     >
       <Button
         size="sm"
+        title={why}
         onClick={onResume}
         disabled={disabled}
         icon={<icons.resume className="size-[13px]" strokeWidth={2.2} />}
@@ -59,6 +70,7 @@ export function TransfersToolbar({
       </Button>
       <Button
         size="sm"
+        title={why}
         onClick={onPause}
         disabled={disabled}
         icon={<icons.pause className="size-[13px]" strokeWidth={2.2} />}
@@ -68,6 +80,7 @@ export function TransfersToolbar({
       <Button
         size="sm"
         variant="danger"
+        title={why}
         onClick={onRemove}
         disabled={disabled}
         icon={<icons.remove className="size-[13px]" strokeWidth={2.2} />}
