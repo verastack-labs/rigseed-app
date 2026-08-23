@@ -41,6 +41,20 @@ jitters on each poll.
 
 ## Rules that are easy to break
 
+**A write that can fail has to say so.** `void api.torrents.pause(hashes)`
+compiles, runs, and reports nothing when the daemon refuses: the row does not
+change, the next poll restores the old value, and the click reads as ignored
+rather than as refused. Use `write('Pause', () => api.torrents.pause(hashes))`
+from `lib/write.ts`, which labels the attempt in the user's word rather than
+the endpoint's and returns whether it landed.
+
+This was swept once and the sweep missed five, all of them the shape
+`void (cond ? apiCall() : otherCall())` rather than `void api.`.
+`lib/write.sweep.test.ts` now scans every page, feature and component file for
+it, so the next one fails a test rather than shipping. A `try` counts as
+handling: a read that cannot reach the daemon shows a loading shape, which is
+the right answer for a read.
+
 **Padding is a named scale, not a `className`.** `Card` puts its body padding
 on an inner element, so padding passed through `className` lands on the outer
 one and stacks rather than replacing. `cn` cannot resolve a conflict between
@@ -106,10 +120,21 @@ adjusted during render**, comparing the client held in state against the one
 just returned. Refs do neither, which is exactly how one of the three
 survived review.
 
-**Theme and label styling are app-local.** Mode, accent, default layout,
-category icons and tag colours are kept in `localStorage`, not in qBittorrent.
-The Web API has no field for any of them, and a remote instance shared with
-another client has no business being told what colour this one paints things.
+**Theme, labels and machine preferences are app-local.** Mode, accent, default
+layout, category icons and tag colours, which desktop notifications are wanted,
+and what the close button does are all kept in `localStorage`, not in
+qBittorrent. The Web API has no field for any of them, and a remote instance
+shared with another client has no business being told what colour this one
+paints things or whose desktop gets interrupted.
+
+They are separate stores rather than one preferences blob. `label-store` is
+about naming, `alert-store` about interrupting somebody, `window-prefs` about
+whether the process keeps running. A single store for everything local is a
+junk drawer by the third entry.
+
+`notice-store` is the exception that is not persisted. A failure from the last
+session is not news, and a stale one describes a daemon that may not even be
+the one now connected.
 
 ## Conventions
 
