@@ -55,3 +55,17 @@ describe('AltSpeedToggle', () => {
     expect(onToggle).not.toHaveBeenCalled()
   })
 })
+
+describe('narrow windows', () => {
+  it('drops the word and keeps the icon, the title and the name', () => {
+    // At the minimum supported window the toolbar cannot carry every label.
+    // The icon is the only thing that survives, so everything that names the
+    // control has to stay attached to it.
+    setup({ active: true })
+    const sw = screen.getByRole('switch')
+    expect(sw.querySelector('svg')).toBeInTheDocument()
+    expect(sw).toHaveAttribute('aria-label', 'Alternative speed limits')
+    expect(screen.getByText('Limited').className).toContain('hidden')
+    expect(screen.getByText('Limited').className).toContain('xl:inline')
+  })
+})

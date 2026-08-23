@@ -14,6 +14,9 @@ import {
   Filter,
   Hourglass,
   Layers,
+  LayoutGrid,
+  List,
+  Rows2,
   Brush,
   Disc,
   FileText,
@@ -61,6 +64,13 @@ export const icons = {
   active: Activity,
   stalled: Hourglass,
   /** Auto-download rules, which are a filter over a feed. */
+  /* The three Transfers layouts, chunky to dense, so the strip reads as a
+     density scale before any label is read: two fat rows, four squares,
+     three thin lines. */
+  layoutEasy: Rows2,
+  layoutGrid: LayoutGrid,
+  layoutList: List,
+
   filter: Filter,
   palette: Palette,
   resume: Play,

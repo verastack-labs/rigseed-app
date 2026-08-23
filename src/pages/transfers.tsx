@@ -196,7 +196,7 @@ export function Transfers() {
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center">
+        <div className="flex min-w-0 items-center">
           <TransfersToolbar
             className="flex-1 border-b-0"
             selectedCount={selected.length}
@@ -207,7 +207,7 @@ export function Transfers() {
             onPause={() => act.onPause(scope)}
             onRemove={() => act.onRemove(scope)}
           />
-          <div className="flex h-[52px] items-center gap-2.5 border-b border-line pr-6 pl-0">
+          <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pr-6 pl-0">
             <Input
               mono
               size="sm"
@@ -217,16 +217,32 @@ export function Transfers() {
               placeholder="Search torrents…"
               aria-label="Search torrents"
               icon={<Search className="size-[13px]" strokeWidth={2} />}
-              className="w-[232px]"
+              // Shrinks before anything else does. A field that is narrower
+              // than its placeholder still takes a query; a button that has
+              // lost its label has lost the only thing naming it.
+              className="w-[232px] min-w-[132px] shrink"
             />
-            <SectionHeader>View</SectionHeader>
+            <SectionHeader className="hidden xl:block">View</SectionHeader>
             <SegmentedControl
               size="sm"
               label="View"
+              iconsWhenNarrow
               options={[
-                { value: 'easy', label: 'Easy' },
-                { value: 'grid', label: 'Grid' },
-                { value: 'list', label: 'List' },
+                {
+                  value: 'easy',
+                  label: 'Easy',
+                  icon: <icons.layoutEasy className="size-[14px]" strokeWidth={2} />,
+                },
+                {
+                  value: 'grid',
+                  label: 'Grid',
+                  icon: <icons.layoutGrid className="size-[14px]" strokeWidth={2} />,
+                },
+                {
+                  value: 'list',
+                  label: 'List',
+                  icon: <icons.layoutList className="size-[14px]" strokeWidth={2} />,
+                },
               ]}
               value={activeLayout}
               onChange={(next) => setLayout(next as Layout)}

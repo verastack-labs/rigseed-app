@@ -16,6 +16,15 @@ export interface SegmentedControlProps<T extends string = string> {
   size?: 'sm' | 'md'
   /** Accessible name for the group, for example "View" or "Log tab". */
   label: string
+  /**
+   * Drop to icons alone once the window is too narrow to carry the words.
+   *
+   * Only honoured where every option has an icon: a strip of unlabelled
+   * buttons where some have no glyph is worse than one that overflows. The
+   * label stays in `title` and in the accessible name either way, so nothing
+   * is lost to a screen reader or to a hover.
+   */
+  iconsWhenNarrow?: boolean
   className?: string
 }
 
@@ -30,8 +39,12 @@ export function SegmentedControl<T extends string = string>({
   onChange,
   size = 'md',
   label,
+  iconsWhenNarrow,
   className,
 }: SegmentedControlProps<T>) {
+  const shrinkable =
+    iconsWhenNarrow === true && options.every((raw) => normalise(raw).icon !== undefined)
+
   return (
     <div
       role="radiogroup"
@@ -51,6 +64,7 @@ export function SegmentedControl<T extends string = string>({
             role="radio"
             aria-checked={on}
             title={opt.label}
+            aria-label={opt.label}
             onClick={() => onChange?.(opt.value)}
             className={cn(
               'inline-flex items-center gap-1.5 rounded-md border-none font-semibold whitespace-nowrap',
@@ -60,7 +74,7 @@ export function SegmentedControl<T extends string = string>({
             )}
           >
             {opt.icon}
-            {opt.label}
+            <span className={shrinkable ? 'hidden xl:inline' : undefined}>{opt.label}</span>
             {opt.count != null ? (
               <span className="font-mono text-[10px] opacity-75">{opt.count}</span>
             ) : null}

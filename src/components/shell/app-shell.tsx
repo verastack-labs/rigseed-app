@@ -94,7 +94,14 @@ export function AppShell() {
 
       <div className="flex min-w-0 flex-1 flex-col pl-[60px]">
         <TopBar isHome={pathname === '/'} breadcrumb={current?.breadcrumb ?? ''} />
-        <main className="min-h-0 flex-1 overflow-auto">
+        {/* `overflow-auto` here let the whole page scroll sideways whenever
+            anything inside was too wide, and the Transfers sidebar went with
+            it: the filter list and the speed card slid out of the window
+            along with the content they are meant to sit beside. Vertical
+            scrolling stays, horizontal never belongs to the shell. Anything
+            that genuinely needs to scroll sideways owns that itself, next to
+            the content rather than around the whole screen. */}
+        <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
           <Outlet />
         </main>
         {/* Outside main, so a page that scrolls does not carry it away, and
