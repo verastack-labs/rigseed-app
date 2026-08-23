@@ -32,3 +32,68 @@ a:hover { color: var(--accent2); }
 :where(button, [role="button"]):disabled {
   cursor: not-allowed;
 }
+
+/*
+ * Scrollbars, which the platform draws in its own colours until told otherwise.
+ *
+ * The default Chromium bar is a light grey trough with a mid-grey thumb. On a
+ * warm near-black surface that reads as a strip of somebody else's interface
+ * pasted down the edge, and it is the one part of the window the accent never
+ * reached.
+ *
+ * Track stays transparent so the bar borrows whatever surface it sits on
+ * rather than introducing a fifth neutral. The thumb is `--line`, the same
+ * colour as every divider, and thickens in colour rather than in width on
+ * hover, since a thumb that changes size shifts the content beside it.
+ *
+ * The padding is a transparent border with `background-clip: content-box`,
+ * which is the only way to inset a webkit thumb: the element has no box model
+ * of its own to add padding to.
+ */
+/*
+ * The standard properties are a fallback, not the plan. Chromium ignores every
+ * `::-webkit-scrollbar` rule the moment `scrollbar-width` is set on the same
+ * element, so declaring both unconditionally threw away the rounded inset
+ * thumb and the hover and drag states below and left a plain tinted bar.
+ * Measured: with both present the bar came back 10px and square.
+ *
+ * Every webview rigseed ships in is Blink or WebKit, so the pseudo-elements
+ * are the real implementation and this branch only ever runs in a browser
+ * during development.
+ */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dimmer);
+  background-clip: content-box;
+}
+
+/* Dragging is the one moment the bar is the thing being used, so it takes the
+   accent for the duration rather than staying a divider. */
+::-webkit-scrollbar-thumb:vertical:active,
+::-webkit-scrollbar-thumb:horizontal:active {
+  background: var(--accent);
+  background-clip: content-box;
+}
