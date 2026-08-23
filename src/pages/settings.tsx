@@ -10,6 +10,7 @@ import { NumberField } from '@/features/settings/number-field'
 import { SettingRow } from '@/features/settings/setting-row'
 import { askForAlerts } from '@/services/desktop-alert'
 import { useAlertStore } from '@/state/alert-store'
+import { useWindowPrefs } from '@/state/window-prefs'
 import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { canReachDesktop, pickFolder } from '@/services/shell'
@@ -137,6 +138,7 @@ export function Settings() {
   const [section, setSection] = useState<SectionKey>('downloads')
 
   const alerts = useAlertStore()
+  const windowPrefs = useWindowPrefs()
   /**
    * Turning one on is what asks the operating system, never startup.
    *
@@ -609,36 +611,60 @@ export function Settings() {
             ) : null}
 
             {section === 'app' ? (
-              <Card title="Desktop notifications" api="this machine" padding="none">
-                <SettingRow
-                  label="When a download finishes"
-                  hint="A notification from the operating system, so it arrives whether or not rigseed is the window in front."
-                >
-                  <Switch
-                    checked={alerts.onComplete}
-                    onChange={(next) => void setAlert('onComplete', next)}
-                    label="Notify when a download finishes"
-                  />
-                </SettingRow>
-                <SettingRow
-                  label="When a torrent stops with an error"
-                  hint="A missing file or a disk that filled up stops a torrent silently otherwise."
-                >
-                  <Switch
-                    checked={alerts.onError}
-                    onChange={(next) => void setAlert('onError', next)}
-                    label="Notify when a torrent stops with an error"
-                  />
-                </SettingRow>
-                {refused ? (
-                  <div className="border-t border-line px-4 py-3">
-                    <p className="text-[11.5px] leading-[1.6] text-text-dim">
-                      The operating system refused. rigseed asks once and cannot ask again, so this
-                      has to be turned back on in the system&rsquo;s own notification settings.
-                    </p>
-                  </div>
-                ) : null}
-              </Card>
+              <>
+                <Card title="Closing the window" api="this machine" padding="none">
+                  <SettingRow
+                    label="When the close button is pressed"
+                    hint="Torrents only transfer while rigseed is running, so closing it is not a free action."
+                  >
+                    <SegmentedControl
+                      label="What closing the window does"
+                      value={windowPrefs.onClose}
+                      onChange={(next) =>
+                        windowPrefs.setOnClose(next as typeof windowPrefs.onClose)
+                      }
+                      options={[
+                        { value: 'ask', label: 'Ask' },
+                        { value: 'tray', label: 'Keep running' },
+                        { value: 'quit', label: 'Quit' },
+                      ]}
+                      size="sm"
+                    />
+                  </SettingRow>
+                </Card>
+
+                <Card title="Desktop notifications" api="this machine" padding="none">
+                  <SettingRow
+                    label="When a download finishes"
+                    hint="A notification from the operating system, so it arrives whether or not rigseed is the window in front."
+                  >
+                    <Switch
+                      checked={alerts.onComplete}
+                      onChange={(next) => void setAlert('onComplete', next)}
+                      label="Notify when a download finishes"
+                    />
+                  </SettingRow>
+                  <SettingRow
+                    label="When a torrent stops with an error"
+                    hint="A missing file or a disk that filled up stops a torrent silently otherwise."
+                  >
+                    <Switch
+                      checked={alerts.onError}
+                      onChange={(next) => void setAlert('onError', next)}
+                      label="Notify when a torrent stops with an error"
+                    />
+                  </SettingRow>
+                  {refused ? (
+                    <div className="border-t border-line px-4 py-3">
+                      <p className="text-[11.5px] leading-[1.6] text-text-dim">
+                        The operating system refused. rigseed asks once and cannot ask again, so
+                        this has to be turned back on in the system&rsquo;s own notification
+                        settings.
+                      </p>
+                    </div>
+                  ) : null}
+                </Card>
+              </>
             ) : null}
 
             {section === 'webui' ? (
