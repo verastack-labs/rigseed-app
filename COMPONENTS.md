@@ -21,12 +21,12 @@ a second screen, it moves down a layer rather than being imported sideways.
 
 ## The primitives
 
-Thirty-one components in `src/components/ui/`, each with its own test file.
+Thirty-two components in `src/components/ui/`, each with its own test file.
 
 | Group | Components |
 | --- | --- |
 | Surfaces | `Card` `Chip` `Badge` `IconTile` `SectionHeader` |
-| Controls | `Button` `IconButton` `Input` `Textarea` `Switch` `Checkbox` `SegmentedControl` `SwatchRow` `DropZone` |
+| Controls | `Button` `IconButton` `Input` `Textarea` `Switch` `Checkbox` `SegmentedControl` `SwatchRow` `DropZone` `LimitField` |
 | Overlays | `Dialog` `ConfirmDialog` `FormDialog` `ContextMenu` `Disclosure` |
 | Data | `DataValue` `ProgressBar` `Sparkline` `StatCard` `StatusDot` |
 | Navigation | `NavRail` `RailItem` `TabBar` `FilterRow` |
@@ -38,6 +38,20 @@ Inter for prose and JetBrains Mono for values. Sizes, speeds, ratios,
 percentages, hashes, IPs and API paths go through it. Sentences and labels do
 not. It also sets `tabular-nums`, without which every live-updating figure
 jitters on each poll.
+
+`LimitField` is the worked example of the layering rule. It began inside the
+Speed tab, then the Transfers row menu needed the same control, so it moved to
+`ui/` rather than being imported across from one feature to another. It knows
+about bytes per second and about `-1` meaning unlimited; it does not know what
+a torrent is, which is what makes it a primitive.
+
+It also carries two lessons worth not relearning. It is mounted with a `key` of
+the current limit, because the daemon is the source of truth and can be changed
+from the stock WebUI or another client, and remounting says that without a
+component that has to correct itself in an effect. And the field's open state is
+kept separately from whether a limit is set: deriving it deadlocked, since
+unlimited disabled the box, a disabled box could not be typed into, and an empty
+box committed as unlimited.
 
 ## Rules that are easy to break
 
