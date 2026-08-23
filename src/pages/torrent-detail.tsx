@@ -99,7 +99,9 @@ export function TorrentDetail() {
 
   const act = {
     onPauseResume: () =>
-      void (isPaused(torrent.state) ? api.torrents.resume([hash]) : api.torrents.pause([hash])),
+      void write(isPaused(torrent.state) ? 'Resume' : 'Pause', () =>
+        isPaused(torrent.state) ? api.torrents.resume([hash]) : api.torrents.pause([hash]),
+      ),
     onRecheck: () => void write('Recheck', () => api.torrents.recheck([hash])),
     onReannounce: () => void write('Reannounce', () => api.torrents.reannounce([hash])),
     // The daemon's own magnet, which carries the display name and trackers.
@@ -110,7 +112,12 @@ export function TorrentDetail() {
   }
 
   const applyPriority = async (indices: readonly number[], priority: Priority) => {
-    await api.torrents.filePrio(hash, indices, priority)
+    const ok = await write('Change file priority', () =>
+      api.torrents.filePrio(hash, indices, priority),
+    )
+    // The selection stands if the change did not land. Clearing it would
+    // leave somebody re-picking the same files to try again.
+    if (!ok) return
     setSelectedFiles([])
     await refresh()
   }
@@ -184,9 +191,11 @@ export function TorrentDetail() {
             downHistory={speedHistory.down}
             upHistory={speedHistory.up}
             onLimit={(direction, bytes) =>
-              void (direction === 'down'
-                ? api.torrents.setDownloadLimit([hash], bytes)
-                : api.torrents.setUploadLimit([hash], bytes))
+              void write(direction === 'down' ? 'Set download limit' : 'Set upload limit', () =>
+                direction === 'down'
+                  ? api.torrents.setDownloadLimit([hash], bytes)
+                  : api.torrents.setUploadLimit([hash], bytes),
+              )
             }
             onToggleSequential={() =>
               void write('Sequential download', () => api.torrents.toggleSequentialDownload([hash]))

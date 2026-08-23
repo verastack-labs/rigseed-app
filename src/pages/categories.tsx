@@ -9,6 +9,7 @@ import { LabelEditor, type LabelDraft } from '@/features/labels/label-editor'
 import { LabelList, type LabelSummary } from '@/features/labels/label-list'
 import { icons } from '@/lib/icons'
 import { DEFAULT_CATEGORY_ICON, swatchFor } from '@/lib/labels'
+import { write } from '@/lib/write'
 import { useApi } from '@/services/api-context'
 import { categoryStyle, tagColor, useLabelStore } from '@/state/label-store'
 import { selectTorrentList, useTorrentStore } from '@/state/torrent-store'
@@ -140,8 +141,15 @@ export function Categories() {
     if (isCategory) {
       // create and edit take the same two arguments; which one applies is
       // whether the daemon already knows the name.
-      if (editing) await api.torrents.editCategory(name, draft.savePath)
-      else await api.torrents.createCategory(name, draft.savePath)
+      const ok = await write(editing ? 'Save category' : 'Create category', () =>
+        editing
+          ? api.torrents.editCategory(name, draft.savePath)
+          : api.torrents.createCategory(name, draft.savePath),
+      )
+      // The local icon and colour are keyed by a name the daemon may not have
+      // accepted. Storing them anyway leaves a style for a category that does
+      // not exist, which then survives every later listing.
+      if (!ok) return
 
       styles.setCategoryStyle(name, { icon: draft.icon, color: draft.color })
 
@@ -151,10 +159,17 @@ export function Categories() {
       // it can honestly do.
       if (original && draft.managed !== original.managed) {
         const affected = torrents.filter((t) => t.category === name).map((t) => t.hash)
-        if (affected.length) await api.torrents.setAutoManagement(affected, draft.managed)
+        if (affected.length) {
+          await write('Change automatic management', () =>
+            api.torrents.setAutoManagement(affected, draft.managed),
+          )
+        }
       }
     } else {
-      if (!editing) await api.torrents.createTags([name])
+      if (!editing) {
+        const ok = await write('Create tag', () => api.torrents.createTags([name]))
+        if (!ok) return
+      }
       styles.setTagColor(name, draft.color)
     }
 
@@ -163,13 +178,15 @@ export function Categories() {
 
   const remove = async () => {
     if (!editing) return
-    if (isCategory) {
-      await api.torrents.removeCategories([editing])
-      styles.forgetCategory(editing)
-    } else {
-      await api.torrents.deleteTags([editing])
-      styles.forgetTag(editing)
-    }
+    const ok = await write(isCategory ? 'Remove category' : 'Delete tag', () =>
+      isCategory ? api.torrents.removeCategories([editing]) : api.torrents.deleteTags([editing]),
+    )
+    // The stored icon and colour outlive a failed delete on purpose. Forgetting
+    // them for a category the daemon still has would silently reset its
+    // appearance, and the user would have no idea why.
+    if (!ok) return
+    if (isCategory) styles.forgetCategory(editing)
+    else styles.forgetTag(editing)
     setConfirmDelete(false)
     setEditing(null)
     setDraft(null)
