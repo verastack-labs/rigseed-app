@@ -250,3 +250,45 @@ export async function awaitInstalled(
     missing: wanted.filter((name) => !present.has(name)),
   }
 }
+
+/** Each installed plugin's version, keyed by the daemon's name for it. */
+export function versionsOf(plugins: readonly SearchPlugin[]): Map<string, string> {
+  return new Map(plugins.map((one) => [one.name, one.version]))
+}
+
+/**
+ * Waits for `updatePlugins` to finish, and reports what it changed.
+ *
+ * Same problem as installing, for the same reason: the daemon answers before it
+ * has fetched anything, so a caller that believes the 200 reports an update
+ * that has not happened yet. There is no endpoint that says what would update
+ * either, which is why the design's per-row `Update` badge was never built. The
+ * only fact available is the version each plugin carries, before and after.
+ *
+ * Returns as soon as anything moves. Nothing moving is the common case and it
+ * costs the full window, which is why the window is short: this is a button
+ * somebody pressed and is waiting on, not a background poll.
+ */
+export async function awaitUpdated(
+  api: SearchApi,
+  before: ReadonlyMap<string, string>,
+  options: { attempts?: number; everyMs?: number } = {},
+): Promise<{ updated: string[] }> {
+  const attempts = options.attempts ?? 6
+  const everyMs = options.everyMs ?? 700
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const now = versionsOf(await api.plugins())
+      const updated = [...now]
+        .filter(([name, version]) => before.has(name) && before.get(name) !== version)
+        .map(([name]) => name)
+      if (updated.length > 0) return { updated }
+    } catch {
+      // A list that could not be read this time says nothing either way.
+    }
+    if (attempt < attempts - 1) await new Promise((done) => setTimeout(done, everyMs))
+  }
+
+  return { updated: [] }
+}

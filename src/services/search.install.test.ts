@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { awaitInstalled, pluginNameFor, type SearchApi } from '@/services/search'
+import { awaitInstalled, awaitUpdated, pluginNameFor, type SearchApi } from '@/services/search'
 
 const plugin = (name: string) => ({
   name,
@@ -95,5 +95,70 @@ describe('awaitInstalled', () => {
     await awaitInstalled(api, ['nope'], { attempts: 3, everyMs: 1 })
     expect(waits).toHaveBeenCalledTimes(2)
     waits.mockRestore()
+  })
+})
+
+describe('awaitUpdated', () => {
+  const versioned = (rounds: Record<string, string>[]) => {
+    const answers = [...rounds]
+    const plugins = vi.fn(async () => {
+      const round = answers.length > 1 ? answers.shift()! : answers[0]!
+      return Object.entries(round).map(([name, version]) => ({ ...plugin(name), version }))
+    })
+    return { plugins } as unknown as SearchApi & { plugins: typeof plugins }
+  }
+
+  it('reports what actually changed version', async () => {
+    // The only fact available. updatePlugins answers before it has fetched
+    // anything, and no endpoint says what would update, so before-and-after
+    // versions are the whole signal.
+    const api = versioned([{ piratebay: '2.0', eztv: '1.0' }])
+    const before = new Map([
+      ['piratebay', '1.9'],
+      ['eztv', '1.0'],
+    ])
+    const { updated } = await awaitUpdated(api, before, { everyMs: 1 })
+    expect(updated).toEqual(['piratebay'])
+  })
+
+  it('keeps looking while the daemon is still fetching', async () => {
+    const api = versioned([{ piratebay: '1.9' }, { piratebay: '1.9' }, { piratebay: '2.0' }])
+    const { updated } = await awaitUpdated(api, new Map([['piratebay', '1.9']]), { everyMs: 1 })
+    expect(updated).toEqual(['piratebay'])
+    expect(api.plugins).toHaveBeenCalledTimes(3)
+  })
+
+  it('reports nothing rather than waiting forever when everything is current', async () => {
+    // The common case, and the one a silent button never answered.
+    const api = versioned([{ piratebay: '2.0' }])
+    const { updated } = await awaitUpdated(api, new Map([['piratebay', '2.0']]), {
+      attempts: 2,
+      everyMs: 1,
+    })
+    expect(updated).toEqual([])
+    expect(api.plugins).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not count a plugin that arrived during the check as an update', async () => {
+    // Installed in another window, or by the starter list moments earlier. It
+    // is new, not updated, and calling it updated is a claim about work this
+    // button did not do.
+    const api = versioned([{ piratebay: '2.0', torlock: '1.0' }])
+    const { updated } = await awaitUpdated(api, new Map([['piratebay', '2.0']]), {
+      attempts: 2,
+      everyMs: 1,
+    })
+    expect(updated).toEqual([])
+  })
+
+  it('does not treat an unreadable list as nothing having happened', async () => {
+    const plugins = vi
+      .fn<() => Promise<(ReturnType<typeof plugin> & { version: string })[]>>()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue([{ ...plugin('piratebay'), version: '2.0' }])
+    const api = { plugins } as unknown as SearchApi
+
+    const { updated } = await awaitUpdated(api, new Map([['piratebay', '1.9']]), { everyMs: 1 })
+    expect(updated).toEqual(['piratebay'])
   })
 })

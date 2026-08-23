@@ -15,7 +15,15 @@ import { swatchColor, swatchFor } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 import { write } from '@/lib/write'
 import { useApi, useConnection } from '@/services/api-context'
-import { awaitInstalled, checkPython, pluginNameFor, type PythonCheck } from '@/services/search'
+import {
+  awaitInstalled,
+  awaitUpdated,
+  checkPython,
+  pluginNameFor,
+  versionsOf,
+  type PythonCheck,
+} from '@/services/search'
+import { notify } from '@/state/notice-store'
 import { useSearchJob } from '@/state/use-search-job'
 import type { SearchPlugin } from '@/types/qbittorrent'
 
@@ -239,6 +247,41 @@ export function Search() {
           `${missing.join(', ')} did not install. The daemon accepted the request and then rejected the plugin; its log says why.`,
         )
       }
+    } catch (cause) {
+      setFailure(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * Checking for plugin updates, which used to say nothing at all.
+   *
+   * The button called `updatePlugins` and refreshed the list, so updating three
+   * plugins and updating none looked identical: no message, and versions that
+   * most people have never read. The endpoint answers before it has fetched
+   * anything, so the outcome is only visible by comparing versions afterwards.
+   *
+   * Announced rather than left silent even when nothing changed. "Everything is
+   * current" is the answer somebody pressing this wants most of the time, and
+   * it is the one a silent button never gives.
+   */
+  const checkUpdates = async () => {
+    setBusy(true)
+    setFailure(null)
+    try {
+      const before = versionsOf(plugins ?? [])
+      await api.search.updatePlugins()
+      const { updated } = await awaitUpdated(api.search, before)
+      await refreshPlugins()
+      notify({
+        tone: 'ok',
+        what:
+          updated.length === 0
+            ? 'Plugins are up to date'
+            : `Updated ${updated.length} plugin${updated.length === 1 ? '' : 's'}`,
+        ...(updated.length > 0 ? { detail: updated.join(', ') } : {}),
+      })
     } catch (cause) {
       setFailure(cause instanceof Error ? cause.message : String(cause))
     } finally {
@@ -498,7 +541,7 @@ export function Search() {
         onInstall={(sources) => void install(sources)}
         onToggle={(name, enable) => void pluginWrite(() => api.search.enablePlugin([name], enable))}
         onUninstall={(name) => void pluginWrite(() => api.search.uninstallPlugin([name]))}
-        onCheckUpdates={() => void pluginWrite(() => api.search.updatePlugins())}
+        onCheckUpdates={() => void checkUpdates()}
       />
     </div>
   )
