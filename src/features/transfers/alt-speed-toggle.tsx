@@ -57,7 +57,11 @@ export function AltSpeedToggle({ active, onToggle, offline, className }: AltSpee
       )}
     >
       <Icon className="size-[15px]" strokeWidth={2} />
-      {active ? 'Limited' : 'Full speed'}
+      {/* The word goes when the window cannot carry it, never the icon. The
+          accessible name and the title both stay, so the only thing lost is
+          the glance, and only at a width where the alternative is a toolbar
+          that overflows. */}
+      <span className="hidden xl:inline">{active ? 'Limited' : 'Full speed'}</span>
     </button>
   )
 }
