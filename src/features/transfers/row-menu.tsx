@@ -10,6 +10,9 @@ export interface TorrentActions {
   onResume: (hashes: readonly string[]) => void
   onPause: (hashes: readonly string[]) => void
   onRemove: (hashes: readonly string[]) => void
+  onRecheck: (hashes: readonly string[]) => void
+  /** Opens the per-torrent limits, which the page owns and this only asks for. */
+  onSpeedLimits: (torrent: Torrent) => void
 }
 
 /** Every layout renders the same torrents and the same actions. */
@@ -23,7 +26,18 @@ function menuItems(torrent: Torrent, actions: TorrentActions) {
   return [
     { label: 'Resume', onSelect: () => actions.onResume([torrent.hash]) },
     { label: 'Pause', onSelect: () => actions.onPause([torrent.hash]) },
-    { label: 'Force recheck' },
+    // Wired rather than decorative. It shipped with no handler at all, so it
+    // was a menu item that looked available, highlighted on hover, and did
+    // nothing whatsoever when chosen.
+    { label: 'Force recheck', onSelect: () => actions.onRecheck([torrent.hash]) },
+    { separator: true as const },
+    {
+      // The ellipsis is the convention for an item that opens something rather
+      // than acting immediately, and it matters more than usual here: every
+      // other item on this menu takes effect the moment it is chosen.
+      label: 'Speed limits…',
+      onSelect: () => actions.onSpeedLimits(torrent),
+    },
     { separator: true as const },
     {
       label: 'Copy magnet link',

@@ -12,9 +12,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { TransfersToolbar } from '@/components/shell/transfers-toolbar'
 import { AddTorrentDialog } from '@/features/add-torrent/add-torrent-dialog'
 import type { Source } from '@/features/add-torrent/source-picker'
+import type { Torrent } from '@/types/qbittorrent'
 import { AddFab, type AddSource } from '@/features/transfers/add-fab'
 import { AltSpeedToggle } from '@/features/transfers/alt-speed-toggle'
 import { Sidebar } from '@/features/transfers/sidebar'
+import { SpeedLimitDialog } from '@/features/transfers/speed-limit-dialog'
 import { TorrentEasy } from '@/features/transfers/torrent-easy'
 import { TorrentGrid } from '@/features/transfers/torrent-grid'
 import { write } from '@/lib/write'
@@ -94,11 +96,20 @@ export function Transfers() {
   const categories = useMemo(() => categoryCounts(torrents), [torrents])
   const tags = useMemo(() => tagCounts(torrents), [torrents])
 
+  /** Which torrent's limits are open, by hash. */
+  const [limiting, setLimiting] = useState<string | null>(null)
+
   const act = {
     onResume: (hashes: readonly string[]) =>
       void write('Resume', () => api.torrents.resume(hashes)),
     onPause: (hashes: readonly string[]) => void write('Pause', () => api.torrents.pause(hashes)),
     onRemove: (hashes: readonly string[]) => setConfirmRemove(hashes),
+    onRecheck: (hashes: readonly string[]) =>
+      void write('Force recheck', () => api.torrents.recheck(hashes)),
+    // The page owns the dialog rather than the row. One dialog for whichever
+    // row asked beats one per row, and the limits it shows have to follow the
+    // live torrent through every poll, which the row's copy would not.
+    onSpeedLimits: (torrent: Torrent) => setLimiting(torrent.hash),
   }
 
   // With nothing selected the toolbar acts on everything in view, which is
@@ -314,6 +325,23 @@ export function Transfers() {
           freeSpace={serverState.free_space_on_disk ?? 0}
         />
       ) : null}
+
+      {/* Looked up fresh each render rather than held in state, so the fields
+          follow the daemon through every poll. A torrent removed while its
+          limits are open closes the dialog instead of showing a stale copy. */}
+      <SpeedLimitDialog
+        torrent={visible.find((t) => t.hash === limiting) ?? null}
+        onClose={() => setLimiting(null)}
+        onLimit={(direction, bytes) =>
+          limiting === null
+            ? undefined
+            : void write(direction === 'down' ? 'Set download limit' : 'Set upload limit', () =>
+                direction === 'down'
+                  ? api.torrents.setDownloadLimit([limiting], bytes)
+                  : api.torrents.setUploadLimit([limiting], bytes),
+              )
+        }
+      />
 
       <ConfirmDialog
         open={confirmRemove !== null}

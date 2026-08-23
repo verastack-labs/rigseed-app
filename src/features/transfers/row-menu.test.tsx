@@ -20,7 +20,13 @@ const torrent = makeTorrent({
   content_path: 'C:/Downloads/ubuntu-24.04.2-desktop-amd64.iso',
 })
 
-const actions: TorrentActions = { onResume: vi.fn(), onPause: vi.fn(), onRemove: vi.fn() }
+const actions: TorrentActions = {
+  onResume: vi.fn(),
+  onPause: vi.fn(),
+  onRemove: vi.fn(),
+  onRecheck: vi.fn(),
+  onSpeedLimits: vi.fn(),
+}
 
 /** A card, because RowMenu finds its right-click target by climbing to one. */
 const inACard = () =>
@@ -88,5 +94,35 @@ describe('RowMenu', () => {
     fireEvent.contextMenu(screen.getByTestId('card'), { clientX: 10, clientY: 10 })
     expect(items()).not.toContain('Open containing folder')
     expect(items()).toContain('Copy magnet link')
+  })
+})
+
+describe('the items that were not there', () => {
+  it('actually rechecks, rather than looking like it will', () => {
+    // It shipped with no handler at all: an item that highlighted on hover and
+    // did nothing whatsoever when chosen.
+    inACard()
+    fireEvent.click(screen.getByRole('button', { name: `Actions for ${torrent.name}` }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Force recheck' }))
+    expect(actions.onRecheck).toHaveBeenCalledWith([torrent.hash])
+  })
+
+  it('offers the per-torrent limits without opening the torrent', () => {
+    // They existed on the Speed tab of the torrent's own screen, which is a
+    // long way round for the thing people reach for when one download is
+    // drowning everything else.
+    inACard()
+    fireEvent.click(screen.getByRole('button', { name: `Actions for ${torrent.name}` }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Speed limits…' }))
+    expect(actions.onSpeedLimits).toHaveBeenCalledWith(torrent)
+  })
+
+  it('marks the one that opens something rather than acting', () => {
+    // Every other item on this menu takes effect the moment it is chosen, so
+    // the ellipsis is carrying more than convention here.
+    inACard()
+    fireEvent.click(screen.getByRole('button', { name: `Actions for ${torrent.name}` }))
+    const labels = screen.getAllByRole('menuitem').map((i) => i.textContent?.trim())
+    expect(labels.filter((l) => l?.endsWith('…'))).toEqual(['Speed limits…'])
   })
 })
