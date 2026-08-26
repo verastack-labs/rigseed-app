@@ -58,6 +58,36 @@ export function makeTorrent(overrides: Partial<Torrent> = {}): Torrent {
     magnet_uri: 'magnet:?xt=urn:btih:a1b2c3&dn=ubuntu.iso',
     tracker: 'https://torrent.ubuntu.com/announce',
     content_path: '/downloads/ubuntu.iso',
+
+    // Following the global limits, which is the daemon's own default and the
+    // one state where the setting and the resolved value disagree. They are
+    // deliberately different numbers here: a test that reads max_ratio where
+    // it means ratio_limit has to fail rather than pass on a copy.
+    ratio_limit: -2,
+    max_ratio: -1,
+    seeding_time_limit: -2,
+    max_seeding_time: -1,
+    inactive_seeding_time_limit: -2,
+    max_inactive_seeding_time: -1,
+    share_limit_action: 'Default',
+
+    // Mid-download, so availability is a real number rather than the -1 a
+    // seeding torrent reports.
+    availability: 1.874,
+    force_start: false,
+
+    // Longer than seeding_time, because a torrent is active while it
+    // downloads too and the two must not be interchangeable.
+    time_active: 39_600,
+    last_activity: 1_770_003_400,
+    seen_complete: 1_770_002_100,
+    popularity: 41.6,
+
+    private: false,
+    comment: 'Ubuntu release image',
+    infohash_v1: 'a1b2c3',
+    // Empty rather than absent on a v1-only torrent, as the daemon sends it.
+    infohash_v2: '',
     ...overrides,
   }
 }

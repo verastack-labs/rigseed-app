@@ -156,7 +156,7 @@ function Editor({
         {hasInactive ? (
           <Row
             name="Inactive time"
-            hint="counted while nothing moves, not while seeding"
+            hint="while nothing moves, not while seeding"
             mode={draft.inactiveMode}
             value={draft.inactiveMinutes}
             placeholder="e.g. 4320"
@@ -218,13 +218,26 @@ function Row({
     <div className="flex flex-col gap-2 border-t border-line bg-surface2 px-4 py-3 first:border-t-0">
       <div className="flex items-center gap-2.5">
         <SectionHeader>{name}</SectionHeader>
-        {hint ? <span className="text-[11px] text-text-dimmer">{hint}</span> : null}
+        {/* Truncates rather than wraps. The hint is the least important thing
+            on the line and the only one that can be long, so it gives way
+            first instead of pushing the row to two lines. */}
+        {hint ? (
+          <span className="min-w-0 truncate text-[11px] text-text-dimmer" title={hint}>
+            {hint}
+          </span>
+        ) : null}
         <span className="flex-1" />
         {/* What the daemon will actually enforce, which is not what the strip
             says: a torrent following a global limit that is switched off is
             not limited at all. Reads the resolved max_* field, not the
-            setting. */}
-        <span className="font-mono text-[10.5px] text-text-dimmer">now: {effective}</span>
+            setting.
+
+            Never wrapped. Broken across two lines it reads as two fragments,
+            and it is the one part of the row that has to be read as a
+            sentence. */}
+        <span className="shrink-0 font-mono text-[10.5px] whitespace-nowrap text-text-dimmer">
+          now: {effective}
+        </span>
       </div>
       <div className="flex items-center gap-2.5">
         <SegmentedControl
