@@ -31,6 +31,7 @@ import {
   Rabbit,
   Play,
   Rss,
+  Scale,
   Search,
   Settings,
   Signal,
@@ -91,6 +92,10 @@ export const icons = {
   // is the turtle, which is the icon qBittorrent has used for it for years.
   rabbit: Rabbit,
   turtle: Turtle,
+  /* Share limits, which are about ratio before they are about time: a
+     balance is the shape people already read as one quantity against
+     another, where a clock would name only the lesser half of the pair. */
+  scale: Scale,
   check: Check,
   alert: AlertCircle,
   /** The test-connection glyph: signal arcs, not the nav rail's bars. */
