@@ -233,3 +233,92 @@ describe('ContextMenu', () => {
     expect(screen.getByRole('menu').className).toContain('z-30')
   })
 })
+
+describe('submenus', () => {
+  const copy = vi.fn()
+  const branch = (): ContextMenuItem[] => [
+    { label: 'Resume' },
+    {
+      label: 'Copy',
+      items: [
+        { label: 'Name', onSelect: copy },
+        { label: 'Magnet link' },
+      ],
+    },
+    { label: 'Remove', danger: true },
+  ]
+
+  const openMenu = () => render(<ContextMenu items={branch()} open onClose={vi.fn()} />)
+
+  it('keeps a branch shut until it is asked for', () => {
+    openMenu()
+    expect(screen.getByRole('menuitem', { name: /Copy/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('menuitem', { name: 'Name' })).not.toBeInTheDocument()
+  })
+
+  it('announces itself as opening something rather than doing something', () => {
+    openMenu()
+    expect(screen.getByRole('menuitem', { name: /Copy/ })).toHaveAttribute('aria-haspopup', 'menu')
+  })
+
+  it('opens on hover, which is what a desktop menu does', async () => {
+    openMenu()
+    await userEvent.hover(screen.getByRole('menuitem', { name: /Copy/ }))
+    expect(screen.getByRole('menuitem', { name: 'Name' })).toBeInTheDocument()
+  })
+
+  it('opens on ArrowRight, which is what a keyboard expects', () => {
+    openMenu()
+    const trigger = screen.getByRole('menuitem', { name: /Copy/ })
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'ArrowRight' })
+    expect(screen.getByRole('menuitem', { name: 'Name' })).toBeInTheDocument()
+  })
+
+  it('runs a child and closes the whole menu, not just the branch', async () => {
+    const onClose = vi.fn()
+    render(<ContextMenu items={branch()} open onClose={onClose} />)
+    await userEvent.hover(screen.getByRole('menuitem', { name: /Copy/ }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Name' }))
+    expect(copy).toHaveBeenCalledOnce()
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('ArrowLeft closes the branch and hands focus back to its row', () => {
+    openMenu()
+    const trigger = screen.getByRole('menuitem', { name: /Copy/ })
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'ArrowRight' })
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Name' }), { key: 'ArrowLeft' })
+    expect(screen.queryByRole('menuitem', { name: 'Name' })).not.toBeInTheDocument()
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  it('Escape inside a branch closes the branch, not the menu', () => {
+    const onClose = vi.fn()
+    render(<ContextMenu items={branch()} open onClose={onClose} />)
+    const trigger = screen.getByRole('menuitem', { name: /Copy/ })
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'ArrowRight' })
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Name' }), { key: 'Escape' })
+    expect(screen.queryByRole('menuitem', { name: 'Name' })).not.toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('root arrows walk the root, not into an open branch', () => {
+    // The regression this is really for. An open branch puts its own
+    // menuitems inside the same subtree, so a plain query sweeps them into the
+    // parent's navigation and the arrow keys walk out of the list they belong
+    // to. Root rows are found by attribute for exactly this reason.
+    openMenu()
+    const trigger = screen.getByRole('menuitem', { name: /Copy/ })
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'ArrowRight' })
+    expect(screen.getByRole('menuitem', { name: 'Name' })).toBeInTheDocument()
+
+    const menu = screen.getAllByRole('menu')[0]!
+    trigger.focus()
+    fireEvent.keyDown(menu, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: /Remove/ }))
+  })
+})

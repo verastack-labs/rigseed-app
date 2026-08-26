@@ -17,6 +17,8 @@ import { AddFab, type AddSource } from '@/features/transfers/add-fab'
 import { AltSpeedToggle } from '@/features/transfers/alt-speed-toggle'
 import { Sidebar } from '@/features/transfers/sidebar'
 import { SpeedLimitDialog } from '@/features/transfers/speed-limit-dialog'
+import { saveTorrentFile } from '@/services/torrent-file'
+import { notify } from '@/state/notice-store'
 import { TorrentEasy } from '@/features/transfers/torrent-easy'
 import { TorrentGrid } from '@/features/transfers/torrent-grid'
 import { write } from '@/lib/write'
@@ -29,7 +31,7 @@ import {
 } from '@/features/transfers/filter'
 import { icons } from '@/lib/icons'
 import { nextIndex, useHotkeys } from '@/lib/use-hotkeys'
-import { useApi } from '@/services/api-context'
+import { useApi, useConnection } from '@/services/api-context'
 import { useThemeStore, type Layout } from '@/state/theme-store'
 import { selectTorrentList, useTorrentStore } from '@/state/torrent-store'
 import { hasActiveFilters, useTransfersStore } from '@/state/transfers-store'
@@ -39,6 +41,7 @@ import { isPaused } from '@/utils/format'
 export function Transfers() {
   useSyncPoll()
   const api = useApi()
+  const connection = useConnection()
   const navigate = useNavigate()
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -110,6 +113,23 @@ export function Transfers() {
     // row asked beats one per row, and the limits it shows have to follow the
     // live torrent through every poll, which the row's copy would not.
     onSpeedLimits: (torrent: Torrent) => setLimiting(torrent.hash),
+    /**
+     * Saving the .torrent file, which reports three outcomes rather than two.
+     *
+     * A dismissed save dialog is a decision, not a failure, so it says nothing
+     * at all. A successful one says so, because the file lands wherever the
+     * user chose and there is nothing on this screen to show for it otherwise.
+     */
+    onSaveTorrentFile: (torrent: Torrent) => {
+      const where = connection.status === 'connected' ? connection.baseUrl : ''
+      void saveTorrentFile(where, torrent.hash, torrent.name).then((outcome) => {
+        if (outcome.kind === 'saved') {
+          notify({ tone: 'ok', what: 'Saved .torrent file', detail: outcome.path })
+        } else if (outcome.kind === 'failed') {
+          notify({ tone: 'warn', what: 'Save .torrent file', detail: outcome.reason })
+        }
+      })
+    },
   }
 
   // With nothing selected the toolbar acts on everything in view, which is

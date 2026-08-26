@@ -5,6 +5,9 @@ import {
   ArrowUpFromLine,
   BookOpen,
   Check,
+  ChevronRight,
+  Copy,
+  FileDown,
   Cloud,
   Monitor,
   Plus,
@@ -67,6 +70,12 @@ export const icons = {
   /* The three Transfers layouts, chunky to dense, so the strip reads as a
      density scale before any label is read: two fat rows, four squares,
      three thin lines. */
+  chevronRight: ChevronRight,
+  copy: Copy,
+  /* An arrow into a document, for exporting the .torrent file itself, kept
+     distinct from `download`, which is the arrow every transfer speed uses. */
+  fileDown: FileDown,
+
   layoutEasy: Rows2,
   layoutGrid: LayoutGrid,
   layoutList: List,

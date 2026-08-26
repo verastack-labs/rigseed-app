@@ -193,3 +193,52 @@ mod tests {
         assert!(!Arc::ptr_eq(&a.0, &b.0), "each Http owns its client");
     }
 }
+
+/// Fetches a torrent's `.torrent` file and writes it where the user chose.
+///
+/// Rust rather than the frontend, for two reasons that are both about the
+/// bytes. `Response` above carries a `String`, and a `.torrent` is bencoded
+/// binary, so routing it through the existing commands would corrupt it on the
+/// way. And rigseed has no filesystem plugin: the dialog plugin can ask where
+/// to save, and nothing on the JavaScript side can then write there.
+///
+/// The cookie jar on this client is what makes it work at all. The export
+/// endpoint needs the same session every other call uses, and it is already
+/// held here.
+///
+/// The first byte is checked before anything is written. A bencoded dictionary
+/// starts with `d`, so an HTML error page or an empty body is caught rather
+/// than saved under a `.torrent` name for somebody to discover later. That is
+/// the same lesson `search/installPlugin` taught: a 200 is not proof that what
+/// came back is what was asked for.
+#[tauri::command]
+pub async fn export_torrent(
+    http: tauri::State<'_, Http>,
+    base_url: String,
+    hash: String,
+    dest: String,
+) -> Result<u64, String> {
+    let response = http
+        .0
+        .get(url(&base_url, "torrents/export"))
+        .query(&[("hash", &hash)])
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("torrents/export answered {}", status.as_u16()));
+    }
+
+    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+    if bytes.first() != Some(&b'd') {
+        return Err(format!(
+            "torrents/export returned {} bytes that are not a torrent file",
+            bytes.len()
+        ));
+    }
+
+    std::fs::write(&dest, &bytes).map_err(|e| format!("could not write {dest}: {e}"))?;
+    Ok(bytes.len() as u64)
+}

@@ -364,6 +364,7 @@ pub fn run() {
             http::api_get,
             http::api_post,
             http::api_post_form,
+            http::export_torrent,
             python::search_python,
             tray::hide_to_tray,
             tray::quit_app
