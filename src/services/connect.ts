@@ -45,6 +45,17 @@ export type ConnectionState =
        * this machine, which say nothing about a daemon running on another.
        */
       spawned: boolean
+      /**
+       * Where this daemon lives, for the few things that cannot go through the
+       * client.
+       *
+       * Exporting a `.torrent` is one: the bytes are bencoded binary and the
+       * transport's `Response` carries a string, so the fetch happens in Rust
+       * and Rust has to be told where to fetch from. Empty when the dev server
+       * proxies, which is also where no desktop can be reached, so nothing
+       * that needs this is offered there.
+       */
+      baseUrl: string
     }
   | { status: 'failed'; reason: string }
 
@@ -206,6 +217,7 @@ export async function connect(
       webApiVersion,
       label: target.label ?? hostOf(target.baseUrl),
       spawned: target.spawned ?? false,
+      baseUrl: target.baseUrl,
     }
   } catch (error) {
     // Logged in but cannot be asked what it is, which is stranger than being

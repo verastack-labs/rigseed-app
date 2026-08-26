@@ -37,6 +37,7 @@ const connected = (version: string): ConnectionState => ({
   webApiVersion: '2.15.1',
   label: '127.0.0.1:8080',
   spawned: true,
+  baseUrl: 'http://127.0.0.1:8080',
 })
 
 function Probe() {
