@@ -27,12 +27,17 @@ export interface TorrentActions {
  * **Torrent ID** is the row's id, which is the hash, so it would duplicate
  * Info hash under a second name.
  *
- * **Info hash v1 and v2** separately, and **Comment**, need data this menu
- * does not have. qBittorrent's WebUI reads all three off the torrent row; in
- * rigseed they are on `TorrentProperties`, which is the detail screen's own
- * fetch. Offering them here would mean a request per menu open, or declaring
- * row fields nothing has yet seen a daemon send. One `Info hash` from the row
- * covers the common case, since `hash` is the v1 hash wherever there is one.
+ * **Info hash v1 and v2** separately, and **Comment**, are left for a
+ * follow-up rather than ruled out. All three do arrive on the row: a 5.2.3
+ * daemon sends `infohash_v1`, `infohash_v2` and `comment` in every
+ * `torrents/info` reply, checked against a real one rather than assumed. What
+ * is missing is only that rigseed's `Torrent` type does not declare them, so
+ * adding the entries is a change to the wire model and belongs with the rest
+ * of that work, not smuggled into a menu.
+ *
+ * Until then one `Info hash` covers the common case, since `hash` is the v1
+ * hash wherever there is one, and `infohash_v2` is empty on every non-v2
+ * torrent anyway.
  */
 function copyItems(torrent: Torrent) {
   const put = (value: string) => () => void navigator.clipboard?.writeText(value)
