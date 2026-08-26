@@ -16,6 +16,7 @@ import type { Torrent } from '@/types/qbittorrent'
 import { AddFab, type AddSource } from '@/features/transfers/add-fab'
 import { AltSpeedToggle } from '@/features/transfers/alt-speed-toggle'
 import { Sidebar } from '@/features/transfers/sidebar'
+import { ShareLimitDialog } from '@/features/transfers/share-limit-dialog'
 import { SpeedLimitDialog } from '@/features/transfers/speed-limit-dialog'
 import { saveTorrentFile } from '@/services/torrent-file'
 import { notify } from '@/state/notice-store'
@@ -99,8 +100,10 @@ export function Transfers() {
   const categories = useMemo(() => categoryCounts(torrents), [torrents])
   const tags = useMemo(() => tagCounts(torrents), [torrents])
 
-  /** Which torrent's limits are open, by hash. */
+  /** Which torrent's speed limits are open, by hash. */
   const [limiting, setLimiting] = useState<string | null>(null)
+  /** Which torrent's share limits are open, by hash. Its own dialog. */
+  const [sharing, setSharing] = useState<string | null>(null)
 
   const act = {
     onResume: (hashes: readonly string[]) =>
@@ -113,6 +116,13 @@ export function Transfers() {
     // row asked beats one per row, and the limits it shows have to follow the
     // live torrent through every poll, which the row's copy would not.
     onSpeedLimits: (torrent: Torrent) => setLimiting(torrent.hash),
+    onShareLimits: (torrent: Torrent) => setSharing(torrent.hash),
+    // Named for what it does rather than for the endpoint. "Set force start"
+    // is the API's sentence; a failure notice has to be the user's.
+    onForceStart: (hashes: readonly string[], value: boolean) =>
+      void write(value ? 'Force start' : 'Stop forcing', () =>
+        api.torrents.setForceStart(hashes, value),
+      ),
     /**
      * Saving the .torrent file, which reports three outcomes rather than two.
      *
@@ -361,6 +371,18 @@ export function Transfers() {
                   : api.torrents.setUploadLimit([limiting], bytes),
               )
         }
+      />
+
+      {/* Looked up fresh each render, same as the speed limits above: the
+          dialog reads the daemon's current settings to fill its own controls,
+          so a change made elsewhere has to reach it. */}
+      <ShareLimitDialog
+        torrent={visible.find((t) => t.hash === sharing) ?? null}
+        onClose={() => setSharing(null)}
+        onApply={(limits) => {
+          if (sharing === null) return
+          void write('Set share limits', () => api.torrents.setShareLimits([sharing], limits))
+        }}
       />
 
       <ConfirmDialog

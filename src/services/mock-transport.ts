@@ -428,6 +428,80 @@ function makeTorrent(index: number, rand: () => number): Torrent {
     magnet_uri: `magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(name)}&tr=${encodeURIComponent('https://torrent.ubuntu.com/announce')}`,
     tracker: paused ? '' : 'https://torrent.ubuntu.com/announce',
     content_path: `/downloads/${name}`,
+
+    // One torrent of each kind, so a screen reading share limits meets all
+    // three meanings of the field rather than only the common one. A mock
+    // where every torrent says -2 would let "follow the global limit" and
+    // "no limit" render identically and still look right.
+    ...shareLimits(index),
+
+    // -1 while seeding, as the daemon reports, because how many copies the
+    // swarm holds is only a question for something still downloading.
+    availability: done ? -1 : Number((0.8 + rand() * 1.6).toFixed(3)),
+    force_start: false,
+
+    // Deliberately not equal to `seeding_time`: a torrent is active while it
+    // downloads too, so anything labelled active that reads the seeding field
+    // would be wrong by exactly the download.
+    time_active: done ? 86_400 + index * 3_600 : Math.round(1_800 + rand() * 40_000),
+    last_activity: 1_780_000_000 - index * 137,
+    // 0 means never, which is the state a torrent nobody is seeding is in.
+    seen_complete: index % 4 === 3 ? 0 : 1_780_000_000 - index * 900,
+    // Unbounded and not a percentage, matching the daemon: real ones measured
+    // 40.3, 40.5 and 116.1.
+    popularity: Number((rand() * 120).toFixed(3)),
+
+    private: index % 5 === 0,
+    comment: index % 2 === 0 ? `Released by the ${name.split(' ')[0]} project` : '',
+    infohash_v1: hash,
+    // Empty on a v1-only torrent, which is a string the daemon sends rather
+    // than a field it omits.
+    infohash_v2: '',
+  }
+}
+
+/**
+ * The share limit fields for one mock torrent, cycling through the three modes.
+ *
+ * `max_*` is the resolved value the daemon would compute, not a copy of the
+ * setting. The mock's global limits are off, so "follow the global limit"
+ * resolves to no limit, exactly as it did on the real daemon this was checked
+ * against.
+ */
+function shareLimits(index: number) {
+  const mode = index % 3
+  if (mode === 1) {
+    return {
+      ratio_limit: -1,
+      max_ratio: -1,
+      seeding_time_limit: -1,
+      max_seeding_time: -1,
+      inactive_seeding_time_limit: -1,
+      max_inactive_seeding_time: -1,
+      share_limit_action: 'Stop' as const,
+    }
+  }
+  if (mode === 2) {
+    return {
+      ratio_limit: 2.5,
+      max_ratio: 2.5,
+      // 1440 minutes, which is a day, so anything formatting minutes as a
+      // duration has a value where getting the unit wrong is visible.
+      seeding_time_limit: 1440,
+      max_seeding_time: 1440,
+      inactive_seeding_time_limit: -2,
+      max_inactive_seeding_time: -1,
+      share_limit_action: 'Default' as const,
+    }
+  }
+  return {
+    ratio_limit: -2,
+    max_ratio: -1,
+    seeding_time_limit: -2,
+    max_seeding_time: -1,
+    inactive_seeding_time_limit: -2,
+    max_inactive_seeding_time: -1,
+    share_limit_action: 'Default' as const,
   }
 }
 
@@ -1042,6 +1116,49 @@ export function createMockTransport({
         for (const h of hashes) {
           const t = torrents.get(h)
           if (t) t[key] = limit
+        }
+      }
+      /**
+       * Share limits, resolved the way the daemon resolves them.
+       *
+       * The mock stores `ratio_limit` and then computes `max_ratio` from it,
+       * rather than writing the same number into both. That difference is the
+       * whole point of the pair: a dialog that reads the resolved field to
+       * fill its own inputs would show "no limit" for a torrent set to follow
+       * a global limit, and against a mock that copied the value across it
+       * would look correct.
+       *
+       * The mock's global limits are off, so `-2` resolves to `-1`.
+       */
+      if (path === 'torrents/setShareLimits') {
+        const resolve = (own: number) => (own === -2 ? -1 : own)
+        const ratio = Number(body?.ratioLimit ?? -2)
+        const seeding = Number(body?.seedingTimeLimit ?? -2)
+        const inactive = Number(body?.inactiveSeedingTimeLimit ?? -2)
+        // Anything the daemon does not recognise becomes Default rather than
+        // an error, which is the behaviour the union exists to prevent.
+        const sent = String(body?.shareLimitAction ?? 'Default')
+        const action = (
+          ['Default', 'Stop', 'Remove', 'RemoveWithContent', 'EnableSuperSeeding'] as const
+        ).find((a) => a === sent)
+
+        for (const h of hashes) {
+          const t = torrents.get(h)
+          if (!t) continue
+          t.ratio_limit = ratio
+          t.max_ratio = resolve(ratio)
+          t.seeding_time_limit = seeding
+          t.max_seeding_time = resolve(seeding)
+          t.inactive_seeding_time_limit = inactive
+          t.max_inactive_seeding_time = resolve(inactive)
+          t.share_limit_action = action ?? 'Default'
+        }
+      }
+      if (path === 'torrents/setForceStart') {
+        const value = String(body?.value ?? 'false') === 'true'
+        for (const h of hashes) {
+          const t = torrents.get(h)
+          if (t) t.force_start = value
         }
       }
       if (path === 'torrents/toggleSequentialDownload') {

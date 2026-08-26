@@ -213,3 +213,99 @@ describe('labels through the mock', () => {
     expect(after.every((t) => !t.tags.split(',').includes('iso'))).toBe(true)
   })
 })
+
+describe('share limits', () => {
+  /** Captures the form body of a plain POST. */
+  function capturingPost() {
+    const post = vi.fn<Transport['post']>(() => Promise.resolve(undefined as never))
+    const transport = { get: vi.fn(), post, postForm: vi.fn() } as unknown as Transport
+    return { api: createTorrentsApi(transport), post }
+  }
+
+  it('always sends shareLimitAction, which the daemon requires', async () => {
+    // A 5.2.3 daemon answers 400 "Missing required parameters:
+    // shareLimitAction" to the three-parameter call every older client sends,
+    // so this is not an optional extra even though the docs read as if it is.
+    const { api, post } = capturingPost()
+
+    await api.setShareLimits(['abc'], {
+      ratioLimit: 2,
+      seedingTimeLimit: -2,
+      inactiveSeedingTimeLimit: -2,
+      shareLimitAction: 'Default',
+    })
+
+    expect(post).toHaveBeenCalledWith('torrents/setShareLimits', {
+      hashes: 'abc',
+      ratioLimit: 2,
+      seedingTimeLimit: -2,
+      inactiveSeedingTimeLimit: -2,
+      shareLimitAction: 'Default',
+    })
+  })
+
+  it('resolves -2 into the effective limit rather than copying it', async () => {
+    // ratio_limit is what somebody chose and max_ratio is what will happen.
+    // Reading the second to fill a dialog would show "no limit" for a torrent
+    // that is following a global limit, so the two must never be equal by
+    // construction. The mock's global limits are off, so -2 resolves to -1.
+    const torrents = createTorrentsApi(createMockTransport())
+    const [first] = await torrents.info()
+
+    await torrents.setShareLimits([first!.hash], {
+      ratioLimit: -2,
+      seedingTimeLimit: -2,
+      inactiveSeedingTimeLimit: -2,
+      shareLimitAction: 'Default',
+    })
+
+    const following = (await torrents.info()).find((t) => t.hash === first!.hash)!
+    expect(following.ratio_limit).toBe(-2)
+    expect(following.max_ratio).toBe(-1)
+
+    await torrents.setShareLimits([first!.hash], {
+      ratioLimit: 4,
+      seedingTimeLimit: 90,
+      inactiveSeedingTimeLimit: -2,
+      shareLimitAction: 'Stop',
+    })
+
+    const capped = (await torrents.info()).find((t) => t.hash === first!.hash)!
+    expect(capped.ratio_limit).toBe(4)
+    expect(capped.max_ratio).toBe(4)
+    expect(capped.seeding_time_limit).toBe(90)
+    expect(capped.share_limit_action).toBe('Stop')
+  })
+
+  it('falls back to Default on an action the daemon does not know', async () => {
+    // The daemon answers 200 and applies Default rather than rejecting it,
+    // which is why ShareLimitAction is a union: a typo has no symptom at all.
+    const torrents = createTorrentsApi(createMockTransport())
+    const [first] = await torrents.info()
+
+    await torrents.setShareLimits([first!.hash], {
+      ratioLimit: -2,
+      seedingTimeLimit: -2,
+      inactiveSeedingTimeLimit: -2,
+      // Plausible, and one of the two names measured to be wrong.
+      shareLimitAction: 'Pause' as never,
+    })
+
+    const after = (await torrents.info()).find((t) => t.hash === first!.hash)!
+    expect(after.share_limit_action).toBe('Default')
+  })
+
+  it('force start is a setter, not a toggle', async () => {
+    // Unlike sequential download and first/last piece, which only flip. Asking
+    // for false twice has to stay false.
+    const torrents = createTorrentsApi(createMockTransport())
+    const [first] = await torrents.info()
+
+    await torrents.setForceStart([first!.hash], true)
+    expect((await torrents.info()).find((t) => t.hash === first!.hash)!.force_start).toBe(true)
+
+    await torrents.setForceStart([first!.hash], false)
+    await torrents.setForceStart([first!.hash], false)
+    expect((await torrents.info()).find((t) => t.hash === first!.hash)!.force_start).toBe(false)
+  })
+})

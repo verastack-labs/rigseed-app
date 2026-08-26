@@ -152,7 +152,141 @@ export interface Torrent {
    * what was named.
    */
   content_path: string
+
+  /**
+   * The torrent's own ratio limit, which is a setting and not a measurement.
+   *
+   * Three meanings in one number, and the app has to keep them apart because
+   * they are three different sentences to a person:
+   *
+   * - `-2` follow the global limit, whatever it happens to be
+   * - `-1` no limit for this torrent, regardless of the global one
+   * - anything else, that ratio
+   *
+   * `ratio`, a few fields up, is what the torrent has actually achieved. The
+   * two are unrelated and only one of them is writable.
+   */
+  ratio_limit: number
+  /**
+   * The ratio limit that will actually apply, with `-2` already resolved.
+   *
+   * The daemon does the resolving, so this is the answer to "what happens to
+   * this torrent", where `ratio_limit` is the answer to "what did somebody
+   * choose". Checked on a real 5.2.3 daemon: a torrent left on `-2` while the
+   * global limit was off reported `max_ratio: -1`, and setting its own limit
+   * to `999` moved this to `999` in the same reply.
+   *
+   * Read-only. Writing goes through `ratio_limit` via `torrents/setShareLimits`.
+   */
+  max_ratio: number
+  /** Minutes, with the same `-2` / `-1` / value meanings as `ratio_limit`. */
+  seeding_time_limit: number
+  /** Minutes. The resolved counterpart to `seeding_time_limit`. */
+  max_seeding_time: number
+  /**
+   * Minutes of *inactivity* before the limit trips, not minutes of seeding.
+   *
+   * qBittorrent 4.6 and Web API 2.9.3 added it, so it is absent on older
+   * daemons and `torrents/setShareLimits` still demands the parameter.
+   */
+  inactive_seeding_time_limit?: number
+  /** Minutes. The resolved counterpart to `inactive_seeding_time_limit`. */
+  max_inactive_seeding_time?: number
+  /**
+   * What the daemon does when a share limit is reached.
+   *
+   * The accepted names were read off a 5.2.3 daemon one at a time rather than
+   * taken from documentation, because an unrecognised one is not rejected: it
+   * answers 200 and quietly leaves the torrent on `Default`. `Pause` and
+   * `DeleteFiles` are both plausible and both wrong, and neither fails loudly.
+   *
+   * 5.0 and newer. Absent before that.
+   */
+  share_limit_action?: ShareLimitAction
+
+  /**
+   * How many complete copies of the torrent the connected peers add up to.
+   *
+   * `1.0` means one whole copy is reachable between them; below that, some
+   * pieces are not currently offered by anyone. `-1` while seeding, since the
+   * question is only meaningful for something still downloading.
+   */
+  availability: number
+  /**
+   * Ignores the queue and the queueing limits, which is not the same as
+   * resuming. A force-started torrent runs even when the active-downloads
+   * limit is already met.
+   */
+  force_start: boolean
+
+  /** Seconds the torrent has been running, across every session. */
+  time_active: number
+  /** Unix seconds. When the torrent last moved any data. */
+  last_activity: number
+  /**
+   * Unix seconds, when a complete copy was last seen in the swarm.
+   *
+   * `0` means never, which for a torrent that has never finished is the
+   * difference between slow and hopeless.
+   */
+  seen_complete: number
+  /**
+   * The daemon's own measure of how alive the swarm is.
+   *
+   * Not a percentage and not bounded: real torrents on a live daemon reported
+   * `40.3`, `40.5` and `116.1`. Carried through as sent rather than scaled
+   * into something that looks like a percentage and is not one.
+   *
+   * 5.0 and newer.
+   */
+  popularity?: number
+
+  /**
+   * Whether the torrent is private, meaning DHT, PeX and LSD are refused.
+   *
+   * 5.0 and newer.
+   */
+  private?: boolean
+  /**
+   * The comment baked into the `.torrent` by whoever made it.
+   *
+   * On the row from 5.0 onwards. `torrents/properties` has always carried it,
+   * which is where the detail screen reads it, so this is the cheaper source
+   * rather than the only one.
+   */
+  comment?: string
+  /**
+   * The v1 and v2 info hashes, separately.
+   *
+   * `hash` is whichever one identifies the torrent to this daemon. These two
+   * say which is which, and both are empty strings rather than absent when a
+   * torrent has no hash of that version, which every v1-only torrent does for
+   * `infohash_v2`.
+   *
+   * 4.4 and newer.
+   */
+  infohash_v1?: string
+  infohash_v2?: string
 }
+
+/**
+ * The five names `torrents/setShareLimits` recognises on a 5.2.3 daemon.
+ *
+ * A union rather than a string because a typo here has no symptom: the daemon
+ * answers 200 and applies `Default`.
+ */
+export type ShareLimitAction =
+  'Default' | 'Stop' | 'Remove' | 'RemoveWithContent' | 'EnableSuperSeeding'
+
+/**
+ * A share limit as the UI thinks about it, rather than as the wire encodes it.
+ *
+ * The wire packs "follow the global setting", "never stop" and "stop at this
+ * number" into one field using `-2` and `-1` as sentinels. Those are three
+ * different choices to a person and a radio group has to tell them apart, so
+ * the dialog works in this shape and converts at the edge.
+ */
+export type ShareLimitMode = 'global' | 'unlimited' | 'custom'
 
 export interface TorrentFile {
   index: number
@@ -324,6 +458,16 @@ export const ETA_INFINITE = 8640000
 
 /** -1 means unlimited for both rate limits. */
 export const LIMIT_UNLIMITED = -1
+
+/**
+ * -2 on a share limit means "whatever the global setting says".
+ *
+ * Share limits carry a sentinel the rate limits do not have, which is why
+ * `LIMIT_UNLIMITED` alone is not enough to read one. A rate limit is either a
+ * number or unlimited; a share limit has a third state where the torrent has
+ * expressed no opinion and defers to the daemon's own setting.
+ */
+export const SHARE_LIMIT_GLOBAL = -2
 
 /**
  * The preference keys Settings reads and writes.

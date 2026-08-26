@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { RowMenu, type TorrentActions } from '@/features/transfers/row-menu'
 import { makeTorrent } from '@/test/torrent'
+import type { Torrent } from '@/types/qbittorrent'
 
 const revealInFolder = vi.fn()
 let hasDesktop = true
@@ -26,14 +27,16 @@ const actions: TorrentActions = {
   onRemove: vi.fn(),
   onRecheck: vi.fn(),
   onSpeedLimits: vi.fn(),
+  onShareLimits: vi.fn(),
+  onForceStart: vi.fn(),
   onSaveTorrentFile: vi.fn(),
 }
 
 /** A card, because RowMenu finds its right-click target by climbing to one. */
-const inACard = () =>
+const inACard = (one: Torrent = torrent) =>
   render(
     <div data-context-target data-testid="card">
-      <RowMenu torrent={torrent} actions={actions} />
+      <RowMenu torrent={one} actions={actions} />
     </div>,
   )
 
@@ -118,13 +121,40 @@ describe('the items that were not there', () => {
     expect(actions.onSpeedLimits).toHaveBeenCalledWith(torrent)
   })
 
+  it('opens the share limits for the row it came from', () => {
+    inACard()
+    fireEvent.click(screen.getByRole('button', { name: `Actions for ${torrent.name}` }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Share limits…' }))
+    expect(actions.onShareLimits).toHaveBeenCalledWith(torrent)
+  })
+
+  it('names force start by what choosing it will do', () => {
+    // The menu has no checkable row, so a label that describes the current
+    // state would be read as describing the next action by half the audience
+    // and as the state by the other half.
+    inACard()
+    fireEvent.click(screen.getByRole('button', { name: `Actions for ${torrent.name}` }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Force start' }))
+    expect(actions.onForceStart).toHaveBeenCalledWith([torrent.hash], true)
+  })
+
+  it('offers to stop forcing a torrent that is already forced', () => {
+    // The other half of the same row. Sending true again would be a write
+    // that changes nothing, and the label would be a lie.
+    inACard({ ...torrent, force_start: true })
+    fireEvent.click(screen.getByRole('button', { name: `Actions for ${torrent.name}` }))
+    expect(screen.queryByRole('menuitem', { name: 'Force start' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Stop forcing' }))
+    expect(actions.onForceStart).toHaveBeenCalledWith([torrent.hash], false)
+  })
+
   it('marks the one that opens something rather than acting', () => {
     // Every other item on this menu takes effect the moment it is chosen, so
     // the ellipsis is carrying more than convention here.
     inACard()
     fireEvent.click(screen.getByRole('button', { name: `Actions for ${torrent.name}` }))
     const labels = screen.getAllByRole('menuitem').map((i) => i.textContent?.trim())
-    expect(labels.filter((l) => l?.endsWith('…'))).toEqual(['Speed limits…'])
+    expect(labels.filter((l) => l?.endsWith('…'))).toEqual(['Speed limits…', 'Share limits…'])
   })
 })
 

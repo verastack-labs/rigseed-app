@@ -14,6 +14,10 @@ export interface TorrentActions {
   onRecheck: (hashes: readonly string[]) => void
   /** Opens the per-torrent limits, which the page owns and this only asks for. */
   onSpeedLimits: (torrent: Torrent) => void
+  /** Opens the per-torrent ratio and seeding time limits. */
+  onShareLimits: (torrent: Torrent) => void
+  /** Force start, which ignores the queue rather than resuming. */
+  onForceStart: (hashes: readonly string[], value: boolean) => void
   /** Saves the torrent's own .torrent file, via a dialog and a Rust write. */
   onSaveTorrentFile: (torrent: Torrent) => void
 }
@@ -68,6 +72,25 @@ function menuItems(torrent: Torrent, actions: TorrentActions) {
     // was a menu item that looked available, highlighted on hover, and did
     // nothing whatsoever when chosen.
     { label: 'Force recheck', onSelect: () => actions.onRecheck([torrent.hash]) },
+    /**
+     * Force start, worded as what choosing it will do rather than as a state.
+     *
+     * The menu has no checkable row, and adding one for a single item would be
+     * a control whose ticked and unticked states are told apart only by a mark
+     * somebody has to already know to look for. A label that names the next
+     * action cannot be misread in either direction.
+     *
+     * Not a louder Resume. A resumed torrent still waits its turn against the
+     * queue's active-downloads limit; a force-started one ignores the queue
+     * entirely, which is the whole reason it exists.
+     */
+    {
+      label: torrent.force_start ? 'Stop forcing' : 'Force start',
+      icon: torrent.force_start ? (
+        <icons.check className="size-[13px]" strokeWidth={2} />
+      ) : undefined,
+      onSelect: () => actions.onForceStart([torrent.hash], !torrent.force_start),
+    },
     { separator: true as const },
     {
       // The ellipsis is the convention for an item that opens something rather
@@ -75,6 +98,14 @@ function menuItems(torrent: Torrent, actions: TorrentActions) {
       // other item on this menu takes effect the moment it is chosen.
       label: 'Speed limits…',
       onSelect: () => actions.onSpeedLimits(torrent),
+    },
+    // How fast it goes, then when it is finished. Adjacent because they are
+    // the two halves of the same question and qBittorrent separates them by
+    // the width of a whole menu.
+    {
+      label: 'Share limits…',
+      icon: <icons.scale className="size-[13px]" strokeWidth={2} />,
+      onSelect: () => actions.onShareLimits(torrent),
     },
     { separator: true as const },
     {
