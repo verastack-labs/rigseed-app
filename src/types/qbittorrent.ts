@@ -460,6 +460,16 @@ export const ETA_INFINITE = 8640000
 export const LIMIT_UNLIMITED = -1
 
 /**
+ * -2 on a share limit means "whatever the global setting says".
+ *
+ * Share limits carry a sentinel the rate limits do not have, which is why
+ * `LIMIT_UNLIMITED` alone is not enough to read one. A rate limit is either a
+ * number or unlimited; a share limit has a third state where the torrent has
+ * expressed no opinion and defers to the daemon's own setting.
+ */
+export const SHARE_LIMIT_GLOBAL = -2
+
+/**
  * The preference keys Settings reads and writes.
  *
  * Not all 223 of them. `app/preferences` returns everything qBittorrent has,
