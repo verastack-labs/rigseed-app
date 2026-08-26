@@ -53,6 +53,21 @@ kept separately from whether a limit is set: deriving it deadlocked, since
 unlimited disabled the box, a disabled box could not be typed into, and an empty
 box committed as unlimited.
 
+`ContextMenu` carries one level of submenu, and the single level is a rule
+rather than a gap. qBittorrent's own menu is the reference and its deepest
+branch is one deep: Copy, Category, Tags and Queue all open a flat list.
+Arbitrary nesting needs focus handling per depth and a way out of the middle of
+a chain, which is a lot of machinery for a shape nothing here has asked for, so
+`ContextMenuSubmenu` takes `ContextMenuAction[]` and nesting is simply not
+expressible.
+
+The one thing to know before touching it: **root rows are found by
+`[data-menu-root]`, not by querying `[role="menuitem"]`.** An open branch puts
+its own menuitems inside the same subtree, so a plain query sweeps them into the
+parent's arrow-key navigation and the keyboard walks out of the list it belongs
+to. `:scope >` does not help either, since a branch row sits inside a positioned
+wrapper and is a grandchild rather than a child.
+
 ## Rules that are easy to break
 
 **A write that can fail has to say so.** `void api.torrents.pause(hashes)`

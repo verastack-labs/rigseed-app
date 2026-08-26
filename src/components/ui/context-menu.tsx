@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode, RefObject } from 'react'
 
+import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 
 export interface ContextMenuAction {
@@ -11,14 +12,35 @@ export interface ContextMenuAction {
   danger?: boolean
   disabled?: boolean
   separator?: never
+  items?: never
 }
 
 export interface ContextMenuSeparator {
   separator: true
   label?: never
+  items?: never
 }
 
-export type ContextMenuItem = ContextMenuAction | ContextMenuSeparator
+/**
+ * A row that opens a second list rather than doing something.
+ *
+ * **One level, and that is a rule rather than a gap.** qBittorrent's own menu
+ * is the reference and its deepest branch is one: Copy, Category, Tags, Queue
+ * all open a flat list. A menu that can nest arbitrarily needs focus handling
+ * per depth and a way out of the middle of a chain, which is a lot of
+ * machinery for a shape nothing in this app has asked for. Nesting is
+ * expressible only by the type not allowing it.
+ */
+export interface ContextMenuSubmenu {
+  label: string
+  icon?: ReactNode
+  items: readonly ContextMenuAction[]
+  disabled?: boolean
+  separator?: never
+  onSelect?: never
+}
+
+export type ContextMenuItem = ContextMenuAction | ContextMenuSeparator | ContextMenuSubmenu
 
 /** A point in viewport coordinates, as a `contextmenu` event reports it. */
 export interface Point {
@@ -59,7 +81,160 @@ export interface ContextMenuProps {
   className?: string
 }
 
-const isAction = (i: ContextMenuItem): i is ContextMenuAction => !('separator' in i && i.separator)
+const isSeparator = (i: ContextMenuItem): i is ContextMenuSeparator =>
+  'separator' in i && i.separator === true
+
+const isSubmenu = (i: ContextMenuItem): i is ContextMenuSubmenu =>
+  'items' in i && Array.isArray(i.items)
+
+/** Whether this row can take focus, which a separator and a disabled row cannot. */
+const isFocusable = (i: ContextMenuItem): boolean => !isSeparator(i) && !i.disabled
+
+const ROW = cn(
+  'flex w-full items-center gap-2.5 rounded-md border-none bg-transparent',
+  'px-[9px] py-[7px] text-left font-sans text-[12px] font-medium',
+  'transition-colors duration-fast hover:bg-surface2 focus-visible:bg-surface2',
+  'disabled:pointer-events-none disabled:opacity-45',
+)
+
+/**
+ * One branch of the menu.
+ *
+ * Owns whether it is open, because nothing above it needs to know and a parent
+ * tracking which of its children is expanded is state that can disagree with
+ * the DOM.
+ *
+ * Opens on hover as well as on click, which is what a desktop menu does, and
+ * on ArrowRight, which is what a keyboard expects. Closing on ArrowLeft hands
+ * focus back to this row rather than to the top of the list, so a wrong turn
+ * costs one keystroke.
+ */
+function Submenu({
+  item,
+  rootFirst,
+  onCloseAll,
+}: {
+  item: ContextMenuSubmenu
+  rootFirst: boolean
+  onCloseAll: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [flipped, setFlipped] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  // Measured before paint, like the parent's own flip. A branch that opens off
+  // the right edge of the window is worse than one that opens leftwards, and
+  // the caller cannot know which rows are near an edge.
+  useLayoutEffect(() => {
+    if (!open) return
+    const el = panelRef.current
+    if (!el) return
+    setFlipped(el.getBoundingClientRect().right > window.innerWidth - 8)
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    // Focus the first child once it exists, so ArrowRight lands somewhere.
+    panelRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus()
+  }, [open])
+
+  const close = (refocus: boolean) => {
+    setOpen(false)
+    if (refocus) triggerRef.current?.focus()
+  }
+
+  return (
+    <div className="relative" onMouseLeave={() => setOpen(false)}>
+      <button
+        ref={triggerRef}
+        type="button"
+        role="menuitem"
+        data-menu-root
+        aria-haspopup="menu"
+        aria-expanded={open}
+        disabled={item.disabled}
+        tabIndex={rootFirst ? 0 : -1}
+        onMouseEnter={() => setOpen(true)}
+        onClick={() => setOpen((was) => !was)}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowRight' || event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            event.stopPropagation()
+            setOpen(true)
+          }
+        }}
+        className={cn(ROW, 'text-text')}
+      >
+        {item.icon ? <span className="text-text-dim flex">{item.icon}</span> : null}
+        {item.label}
+        <span className="flex-1" />
+        <icons.chevronRight className="text-text-dimmer size-3.5" strokeWidth={2.2} />
+      </button>
+
+      {open ? (
+        <div
+          ref={panelRef}
+          role="menu"
+          aria-label={item.label}
+          onKeyDown={(event) => {
+            const buttons = Array.from(
+              panelRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [],
+            )
+            const at = buttons.indexOf(document.activeElement as HTMLButtonElement)
+            switch (event.key) {
+              case 'ArrowLeft':
+              case 'Escape':
+                event.preventDefault()
+                // Stopped, so the root does not also read this as a dismissal.
+                // Escape inside a branch closes the branch, not the menu.
+                event.stopPropagation()
+                close(true)
+                break
+              case 'ArrowDown':
+                event.preventDefault()
+                event.stopPropagation()
+                buttons[(at + 1) % buttons.length]?.focus()
+                break
+              case 'ArrowUp':
+                event.preventDefault()
+                event.stopPropagation()
+                buttons[(at - 1 + buttons.length) % buttons.length]?.focus()
+                break
+            }
+          }}
+          className={cn(
+            'bg-surface border-line absolute top-0 z-40 w-[196px] rounded-3xl border p-1.5',
+            'shadow-[var(--shadow-card)]',
+            flipped ? 'right-[calc(100%+4px)]' : 'left-[calc(100%+4px)]',
+          )}
+        >
+          {item.items.map((child) => (
+            <button
+              key={child.label}
+              type="button"
+              role="menuitem"
+              disabled={child.disabled}
+              tabIndex={-1}
+              onClick={() => {
+                child.onSelect?.()
+                onCloseAll()
+              }}
+              className={cn(ROW, child.danger ? 'text-danger' : 'text-text')}
+            >
+              {child.icon ? (
+                <span className={cn('flex', child.danger ? 'text-danger' : 'text-text-dim')}>
+                  {child.icon}
+                </span>
+              ) : null}
+              {child.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
 /**
  * The three-dot menu.
@@ -143,15 +318,28 @@ export function ContextMenu({
     return () => window.removeEventListener('pointerdown', onOutside)
   }, [open, onClose, anchorRef])
 
-  const actionIndexes = items.reduce<number[]>((acc, item, i) => {
-    if (isAction(item) && !item.disabled) acc.push(i)
-    return acc
-  }, [])
+  const firstFocusable = items.findIndex(isFocusable)
 
-  const focusAt = useCallback((position: number) => {
-    const buttons = menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')
-    buttons?.[position]?.focus()
-  }, [])
+  /**
+   * Root rows only, found by attribute rather than by position.
+   *
+   * An open branch puts its own `role="menuitem"` buttons inside this same
+   * subtree, so a plain query would sweep them into the parent's up and down
+   * navigation and the arrow keys would walk out of the list they belong to.
+   * `:scope >` does not help either: a branch row is wrapped in a positioned
+   * div, so it is a grandchild rather than a child.
+   */
+  const rootRows = useCallback(
+    () => Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[data-menu-root]') ?? []),
+    [],
+  )
+
+  const focusAt = useCallback(
+    (position: number) => {
+      rootRows()[position]?.focus()
+    },
+    [rootRows],
+  )
 
   // Focus the first item on open, and hand focus back to the trigger on close.
   // Without the second half, closing the menu drops the user at the top of the
@@ -165,9 +353,7 @@ export function ContextMenu({
   }, [open, focusAt])
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    const buttons = Array.from(
-      menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [],
-    )
+    const buttons = rootRows()
     const current = buttons.indexOf(document.activeElement as HTMLButtonElement)
 
     switch (event.key) {
@@ -220,25 +406,33 @@ export function ContextMenu({
       )}
       style={at ? { width, left: at.x, top: at.y } : { width }}
     >
-      {items.map((item, i) =>
-        isAction(item) ? (
+      {items.map((item, i) => {
+        if (isSeparator(item)) {
+          return <div key={`sep-${i}`} role="separator" className="bg-line mx-1 my-[5px] h-px" />
+        }
+        if (isSubmenu(item)) {
+          return (
+            <Submenu
+              key={item.label}
+              item={item}
+              rootFirst={firstFocusable === i}
+              onCloseAll={onClose}
+            />
+          )
+        }
+        return (
           <button
             key={item.label}
             type="button"
             role="menuitem"
+            data-menu-root
             disabled={item.disabled}
-            tabIndex={actionIndexes[0] === i ? 0 : -1}
+            tabIndex={firstFocusable === i ? 0 : -1}
             onClick={() => {
               item.onSelect?.()
               onClose()
             }}
-            className={cn(
-              'flex w-full items-center gap-2.5 rounded-md border-none bg-transparent',
-              'px-[9px] py-[7px] text-left font-sans text-[12px] font-medium',
-              'transition-colors duration-fast hover:bg-surface2 focus-visible:bg-surface2',
-              'disabled:pointer-events-none disabled:opacity-45',
-              item.danger ? 'text-danger' : 'text-text',
-            )}
+            className={cn(ROW, item.danger ? 'text-danger' : 'text-text')}
           >
             {item.icon ? (
               <span className={cn('flex', item.danger ? 'text-danger' : 'text-text-dim')}>
@@ -247,10 +441,8 @@ export function ContextMenu({
             ) : null}
             {item.label}
           </button>
-        ) : (
-          <div key={`sep-${i}`} role="separator" className="bg-line mx-1 my-[5px] h-px" />
-        ),
-      )}
+        )
+      })}
     </div>
   )
 }
