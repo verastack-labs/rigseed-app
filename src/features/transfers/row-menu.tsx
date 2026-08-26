@@ -1,6 +1,7 @@
 import { MoreVertical } from 'lucide-react'
 
 import { ContextMenu } from '@/components/ui/context-menu'
+import { icons } from '@/lib/icons'
 import { usePointerMenu } from '@/lib/use-pointer-menu'
 import { cn } from '@/lib/utils'
 import { canReachDesktop, revealInFolder } from '@/services/shell'
@@ -13,6 +14,38 @@ export interface TorrentActions {
   onRecheck: (hashes: readonly string[]) => void
   /** Opens the per-torrent limits, which the page owns and this only asks for. */
   onSpeedLimits: (torrent: Torrent) => void
+  /** Saves the torrent's own .torrent file, via a dialog and a Rust write. */
+  onSaveTorrentFile: (torrent: Torrent) => void
+}
+
+/**
+ * Everything worth copying off a torrent, and where each value comes from.
+ *
+ * Matched against qBittorrent's own Copy submenu rather than invented, and
+ * three of its seven entries are deliberately not here.
+ *
+ * **Torrent ID** is the row's id, which is the hash, so it would duplicate
+ * Info hash under a second name.
+ *
+ * **Info hash v1 and v2** separately, and **Comment**, need data this menu
+ * does not have. qBittorrent's WebUI reads all three off the torrent row; in
+ * rigseed they are on `TorrentProperties`, which is the detail screen's own
+ * fetch. Offering them here would mean a request per menu open, or declaring
+ * row fields nothing has yet seen a daemon send. One `Info hash` from the row
+ * covers the common case, since `hash` is the v1 hash wherever there is one.
+ */
+function copyItems(torrent: Torrent) {
+  const put = (value: string) => () => void navigator.clipboard?.writeText(value)
+  return [
+    { label: 'Name', onSelect: put(torrent.name) },
+    { label: 'Magnet link', onSelect: put(torrent.magnet_uri) },
+    { label: 'Info hash', onSelect: put(torrent.hash) },
+    // Two different paths, and the difference bites. `save_path` is the folder
+    // the torrent was told to go in; `content_path` is the file or folder it
+    // actually made, which for a single-file torrent is not the two joined.
+    { label: 'Content path', onSelect: put(torrent.content_path) },
+    { label: 'Save path', onSelect: put(torrent.save_path) },
+  ]
 }
 
 /** Every layout renders the same torrents and the same actions. */
@@ -40,14 +73,20 @@ function menuItems(torrent: Torrent, actions: TorrentActions) {
     },
     { separator: true as const },
     {
-      label: 'Copy magnet link',
-      // The daemon's own magnet, which carries the display name and trackers.
-      onSelect: () => void navigator.clipboard?.writeText(torrent.magnet_uri),
+      label: 'Copy',
+      icon: <icons.copy className="size-[13px]" strokeWidth={2} />,
+      items: copyItems(torrent),
     },
-    // Only where there is a desktop to ask. In a browser this would be a menu
-    // item that does nothing, which is worse than one that is not there.
+    // Both need somewhere outside the webview to land: one writes a file, the
+    // other opens a file manager. In a browser they would be menu items that
+    // do nothing, which is worse than items that are not there.
     ...(canReachDesktop()
       ? [
+          {
+            label: 'Save .torrent file…',
+            icon: <icons.fileDown className="size-[13px]" strokeWidth={2} />,
+            onSelect: () => actions.onSaveTorrentFile(torrent),
+          },
           {
             label: 'Open containing folder',
             onSelect: () => void revealInFolder(torrent.content_path),
