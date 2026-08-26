@@ -1,6 +1,7 @@
 import type {
   AddTorrentOptions,
   Category,
+  ShareLimitAction,
   Torrent,
   TorrentFile,
   TorrentProperties,
@@ -148,6 +149,47 @@ export function createTorrentsApi(transport: Transport, caps: Capabilities = DEF
       transport.post<void>('torrents/setDownloadLimit', { ...hashes(list), limit }),
     setUploadLimit: (list: readonly string[], limit: number) =>
       transport.post<void>('torrents/setUploadLimit', { ...hashes(list), limit }),
+
+    /**
+     * Ratio and seeding time limits for a torrent, in one call.
+     *
+     * All four parameters go every time, because the endpoint is
+     * all-or-nothing: it overwrites every limit it is given and there is no
+     * way to change one and leave the others alone. Sending three of them
+     * would silently reset the fourth, so the caller passes the full set and
+     * the dialog reads the current values to fill it.
+     *
+     * `shareLimitAction` is not optional, whatever the API docs suggest. A
+     * 5.2.3 daemon answers `400 Missing required parameters: shareLimitAction`
+     * to the three-parameter call that every older client sends. It is safe on
+     * an older daemon too, which ignores parameters it does not know, so it
+     * always goes rather than being gated on a version check.
+     *
+     * The daemon does not validate the action. A misspelt one answers 200 and
+     * applies `Default`, which is why `ShareLimitAction` is a union.
+     *
+     * Limits use the wire's own sentinels: `-2` follows the global setting and
+     * `-1` means no limit. Times are minutes.
+     */
+    setShareLimits: (
+      list: readonly string[],
+      limits: {
+        ratioLimit: number
+        seedingTimeLimit: number
+        inactiveSeedingTimeLimit: number
+        shareLimitAction: ShareLimitAction
+      },
+    ) => transport.post<void>('torrents/setShareLimits', { ...hashes(list), ...limits }),
+
+    /**
+     * Force start, which ignores the queue rather than resuming.
+     *
+     * Not the same as `resume`: a queued torrent that is resumed still waits
+     * its turn against the active-downloads limit, and a force-started one
+     * does not. A setter rather than a toggle, unlike the two below.
+     */
+    setForceStart: (list: readonly string[], value: boolean) =>
+      transport.post<void>('torrents/setForceStart', { ...hashes(list), value }),
 
     // Toggles, not setters. The API has no way to say "sequential on"; it
     // only flips, which means the caller has to know the current state and a

@@ -1118,6 +1118,49 @@ export function createMockTransport({
           if (t) t[key] = limit
         }
       }
+      /**
+       * Share limits, resolved the way the daemon resolves them.
+       *
+       * The mock stores `ratio_limit` and then computes `max_ratio` from it,
+       * rather than writing the same number into both. That difference is the
+       * whole point of the pair: a dialog that reads the resolved field to
+       * fill its own inputs would show "no limit" for a torrent set to follow
+       * a global limit, and against a mock that copied the value across it
+       * would look correct.
+       *
+       * The mock's global limits are off, so `-2` resolves to `-1`.
+       */
+      if (path === 'torrents/setShareLimits') {
+        const resolve = (own: number) => (own === -2 ? -1 : own)
+        const ratio = Number(body?.ratioLimit ?? -2)
+        const seeding = Number(body?.seedingTimeLimit ?? -2)
+        const inactive = Number(body?.inactiveSeedingTimeLimit ?? -2)
+        // Anything the daemon does not recognise becomes Default rather than
+        // an error, which is the behaviour the union exists to prevent.
+        const sent = String(body?.shareLimitAction ?? 'Default')
+        const action = (
+          ['Default', 'Stop', 'Remove', 'RemoveWithContent', 'EnableSuperSeeding'] as const
+        ).find((a) => a === sent)
+
+        for (const h of hashes) {
+          const t = torrents.get(h)
+          if (!t) continue
+          t.ratio_limit = ratio
+          t.max_ratio = resolve(ratio)
+          t.seeding_time_limit = seeding
+          t.max_seeding_time = resolve(seeding)
+          t.inactive_seeding_time_limit = inactive
+          t.max_inactive_seeding_time = resolve(inactive)
+          t.share_limit_action = action ?? 'Default'
+        }
+      }
+      if (path === 'torrents/setForceStart') {
+        const value = String(body?.value ?? 'false') === 'true'
+        for (const h of hashes) {
+          const t = torrents.get(h)
+          if (t) t.force_start = value
+        }
+      }
       if (path === 'torrents/toggleSequentialDownload') {
         for (const h of hashes) {
           const t = torrents.get(h)
