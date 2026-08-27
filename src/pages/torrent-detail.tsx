@@ -14,6 +14,7 @@ import { SpeedTab } from '@/features/torrent-detail/speed-tab'
 import { TrackersTab } from '@/features/torrent-detail/trackers-tab'
 import { TitleBlock } from '@/features/torrent-detail/title-block'
 import { isSynthetic } from '@/features/torrent-detail/tracker-status'
+import { copy } from '@/lib/clipboard'
 import { icons } from '@/lib/icons'
 import { write } from '@/lib/write'
 import { useApi } from '@/services/api-context'
@@ -107,7 +108,7 @@ export function TorrentDetail() {
     // The daemon's own magnet, which carries the display name and trackers.
     // Rebuilding one from the info hash produces a valid link that has lost
     // everything a client needs to find peers without waiting on DHT.
-    onCopyMagnet: () => void navigator.clipboard?.writeText(torrent.magnet_uri),
+    onCopyMagnet: () => void copy('magnet link', torrent.magnet_uri),
     onRemove: () => setConfirmRemove(true),
   }
 

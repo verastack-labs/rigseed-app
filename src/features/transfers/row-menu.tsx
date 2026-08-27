@@ -1,6 +1,7 @@
 import { MoreVertical } from 'lucide-react'
 
 import { ContextMenu } from '@/components/ui/context-menu'
+import { copy } from '@/lib/clipboard'
 import { icons } from '@/lib/icons'
 import { usePointerMenu } from '@/lib/use-pointer-menu'
 import { cn } from '@/lib/utils'
@@ -44,16 +45,18 @@ export interface TorrentActions {
  * torrent anyway.
  */
 function copyItems(torrent: Torrent) {
-  const put = (value: string) => () => void navigator.clipboard?.writeText(value)
+  // Lower case, because it lands mid-sentence in "Copied magnet link". The
+  // menu row keeps its own capitalisation; these name the content instead.
+  const put = (what: string, value: string) => () => void copy(what, value)
   return [
-    { label: 'Name', onSelect: put(torrent.name) },
-    { label: 'Magnet link', onSelect: put(torrent.magnet_uri) },
-    { label: 'Info hash', onSelect: put(torrent.hash) },
+    { label: 'Name', onSelect: put('name', torrent.name) },
+    { label: 'Magnet link', onSelect: put('magnet link', torrent.magnet_uri) },
+    { label: 'Info hash', onSelect: put('info hash', torrent.hash) },
     // Two different paths, and the difference bites. `save_path` is the folder
     // the torrent was told to go in; `content_path` is the file or folder it
     // actually made, which for a single-file torrent is not the two joined.
-    { label: 'Content path', onSelect: put(torrent.content_path) },
-    { label: 'Save path', onSelect: put(torrent.save_path) },
+    { label: 'Content path', onSelect: put('content path', torrent.content_path) },
+    { label: 'Save path', onSelect: put('save path', torrent.save_path) },
   ]
 }
 

@@ -10,6 +10,7 @@ import { PluginManager } from '@/features/search/plugin-manager'
 import { PluginSource } from '@/features/search/plugin-source'
 import { PythonSource } from '@/features/search/python-source'
 import { RESULT_COLUMNS, ResultRow } from '@/features/search/result-row'
+import { copy } from '@/lib/clipboard'
 import { icons } from '@/lib/icons'
 import { swatchColor, swatchFor } from '@/lib/labels'
 import { cn } from '@/lib/utils'
@@ -494,7 +495,7 @@ export function Search() {
                     announce: 'Torrent added',
                   })
                 }
-                onCopyMagnet={() => void navigator.clipboard?.writeText(result.fileUrl)}
+                onCopyMagnet={() => void copy('magnet link', result.fileUrl)}
               />
             ))
           )}
