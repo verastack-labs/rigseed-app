@@ -286,6 +286,10 @@ export function Settings() {
                     label="Incomplete path"
                     hint="Only used while the switch above is on."
                     dirty={isDirty('temp_path')}
+                    // The whole row recedes, not just the box. A greyed input
+                    // under a full-strength label reads as broken rather than
+                    // as waiting on the switch above it.
+                    inactive={!draft.temp_path_enabled}
                   >
                     <Input
                       mono

@@ -44,3 +44,38 @@ describe('SettingRow', () => {
     expect(screen.queryByLabelText('changed, not yet applied')).not.toBeInTheDocument()
   })
 })
+
+describe('a row waiting on a switch elsewhere', () => {
+  it('dims the label and the hint, not just the control', () => {
+    // Disabling the control alone was not enough. A greyed input under a
+    // label and hint at full strength reads as a field that ought to work and
+    // does not, rather than as one waiting on the switch above it.
+    render(
+      <SettingRow label="Incomplete path" hint="Only used while the switch above is on." inactive>
+        <input aria-label="Incomplete path" disabled />
+      </SettingRow>,
+    )
+    expect(screen.getByText('Incomplete path').className).toContain('text-text-dimmer')
+    expect(screen.getByText(/Only used while/).className).toContain('text-text-dimmer')
+  })
+
+  it('leaves an active row at full strength', () => {
+    render(
+      <SettingRow label="Incomplete path" hint="Only used while the switch above is on.">
+        <input aria-label="Incomplete path" />
+      </SettingRow>,
+    )
+    expect(screen.getByText('Incomplete path').className).not.toContain('text-text-dimmer')
+  })
+
+  it('dims presentation only, leaving the control to say it is disabled', () => {
+    // Assistive technology reads the control's own disabled state. Dimming is
+    // for the eye and must not be the only signal.
+    render(
+      <SettingRow label="Incomplete path" inactive>
+        <input aria-label="Incomplete path" disabled />
+      </SettingRow>,
+    )
+    expect(screen.getByLabelText('Incomplete path')).toBeDisabled()
+  })
+})

@@ -10,6 +10,18 @@ export interface SettingRowProps {
   children: ReactNode
   /** Marks a row holding an unapplied edit. */
   dirty?: boolean
+  /**
+   * Dims the label and hint for a row whose control is switched off elsewhere.
+   *
+   * Disabling the control alone was not enough. A greyed input under a label
+   * and hint at full strength reads as a field that ought to work and does
+   * not, rather than as one waiting on the switch above it. This dims the
+   * words too, so the whole row recedes together.
+   *
+   * Presentation only. The control keeps its own `disabled`, which is what
+   * actually stops input and what assistive technology reads.
+   */
+  inactive?: boolean
   className?: string
 }
 
@@ -25,7 +37,7 @@ export interface SettingRowProps {
  * nav marks dirty sections the same way, so the two agree, and a person
  * scanning a long page can find what they touched without reading it.
  */
-export function SettingRow({ label, hint, children, dirty, className }: SettingRowProps) {
+export function SettingRow({ label, hint, children, dirty, inactive, className }: SettingRowProps) {
   return (
     <div
       className={cn(
@@ -35,7 +47,14 @@ export function SettingRow({ label, hint, children, dirty, className }: SettingR
     >
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex items-center gap-1.5">
-          <span className="text-[12.5px] font-semibold text-text">{label}</span>
+          <span
+            className={cn(
+              'text-[12.5px] font-semibold transition-colors duration-fast',
+              inactive ? 'text-text-dimmer' : 'text-text',
+            )}
+          >
+            {label}
+          </span>
           {dirty ? (
             <span
               aria-label="changed, not yet applied"
@@ -44,7 +63,16 @@ export function SettingRow({ label, hint, children, dirty, className }: SettingR
             />
           ) : null}
         </span>
-        {hint ? <span className="text-[11.5px] leading-[1.5] text-text-dim">{hint}</span> : null}
+        {hint ? (
+          <span
+            className={cn(
+              'text-[11.5px] leading-[1.5] transition-colors duration-fast',
+              inactive ? 'text-text-dimmer' : 'text-text-dim',
+            )}
+          >
+            {hint}
+          </span>
+        ) : null}
       </span>
       <span className="flex shrink-0 items-center gap-2">{children}</span>
     </div>
