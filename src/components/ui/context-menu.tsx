@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode, RefObject } from 'react'
-import { FloatingPortal, flip, offset, shift, useFloating } from '@floating-ui/react'
+import { FloatingPortal, autoUpdate, flip, offset, shift, useFloating } from '@floating-ui/react'
 
 import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
@@ -166,6 +166,10 @@ function Submenu({
     open,
     onOpenChange: setOpen,
     placement: 'right-start',
+    // The row this hangs off can move under it: the parent menu flips, the
+    // window resizes, the list behind it scrolls. Without this the branch
+    // keeps the coordinates it opened with.
+    whileElementsMounted: autoUpdate,
     middleware: [
       offset(4),
       // Leftwards before anything else, which is what a desktop menu does at
@@ -274,7 +278,9 @@ function Submenu({
             }
           }}
           className={cn(
-            'bg-surface border-line z-40 w-[196px] rounded-3xl border p-1.5',
+            // One above its own menu, for the same reason that one clears the
+            // add button. See the root menu's note.
+            'bg-surface border-line z-[46] w-[196px] rounded-3xl border p-1.5',
             'shadow-[var(--shadow-card)]',
           )}
         >
@@ -343,9 +349,45 @@ export function ContextMenu({
    * `above` still wins when a caller passes it, since a few screens know
    * something about their layout that measurement cannot.
    */
+  /**
+   * The cursor as a reference element, memoised so it is one object per point.
+   *
+   * Floating UI accepts anything that can report a rect, so a click position
+   * needs no separate path through the positioning code. Rebuilding it every
+   * render would make the positioner see a new reference each time and
+   * recompute forever.
+   */
+  const pointer = useMemo(
+    () =>
+      at
+        ? {
+            getBoundingClientRect: () =>
+              ({
+                x: at.x,
+                y: at.y,
+                top: at.y,
+                left: at.x,
+                right: at.x,
+                bottom: at.y,
+                width: 0,
+                height: 0,
+              }) as DOMRect,
+          }
+        : null,
+    [at],
+  )
+
   const { refs, floatingStyles } = useFloating({
     open,
     placement: at ? 'bottom-start' : above ? 'top-end' : 'bottom-end',
+    /*
+     * Without this the position is computed once and never again. Floating UI
+     * does not watch for movement on its own, so a menu survives a resize,
+     * a scroll or a layout change holding coordinates from the layout it
+     * opened in. Maximising the window was exactly that: a menu whose trigger
+     * had moved to x 840 stayed at x 396, 244px adrift.
+     */
+    whileElementsMounted: autoUpdate,
     middleware: [
       offset(at ? 0 : 8),
       /*
@@ -366,20 +408,26 @@ export function ContextMenu({
     ],
   })
 
-  // The cursor, as a reference element. Floating UI takes anything that can
-  // report a rect, so a click position needs no special path through the
-  // positioning code.
-  useEffect(() => {
-    if (!open) return
-    if (at) {
-      refs.setReference({
-        getBoundingClientRect: () =>
-          ({ x: at.x, y: at.y, top: at.y, left: at.x, right: at.x, bottom: at.y, width: 0, height: 0 }) as DOMRect,
-      })
-      return
-    }
-    if (anchorRef?.current) refs.setReference(anchorRef.current)
-  }, [open, at, anchorRef, refs])
+  /*
+   * What the menu is positioned against: the cursor, or the trigger's wrapper.
+   *
+   * A layout effect, not a plain one. The earlier version used `useEffect`,
+   * which runs after the browser has painted, and paired it with a positioner
+   * that never recomputed. An anchored menu therefore took whatever position
+   * the first referenceless pass produced and kept it: maximising the window
+   * put a menu at x 396 whose trigger was at x 840, 244px adrift, and it
+   * stayed there. Running before paint means nothing is visible at the
+   * uncorrected spot, and `autoUpdate` above means it cannot go stale after.
+   *
+   * A setter rather than the `elements` prop because that prop is typed for a
+   * DOM element, and a click position is a virtual reference rather than one.
+   * Reading `anchorRef.current` here is also the only correct place for it:
+   * during render it would be a ref read React explicitly forbids.
+   */
+  useLayoutEffect(() => {
+    const reference = pointer ?? anchorRef?.current ?? null
+    if (reference) refs.setPositionReference(reference)
+  }, [pointer, anchorRef, refs, open])
 
   /** See the submenu's own note: the portal mounts a render after `open`. */
   const [menuNode, setMenuNode] = useState<HTMLDivElement | null>(null)
@@ -500,7 +548,15 @@ export function ContextMenu({
       {...{ [SURFACE]: '' }}
       onKeyDown={onKeyDown}
       className={cn(
-        'bg-surface border-line z-30 rounded-3xl border p-1.5',
+        // Above the add button, below a modal. Portalling moved both menus
+        // to the document root, where they stack against app chrome rather
+        // than against the card they came from. The add button's column is
+        // `z-40` and 164x268 of live pointer target in the bottom-right
+        // corner, so at `z-30` it sat on top of any menu reaching that far
+        // and swallowed both clicks and the hover that opens a branch.
+        // Dialogs stay above at `z-50`, which is correct: they are modal and
+        // a menu must not float over one.
+        'bg-surface border-line z-[45] rounded-3xl border p-1.5',
         // Token names live in Tailwind's --shadow-* namespace, so mapping them
         // into @theme would be a self-referential cycle. Shadows appear in four
         // places in the whole app, so an arbitrary value is clearer than

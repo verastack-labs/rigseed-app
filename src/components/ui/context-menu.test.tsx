@@ -216,11 +216,33 @@ describe('ContextMenu', () => {
     expect(remove.className).not.toContain('text-accent')
   })
 
-  it('lifts above neighbouring cards', () => {
+  it('sits above the page chrome and below a modal', () => {
+    /*
+     * This asserted `z-30` before, which is the value that caused the bug it
+     * now guards. Once both menus render through a portal they stack against
+     * the whole app rather than against the card they came from, and the add
+     * button's column is `z-40` with 164x268 of live pointer target in the
+     * bottom-right corner. At `z-30` the menu lost to it: items over that
+     * corner took no clicks and no hover, so a branch could not be opened.
+     *
+     * The upper bound matters just as much. Dialogs are `z-50` and modal, and
+     * a context menu floating over one would be a menu the focus trap has
+     * already excluded.
+     */
     render(<ContextMenu items={items} open onClose={vi.fn()} />)
-    expect(screen.getByRole('menu').className).toContain('z-30')
+    // Read off the class, because jsdom loads no stylesheet and every computed
+    // z-index there is empty. The number is the contract either way.
+    const z = layerOf(screen.getByRole('menu').className)
+    expect(z).toBeGreaterThan(40)
+    expect(z).toBeLessThan(50)
   })
 })
+
+/** The z-index out of a Tailwind class, whether `z-30` or `z-[45]`. */
+function layerOf(className: string): number {
+  const match = /(?:^|\s)z-\[?(\d+)\]?(?:\s|$)/.exec(className)
+  return match ? Number(match[1]) : NaN
+}
 
 describe('submenus', () => {
   const copy = vi.fn()
