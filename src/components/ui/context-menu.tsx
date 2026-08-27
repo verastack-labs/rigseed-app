@@ -1,8 +1,31 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode, RefObject } from 'react'
+import { FloatingPortal, flip, offset, shift, useFloating } from '@floating-ui/react'
 
 import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
+
+/**
+ * Marks every surface this menu renders through a portal.
+ *
+ * Portalled nodes are not inside the trigger's subtree, so the outside-press
+ * handler cannot recognise them by containment and would close the menu on a
+ * click aimed at its own submenu. This attribute is how a press is traced back
+ * to a menu it belongs to.
+ */
+const SURFACE = 'data-menu-surface'
+
+/**
+ * Both menus render into a portal at the document root.
+ *
+ * Not for z-index. `<main>` carries `overflow-x: hidden`, added to kill the
+ * horizontal scrollbar, which makes it a clipping ancestor for anything
+ * positioned inside it. A submenu on a right-hand card is then cut off no
+ * matter how correctly it is positioned, and in the worst case widens the
+ * document and brings the very scrollbar back. Only leaving the subtree fixes
+ * that; better arithmetic cannot.
+ */
+const EDGE = 8
 
 export interface ContextMenuAction {
   label: string
@@ -119,35 +142,77 @@ function Submenu({
   onCloseAll: () => void
 }) {
   const [open, setOpen] = useState(false)
-  const [flipped, setFlipped] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
-  // Measured before paint, like the parent's own flip. A branch that opens off
-  // the right edge of the window is worse than one that opens leftwards, and
-  // the caller cannot know which rows are near an edge.
-  useLayoutEffect(() => {
-    if (!open) return
-    const el = panelRef.current
-    if (!el) return
-    setFlipped(el.getBoundingClientRect().right > window.innerWidth - 8)
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    // Focus the first child once it exists, so ArrowRight lands somewhere.
-    panelRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus()
-  }, [open])
+  /**
+   * Position computed from the trigger, not from where the panel currently is.
+   *
+   * This replaced a hand-rolled flip that was correct on the first open and
+   * wrong on every one after it. It measured the panel's own rect and compared
+   * it against the window, but the flipped flag survived between opens: on
+   * reopen the panel was already on the left, measured as having plenty of
+   * room, and flipped back to the right where it was clipped. Measured on a
+   * 1100px window, a right-hand card put the branch at x 1058 to 1254 against
+   * a viewport edge of 1100.
+   *
+   * The lesson is not that the arithmetic was subtly off. It is that a
+   * position derived from the current position cannot be idempotent, and a
+   * one-shot effect over stateful geometry will always drift. Floating UI
+   * recomputes from the reference element every time, so reopening cannot
+   * reach a different answer than opening did.
+   */
+  const { refs, floatingStyles } = useFloating({
+    open,
+    onOpenChange: setOpen,
+    placement: 'right-start',
+    middleware: [
+      offset(4),
+      // Leftwards before anything else, which is what a desktop menu does at
+      // the edge of a screen.
+      flip({ fallbackPlacements: ['left-start'], padding: EDGE }),
+      // Nudges along the cross axis so a branch near the bottom stays whole
+      // rather than half off the viewport.
+      shift({ padding: EDGE }),
+    ],
+  })
 
   const close = (refocus: boolean) => {
     setOpen(false)
     if (refocus) triggerRef.current?.focus()
   }
 
+  const setTrigger = (node: HTMLButtonElement | null) => {
+    triggerRef.current = node
+    refs.setReference(node)
+  }
+
+  /**
+   * State as well as a ref, because the portal mounts a render late.
+   *
+   * `FloatingPortal` creates its container in an effect, so the panel is not
+   * in the document on the pass that sets `open`. An effect keyed on `open`
+   * alone therefore ran while there was nothing to focus, and ArrowRight
+   * opened a branch that never took focus. Keying on the node instead means
+   * the effect runs when the panel actually exists, whenever that is.
+   */
+  const [panelNode, setPanelNode] = useState<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    // Focus the first child once it exists, so ArrowRight lands somewhere.
+    panelNode?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus()
+  }, [panelNode])
+
+  const setPanel = (node: HTMLDivElement | null) => {
+    panelRef.current = node
+    setPanelNode(node)
+    refs.setFloating(node)
+  }
+
   return (
-    <div className="relative" onMouseLeave={() => setOpen(false)}>
+    <div onMouseLeave={() => setOpen(false)}>
       <button
-        ref={triggerRef}
+        ref={setTrigger}
         type="button"
         role="menuitem"
         data-menu-root
@@ -173,10 +238,15 @@ function Submenu({
       </button>
 
       {open ? (
+        <FloatingPortal>
         <div
-          ref={panelRef}
+          ref={setPanel}
           role="menu"
           aria-label={item.label}
+          {...{ [SURFACE]: '' }}
+          style={floatingStyles}
+          onMouseEnter={() => setOpen(true)}
+          onMouseLeave={() => setOpen(false)}
           onKeyDown={(event) => {
             const buttons = Array.from(
               panelRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [],
@@ -204,9 +274,8 @@ function Submenu({
             }
           }}
           className={cn(
-            'bg-surface border-line absolute top-0 z-40 w-[196px] rounded-3xl border p-1.5',
+            'bg-surface border-line z-40 w-[196px] rounded-3xl border p-1.5',
             'shadow-[var(--shadow-card)]',
-            flipped ? 'right-[calc(100%+4px)]' : 'left-[calc(100%+4px)]',
           )}
         >
           {item.items.map((child) => (
@@ -231,6 +300,7 @@ function Submenu({
             </button>
           ))}
         </div>
+        </FloatingPortal>
       ) : null}
     </div>
   )
@@ -259,37 +329,66 @@ export function ContextMenu({
   className,
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
-  const [measuredFlip, setMeasuredFlip] = useState(false)
-  const flipped = above ?? measuredFlip
 
-  // Measure before paint so the menu never renders in the wrong place first.
-  useLayoutEffect(() => {
-    if (!open || at || above !== undefined) return
-    const el = menuRef.current
-    if (!el) return
-    const rect = el.getBoundingClientRect()
-    setMeasuredFlip(rect.height > 0 && rect.bottom > window.innerHeight - 8)
-  }, [open, at, above, items])
+  /**
+   * One positioner for both ways this menu opens.
+   *
+   * The anchored case references the trigger's own wrapper and hangs the menu
+   * below it with right edges aligned. The pointer case references a zero-size
+   * virtual element at the click, which is how Floating UI models a cursor.
+   * Both then get the same flip and shift treatment, where the old code had
+   * two hand-rolled correction paths that behaved differently: one flipped on
+   * y only, the other clamped on x and flipped on y by hand.
+   *
+   * `above` still wins when a caller passes it, since a few screens know
+   * something about their layout that measurement cannot.
+   */
+  const { refs, floatingStyles } = useFloating({
+    open,
+    placement: at ? 'bottom-start' : above ? 'top-end' : 'bottom-end',
+    middleware: [
+      offset(at ? 0 : 8),
+      /*
+       * Both cases flip, and an earlier version of this excluded the pointer
+       * one on the grounds that a menu jumping above the cursor reads as a
+       * misclick. That conflated two axes. The placement here is `bottom-*`,
+       * so flipping means going above, which is exactly what the hand-rolled
+       * code it replaced already did and what every desktop menu does at the
+       * bottom of a screen. Sideways movement is `shift`'s job, not this one's.
+       *
+       * Leaving it out cost a real regression: a right click low in a card put
+       * the menu at bottom 757 in a 700px window, with the last items off
+       * screen. jsdom cannot see that, since every rect there is zero. Only
+       * driving the actual window caught it.
+       */
+      ...(above !== undefined ? [] : [flip({ padding: EDGE })]),
+      shift({ padding: EDGE }),
+    ],
+  })
 
-  // The pointer-anchored case, which needs both axes rather than a flip.
-  // Clamping rather than flipping on x, because a menu that jumps to the left
-  // of the cursor near the edge of a window reads as a misclick.
-  //
-  // Written straight onto the node rather than into state. The correction
-  // depends on the height the browser just laid out, so a state round trip
-  // would be a second render to reach a value this pass already knows, and
-  // setting state from a layout effect is the pattern the lint rule exists to
-  // stop. A layout effect runs before paint, so nothing is ever visible at the
-  // uncorrected position.
-  useLayoutEffect(() => {
-    const el = menuRef.current
-    if (!open || !at || !el) return
-    const height = el.getBoundingClientRect().height
-    const edge = 8
-    const room = window.innerHeight - edge
-    el.style.left = `${Math.max(edge, Math.min(at.x, window.innerWidth - width - edge))}px`
-    el.style.top = `${at.y + height > room ? Math.max(edge, at.y - height) : at.y}px`
-  }, [open, at, width, items])
+  // The cursor, as a reference element. Floating UI takes anything that can
+  // report a rect, so a click position needs no special path through the
+  // positioning code.
+  useEffect(() => {
+    if (!open) return
+    if (at) {
+      refs.setReference({
+        getBoundingClientRect: () =>
+          ({ x: at.x, y: at.y, top: at.y, left: at.x, right: at.x, bottom: at.y, width: 0, height: 0 }) as DOMRect,
+      })
+      return
+    }
+    if (anchorRef?.current) refs.setReference(anchorRef.current)
+  }, [open, at, anchorRef, refs])
+
+  /** See the submenu's own note: the portal mounts a render after `open`. */
+  const [menuNode, setMenuNode] = useState<HTMLDivElement | null>(null)
+
+  const setMenu = (node: HTMLDivElement | null) => {
+    menuRef.current = node
+    setMenuNode(node)
+    refs.setFloating(node)
+  }
 
   // `pointerdown`, not `click`, and the reason is the whole bug.
   //
@@ -309,6 +408,11 @@ export function ContextMenu({
     const onOutside = (event: Event) => {
       const target = event.target as Node
       if (menuRef.current?.contains(target)) return
+      // A portalled submenu is not inside the menu's subtree, so containment
+      // cannot recognise it and a click on Copy's own children would close the
+      // menu underneath them. The attribute is what traces a press back to a
+      // surface this menu put on screen.
+      if (target instanceof Element && target.closest(`[${SURFACE}]`)) return
       // The trigger toggles the menu itself. Closing here as well would make
       // the two cancel out.
       if (anchorRef?.current?.contains(target)) return
@@ -346,11 +450,11 @@ export function ContextMenu({
   // document, which is the classic way a keyboard user loses their place.
   const triggerRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
-    if (!open) return
+    if (!menuNode) return
     triggerRef.current = document.activeElement as HTMLElement | null
     focusAt(0)
     return () => triggerRef.current?.focus?.()
-  }, [open, focusAt])
+  }, [menuNode, focusAt])
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const buttons = rootRows()
@@ -388,23 +492,23 @@ export function ContextMenu({
   if (!open) return null
 
   return (
+    <FloatingPortal>
     <div
-      ref={menuRef}
+      ref={setMenu}
       role="menu"
       aria-label={label}
+      {...{ [SURFACE]: '' }}
       onKeyDown={onKeyDown}
       className={cn(
         'bg-surface border-line z-30 rounded-3xl border p-1.5',
-        at ? 'fixed' : 'absolute right-0',
         // Token names live in Tailwind's --shadow-* namespace, so mapping them
         // into @theme would be a self-referential cycle. Shadows appear in four
         // places in the whole app, so an arbitrary value is clearer than
         // inventing a parallel name.
         'shadow-[var(--shadow-card)]',
-        !at && (flipped ? 'bottom-[calc(100%+8px)]' : 'top-[calc(100%+8px)]'),
         className,
       )}
-      style={at ? { width, left: at.x, top: at.y } : { width }}
+      style={{ ...floatingStyles, width }}
     >
       {items.map((item, i) => {
         if (isSeparator(item)) {
@@ -444,5 +548,6 @@ export function ContextMenu({
         )
       })}
     </div>
+    </FloatingPortal>
   )
 }

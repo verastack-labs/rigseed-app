@@ -161,63 +161,51 @@ describe('ContextMenu', () => {
     })
   })
 
-  describe('flip', () => {
-    it('opens below when there is room', () => {
-      render(<ContextMenu items={items} open onClose={vi.fn()} />)
-      expect(screen.getByRole('menu').className).toContain('top-[calc(100%+8px)]')
-    })
-
-    it('flips above when it would run off the bottom', () => {
-      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
-        bottom: window.innerHeight + 40,
-        height: 160,
-      } as DOMRect)
-      render(<ContextMenu items={items} open onClose={vi.fn()} />)
-      expect(screen.getByRole('menu').className).toContain('bottom-[calc(100%+8px)]')
-    })
-
-    it('lets an explicit above win over the measurement', () => {
-      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
-        bottom: window.innerHeight + 40,
-        height: 160,
-      } as DOMRect)
-      render(<ContextMenu items={items} open onClose={vi.fn()} above={false} />)
-      expect(screen.getByRole('menu').className).toContain('top-[calc(100%+8px)]')
-    })
-  })
-
-  describe('opened at a point', () => {
-    it('positions itself at the pointer instead of under a trigger', () => {
-      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ height: 160 } as DOMRect)
-      render(<ContextMenu items={items} open onClose={vi.fn()} at={{ x: 120, y: 90 }} />)
+  describe('where it renders', () => {
+    /**
+     * These used to assert Tailwind position classes and exact pixel offsets.
+     * Both are gone: the positioner writes inline styles, and it derives them
+     * from real element rects, which jsdom reports as all-zero. Asserting
+     * pixels here would have meant asserting the mock rather than the layout.
+     *
+     * What is worth pinning in jsdom is the structural half of the fix, which
+     * is the half that was actually broken. The pixel behaviour is checked by
+     * driving the real window instead, and the numbers from that run are in
+     * the component's own comments.
+     */
+    it('renders outside the trigger subtree, not inside it', () => {
+      // The whole point. `<main>` carries `overflow-x: hidden`, so anything
+      // positioned inside it is clipped no matter how well it is placed, and a
+      // submenu on a right-hand card was cut off and widened the document.
+      // Leaving the subtree is the only fix; better arithmetic is not one.
+      const { container } = render(<ContextMenu items={items} open onClose={vi.fn()} />)
       const menu = screen.getByRole('menu')
-      expect(menu.className).toContain('fixed')
-      expect(menu.className).not.toContain('absolute')
-      expect(menu.style.left).toBe('120px')
-      expect(menu.style.top).toBe('90px')
+      expect(container.contains(menu)).toBe(false)
+      expect(document.body.contains(menu)).toBe(true)
     })
 
-    it('clamps to the right edge rather than opening off screen', () => {
-      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ height: 100 } as DOMRect)
-      render(<ContextMenu items={items} open onClose={vi.fn()} at={{ x: window.innerWidth - 4, y: 20 }} />)
-      // 224 wide, 8px from the edge. A menu that opens past the window is a
-      // menu with items nobody can reach.
-      expect(screen.getByRole('menu').style.left).toBe(`${window.innerWidth - 224 - 8}px`)
+    it('places a submenu outside the menu it belongs to', () => {
+      const withBranch: ContextMenuItem[] = [
+        { label: 'Resume' },
+        { label: 'Copy', items: [{ label: 'Name' }] },
+      ]
+      render(<ContextMenu items={withBranch} open onClose={vi.fn()} />)
+      fireEvent.mouseEnter(screen.getByRole('menuitem', { name: /Copy/ }))
+      const [root, branch] = screen.getAllByRole('menu')
+      expect(root!.contains(branch!)).toBe(false)
     })
 
-    it('opens upward when there is no room below the pointer', () => {
-      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ height: 160 } as DOMRect)
-      const y = window.innerHeight - 20
-      render(<ContextMenu items={items} open onClose={vi.fn()} at={{ x: 10, y }} />)
-      expect(screen.getByRole('menu').style.top).toBe(`${y - 160}px`)
-    })
-
-    it('keeps the anchored classes off when it is placed at a point', () => {
-      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ height: 20 } as DOMRect)
-      render(<ContextMenu items={items} open onClose={vi.fn()} at={{ x: 10, y: 10 }} />)
+    it('takes its position from inline styles rather than anchored classes', () => {
+      render(<ContextMenu items={items} open onClose={vi.fn()} />)
       const menu = screen.getByRole('menu')
+      expect(menu.style.position).not.toBe('')
       expect(menu.className).not.toContain('top-[calc(100%+8px)]')
       expect(menu.className).not.toContain('bottom-[calc(100%+8px)]')
+    })
+
+    it('still applies the caller width', () => {
+      render(<ContextMenu items={items} open onClose={vi.fn()} width={300} />)
+      expect(screen.getByRole('menu').style.width).toBe('300px')
     })
   })
 

@@ -62,18 +62,20 @@ describe('RowMenu', () => {
     expect(items()).toContain('Copy')
   })
 
-  it('opens at the pointer when it was a right click', () => {
+  it('opens from the button after a right click, without getting stuck', () => {
+    // These two used to assert `fixed` against `absolute` on the menu, which
+    // was how the pointer and anchored cases differed before positioning moved
+    // to inline styles. The point semantics they were really testing now have
+    // their own tests in `use-pointer-menu.test.tsx`, where they need no
+    // layout. What is left worth checking here is that both routes open a menu
+    // with the same items.
     inACard()
     fireEvent.contextMenu(screen.getByTestId('card'), { clientX: 120, clientY: 90 })
-    expect(screen.getByRole('menu').className).toContain('fixed')
-  })
+    expect(items()).toContain('Copy')
 
-  it('goes back under the button when that is what was clicked', () => {
-    inACard()
-    fireEvent.contextMenu(screen.getByTestId('card'), { clientX: 120, clientY: 90 })
     fireEvent.click(screen.getByRole('button', { name: /Actions for/ }))
     fireEvent.click(screen.getByRole('button', { name: /Actions for/ }))
-    expect(screen.getByRole('menu').className).toContain('absolute')
+    expect(items()).toContain('Copy')
   })
 
   it('stops the webview opening its own menu on top', () => {
