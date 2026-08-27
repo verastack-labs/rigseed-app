@@ -175,85 +175,37 @@ describe('the copy branch', () => {
     expect(screen.queryByRole('menuitem', { name: 'Magnet link' })).not.toBeInTheDocument()
   })
 
-  it('offers what the row actually holds', async () => {
+  it('offers four things and no more', async () => {
+    // Briefly seven, matching qBittorrent. Parity with a power-user client is
+    // not the goal: a newcomer asked to choose between two nearly identical
+    // hashes and two nearly identical paths is worse served than one given
+    // four obvious answers.
     await openBranch()
-    for (const label of ['Name', 'Magnet link', 'Info hash v1', 'Content path', 'Save path']) {
-      expect(screen.getByRole('menuitem', { name: label })).toBeInTheDocument()
+    const labels = [
+      ...screen.getAllByRole('menu').slice(-1)[0]!.querySelectorAll('[role="menuitem"]'),
+    ].map((n) => n.textContent?.trim())
+    expect(labels).toEqual(['Name', 'Magnet link', 'Info hash', 'Save path'])
+  })
+
+  it('leaves out the entries that only a power user could tell apart', async () => {
+    // One Info hash, not v1 and v2: `hash` is whichever identifies the torrent
+    // here. No Content path, since Open containing folder is two rows down and
+    // is what people actually want. No Comment, empty on nearly every torrent.
+    await openBranch()
+    for (const gone of ['Info hash v1', 'Info hash v2', 'Comment', 'Content path', 'Torrent ID']) {
+      expect(screen.queryByRole('menuitem', { name: gone })).not.toBeInTheDocument()
     }
   })
 
-  it('does offer the three that were once thought to need a second request', async () => {
-    // This test used to assert the opposite, on the reasoning that Info hash
-    // v1 and v2 separately, and Comment, lived on TorrentProperties and would
-    // cost a fetch per menu open. They are all on the row: a 5.2.3 daemon
-    // sends them in every torrents/info reply. The reasoning was wrong, the
-    // test enforced it, and between them they kept three entries out.
-    await openBranch()
-    expect(screen.getByRole('menuitem', { name: 'Comment' })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: 'Info hash v2' })).toBeInTheDocument()
-  })
-
-  it('copies the content path and the save path as different things', async () => {
-    // save_path is the folder the torrent was told to go in; content_path is
-    // what it actually made, which for a single-file torrent is not the two
-    // joined. An entry that copied the wrong one would look right.
-    const write = vi.fn()
+  it('copies the save path, which is the one of the two paths that stayed', async () => {
+    // Content path was the other. It differs only in pointing at the file
+    // rather than its folder, and Open containing folder covers that need
+    // better than a second near-identical menu row.
+    const write = vi.fn(() => Promise.resolve())
     Object.assign(navigator, { clipboard: { writeText: write } })
     await openBranch()
 
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Content path' }))
-    expect(write).toHaveBeenCalledWith(torrent.content_path)
-  })
-})
-
-describe('the Copy branch', () => {
-  const openCopy = (one: Torrent = torrent) => {
-    inACard(one)
-    fireEvent.click(screen.getByRole('button', { name: `Actions for ${one.name}` }))
-    fireEvent.mouseEnter(screen.getByRole('menuitem', { name: 'Copy' }))
-  }
-
-  const branchItems = () =>
-    screen.getAllByRole('menu').slice(-1)[0]!.querySelectorAll('[role="menuitem"]')
-
-  it('offers six of qBittorrent’s seven copies', () => {
-    // The seventh, Torrent ID, is the hash under a second name.
-    openCopy()
-    const labels = [...branchItems()].map((n) => n.textContent?.trim())
-    expect(labels).toEqual([
-      'Name',
-      'Magnet link',
-      'Info hash v1',
-      'Info hash v2',
-      'Comment',
-      'Content path',
-      'Save path',
-    ])
-    expect(labels).not.toContain('Torrent ID')
-  })
-
-  it('greys out an entry with nothing behind it rather than hiding it', () => {
-    // infohash_v2 is an empty string on every torrent without a v2 hash. A
-    // menu that changes length between torrents makes the row you want move,
-    // and a greyed row answers the question a missing one leaves open.
-    openCopy(makeTorrent({ infohash_v2: '', comment: '' }))
-    expect(screen.getByRole('menuitem', { name: 'Info hash v2' })).toBeDisabled()
-    expect(screen.getByRole('menuitem', { name: 'Comment' })).toBeDisabled()
-    expect(screen.getByRole('menuitem', { name: 'Info hash v1' })).toBeEnabled()
-  })
-
-  it('enables a v2 entry on a torrent that has one', () => {
-    openCopy(makeTorrent({ infohash_v2: 'deadbeef', comment: 'Release notes' }))
-    expect(screen.getByRole('menuitem', { name: 'Info hash v2' })).toBeEnabled()
-    expect(screen.getByRole('menuitem', { name: 'Comment' })).toBeEnabled()
-  })
-
-  it('falls back to the row hash when v1 is not sent separately', () => {
-    // infohash_v1 arrived in 4.4. On an older daemon it is absent, and `hash`
-    // is the v1 hash wherever there is one.
-    const old = makeTorrent({ hash: 'fallback123' })
-    delete (old as { infohash_v1?: unknown }).infohash_v1
-    openCopy(old)
-    expect(screen.getByRole('menuitem', { name: 'Info hash v1' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Save path' }))
+    expect(write).toHaveBeenCalledWith(torrent.save_path)
   })
 })

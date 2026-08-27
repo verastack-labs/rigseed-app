@@ -24,26 +24,29 @@ export interface TorrentActions {
 }
 
 /**
- * Everything worth copying off a torrent, and where each value comes from.
+ * The four things worth copying off a torrent.
  *
- * Matched against qBittorrent's own Copy submenu rather than invented. Six of
- * its seven entries are here now that the wire model declares the fields; the
- * seventh is left out on purpose.
+ * qBittorrent offers seven, and this had all seven briefly. Parity with
+ * qBittorrent is not the goal: rigseed is meant to be usable by somebody who
+ * has never run a torrent client, and a seven-item submenu asking them to
+ * choose between two nearly identical hashes and two nearly identical paths
+ * fails that badly. Matching a power-user client is a reason to look at a
+ * menu, not a reason to copy it.
  *
- * **Torrent ID** is the row's id, which is the hash, so it would put the same
- * value on the menu twice under two names.
+ * **One `Info hash`, not v1 and v2.** `hash` is whichever one identifies the
+ * torrent to this daemon, which is the v1 wherever there is one. Splitting
+ * them serves the small number of people who already know what a v2 hash is,
+ * and confuses everybody else. Anyone who needs them separately can read both
+ * on the detail screen.
  *
- * The rest arrive on the row. A 5.2.3 daemon sends `infohash_v1`,
- * `infohash_v2` and `comment` in every `torrents/info` reply, measured against
- * a real one. An earlier version of this comment claimed they reached rigseed
- * only through `torrents/properties`, so a menu entry would cost a request per
- * open. That was wrong, and it kept three entries out of the menu for no
- * reason.
+ * **No Content path.** `save_path` answers "where is this on my disk", and
+ * `content_path` differs only in pointing at the file rather than its folder.
+ * Open containing folder is two rows down and is what people actually want.
  *
- * Entries whose value is empty are shown **disabled** rather than hidden. A
- * menu that changes length between torrents makes the one you want move, and
- * a greyed row saying `Info hash v2` answers the question a missing row leaves
- * open: this torrent has no v2 hash, rather than rigseed cannot copy one.
+ * **No Comment.** Empty on nearly every torrent, and already on the detail
+ * screen where there is room to read it.
+ *
+ * **No Torrent ID.** It is the hash under a second name.
  */
 function copyItems(torrent: Torrent) {
   // Lower case, because it lands mid-sentence in "Copied magnet link". The
@@ -56,17 +59,7 @@ function copyItems(torrent: Torrent) {
   return [
     entry('Name', 'name', torrent.name),
     entry('Magnet link', 'magnet link', torrent.magnet_uri),
-    // v1 and v2 separately, as qBittorrent has them. `hash` is whichever one
-    // identifies the torrent to this daemon and is usually the v1; these two
-    // say which is which, and `infohash_v2` is an empty string rather than a
-    // missing field on every torrent without one.
-    entry('Info hash v1', 'info hash v1', torrent.infohash_v1 ?? torrent.hash),
-    entry('Info hash v2', 'info hash v2', torrent.infohash_v2),
-    entry('Comment', 'comment', torrent.comment),
-    // Two different paths, and the difference bites. `save_path` is the folder
-    // the torrent was told to go in; `content_path` is the file or folder it
-    // actually made, which for a single-file torrent is not the two joined.
-    entry('Content path', 'content path', torrent.content_path),
+    entry('Info hash', 'info hash', torrent.infohash_v1 ?? torrent.hash),
     entry('Save path', 'save path', torrent.save_path),
   ]
 }
