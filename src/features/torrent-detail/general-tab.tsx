@@ -153,12 +153,23 @@ export function GeneralTab({ torrent, properties, now }: GeneralTabProps) {
           : 'no whole copy seen yet',
     },
     {
-      // Active is not seeding. A torrent is active while it downloads too, so
-      // the two differ by exactly the download, and the sub-line shows the
-      // split rather than leaving them to look interchangeable.
+      /*
+       * Active is not seeding: a torrent is active while it downloads too, so
+       * the two differ by exactly the download.
+       *
+       * The sub-line reports that difference rather than the seeding time
+       * itself, which was the first version and read as a repeat. Both round
+       * to the same string on anything that finished quickly. Measured on a
+       * real torrent, 412949s active against 412054s seeding both printed
+       * `4d 18h`, so the card said the same thing twice and looked broken. The
+       * gap between them is the one number neither line already carries.
+       */
       label: 'Active for',
       value: formatDuration(torrent.time_active),
-      sub: `${formatDuration(torrent.seeding_time)} of it seeding`,
+      sub:
+        torrent.seeding_time > 0
+          ? `${formatDuration(torrent.time_active - torrent.seeding_time)} of that downloading`
+          : 'not seeding yet',
     },
     {
       label: 'Last activity',

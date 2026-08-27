@@ -177,13 +177,21 @@ describe('the activity cards', () => {
   const cardFor = (label: string) => screen.getByText(label).parentElement!.parentElement!
   const subOf = (label: string) => cardFor(label).textContent ?? ''
 
-  it('keeps active time apart from seeding time', () => {
-    // A torrent is active while it downloads too, so the two differ by exactly
-    // the download. The fixture makes them different numbers on purpose: equal
-    // ones would let a card read the wrong field and still look right.
+  it('reports the download time, not the seeding time again', () => {
+    // The sub-line used to show seeding time, which reads as a repeat: both
+    // round to the same string on anything that finished quickly. Measured on
+    // a real torrent, 412949s active against 412054s seeding both printed
+    // "4d 18h". The gap is the number neither line already carries.
     show({ time_active: 39_600, seeding_time: 3_600 })
     expect(screen.getByText('11h 0m')).toBeInTheDocument()
-    expect(subOf('Active for')).toContain('1h 0m of it seeding')
+    expect(subOf('Active for')).toContain('10h 0m of that downloading')
+  })
+
+  it('says so plainly before any seeding has happened', () => {
+    // seeding_time is 0 while a torrent is still downloading, and "0m of that
+    // downloading" would be both wrong and confusing.
+    show({ time_active: 39_600, seeding_time: 0 })
+    expect(subOf('Active for')).toContain('not seeding yet')
   })
 
   it('says the question does not apply once complete', () => {
