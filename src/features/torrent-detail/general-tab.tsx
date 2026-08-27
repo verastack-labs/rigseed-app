@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatCard } from '@/components/ui/stat-card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useNow } from '@/lib/use-now'
 import { cn } from '@/lib/utils'
 import type { Torrent, TorrentProperties } from '@/types/qbittorrent'
 import {
@@ -27,10 +28,10 @@ export interface GeneralTabProps {
    * Now, in epoch milliseconds, for the two cards that report how long ago
    * something happened.
    *
-   * A parameter rather than a `Date.now()` buried in the render, so a test can
-   * say what "3m ago" means without freezing the clock, and so both cards
-   * measure against the same instant rather than drifting apart. Defaulted,
-   * because the screen has no reason to care.
+   * Optional, and only so a test can say what "3m ago" means. Left out, the
+   * component ticks its own clock: a `Date.now()` read during render would be
+   * impure and would also freeze, so "10m ago" would still read 10m an hour
+   * later on a screen with nothing else to redraw.
    */
   now?: number
 }
@@ -62,7 +63,13 @@ function formatDateTime(seconds: number): string {
  * them, so it is a time-decayed figure over history the client cannot see. A
  * number on screen that nobody can explain is worse than a gap.
  */
-export function GeneralTab({ torrent, properties, now = Date.now() }: GeneralTabProps) {
+export function GeneralTab({ torrent, properties, now }: GeneralTabProps) {
+  // Ticks, so a relative time stays relative to now rather than to whenever
+  // this last drew. A caller-supplied instant wins, which is how the tests pin
+  // one without freezing the clock.
+  const ticking = useNow()
+  const at = now ?? ticking
+
   // Open by default. Somebody who has opened a torrent's details has already
   // asked for its details, and hash, comment and incomplete path are the
   // answers to questions this screen exists to answer. The folder button that
@@ -142,7 +149,7 @@ export function GeneralTab({ torrent, properties, now = Date.now() }: GeneralTab
       sub: done
         ? 'not tracked once complete'
         : torrent.seen_complete
-          ? `whole copy seen ${formatSince(torrent.seen_complete, now)}`
+          ? `whole copy seen ${formatSince(torrent.seen_complete, at)}`
           : 'no whole copy seen yet',
     },
     {
@@ -155,7 +162,7 @@ export function GeneralTab({ torrent, properties, now = Date.now() }: GeneralTab
     },
     {
       label: 'Last activity',
-      value: formatSince(torrent.last_activity, now),
+      value: formatSince(torrent.last_activity, at),
       sub: 'data last moved',
     },
     {
