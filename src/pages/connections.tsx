@@ -9,6 +9,7 @@ import {
 } from '@/features/connections/instance-column'
 import { useConnection } from '@/services/api-context'
 import { connect } from '@/services/connect'
+import { notify } from '@/state/notice-store'
 import { persists, read, store } from '@/services/secrets'
 import {
   addressOf,
@@ -167,6 +168,14 @@ export function Connections() {
             at,
           },
         }))
+        // Said out loud as well as written into the panel. The result card is
+        // below the fold on a short window and does not move when it changes,
+        // so a second failed attempt could look like nothing had happened.
+        notify({
+          tone: 'warn',
+          what: 'Test connection',
+          detail: result.status === 'failed' ? result.reason : 'Nothing answered.',
+        })
         return
       }
 
@@ -195,6 +204,9 @@ export function Connections() {
           at,
         },
       }))
+      // Names the daemon it reached, which is the part that says the address
+      // was right rather than merely that something answered.
+      notify({ tone: 'ok', what: 'Connection works', detail: `qBittorrent ${result.version}` })
     } finally {
       setTesting(false)
     }
