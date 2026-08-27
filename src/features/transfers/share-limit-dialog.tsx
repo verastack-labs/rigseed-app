@@ -179,7 +179,11 @@ function Editor({
             aria-label="When a limit is reached"
             value={draft.action}
             onChange={(e) => set({ action: e.target.value as ShareLimitAction })}
-            className="h-[31px] w-full rounded-lg border border-line bg-surface px-2.5 text-[12px] text-text transition-colors duration-quick focus:border-accent focus:outline-none"
+            // No focus-visible override here. This control has its own radius, so
+            // the ring from tokens/base.css follows it and looks right; the
+            // `focus:outline-none` an earlier draft carried could not have
+            // applied anyway, being a layered utility against an unlayered rule.
+            className="h-[31px] w-full rounded-lg border border-line bg-surface px-2.5 text-[12px] text-text transition-colors duration-quick"
           >
             {ACTIONS.map((a) => (
               <option key={a.value} value={a.value}>

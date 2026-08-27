@@ -20,6 +20,27 @@ a:hover { color: var(--accent2); }
 }
 
 /*
+ * A field inside a styled shell draws no ring of its own.
+ *
+ * `Input` and `Textarea` are a bordered, rounded wrapper around a bare field.
+ * The rule above matched that inner field, which has no radius of its own, so
+ * focus drew a hard-cornered rectangle inset within the rounded box: two
+ * outlines around one control, the inner one square and flush against the
+ * text. The shell wears the ring instead, through `focus-within`, where it
+ * follows the radius somebody can actually see.
+ *
+ * This has to live here rather than as `outline-none` on the field, which is
+ * what both components already tried. Everything in this file is imported
+ * unlayered while Tailwind's utilities sit in a cascade layer, and an
+ * unlayered declaration beats a layered one whatever the specificity. The
+ * utility never stood a chance, which is why the artifact survived two
+ * comments claiming it had been handled.
+ */
+:where(input, select, textarea).rs-inner-field:focus-visible {
+  outline: none;
+}
+
+/*
  * Tailwind 4 dropped the preflight rule that gave buttons a pointer cursor, so
  * every clickable thing in the app was showing an arrow. Restored here rather
  * than as a utility on each component: it is a property of being clickable,

@@ -232,7 +232,11 @@ export function FilesTab({
                   onChange={(e) => onPriority([file.index], Number(e.target.value) as Priority)}
                   className={cn(
                     'rounded-md px-2 py-1 text-[11px] font-semibold',
-                    'border border-line bg-surface2 outline-none',
+                    // Keeps the default focus ring: this control is rounded, so
+                    // the ring follows its corners. The `outline-none` that used
+                    // to be here never applied, a layered utility against the
+                    // unlayered rule in tokens/base.css.
+                    'border border-line bg-surface2',
                     skipped ? 'text-text-dimmer' : 'text-text-dim',
                   )}
                 >
