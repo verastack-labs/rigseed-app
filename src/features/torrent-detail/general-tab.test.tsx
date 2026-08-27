@@ -156,3 +156,101 @@ describe('GeneralTab size', () => {
     expect(screen.queryByText(/selected/)).not.toBeInTheDocument()
   })
 })
+
+describe('the activity cards', () => {
+  /** A fixed instant, so "3m ago" means something a test can assert. */
+  const NOW = 1_770_010_000_000
+
+  const show = (over: Partial<Torrent> = {}, props: Partial<TorrentProperties> = {}) =>
+    render(
+      <GeneralTab torrent={makeTorrent(over)} properties={{ ...properties, ...props }} now={NOW} />,
+    )
+
+  /**
+   * The whole card, found by its label.
+   *
+   * Two levels up, because StatCard wraps the label with its optional icon
+   * before the card itself. Asserting on the card's full text rather than
+   * picking the sub-line span out keeps this from breaking when the card gains
+   * an icon or another line.
+   */
+  const cardFor = (label: string) => screen.getByText(label).parentElement!.parentElement!
+  const subOf = (label: string) => cardFor(label).textContent ?? ''
+
+  it('keeps active time apart from seeding time', () => {
+    // A torrent is active while it downloads too, so the two differ by exactly
+    // the download. The fixture makes them different numbers on purpose: equal
+    // ones would let a card read the wrong field and still look right.
+    show({ time_active: 39_600, seeding_time: 3_600 })
+    expect(screen.getByText('11h 0m')).toBeInTheDocument()
+    expect(subOf('Active for')).toContain('1h 0m of it seeding')
+  })
+
+  it('says the question does not apply once complete', () => {
+    // The daemon sends -1 rather than 0 for a finished torrent, and the two
+    // would read as opposites: nobody has any of it, against nobody needs it.
+    show({ progress: 1, availability: -1 })
+    expect(subOf('Availability')).toContain('not tracked once complete')
+  })
+
+  it('reports availability while there is still something to find', () => {
+    show({ progress: 0.4, availability: 1.874, seen_complete: 1_770_006_400 })
+    expect(screen.getByText('1.87')).toBeInTheDocument()
+    expect(subOf('Availability')).toContain('whole copy seen 1h ago')
+  })
+
+  it('separates never seen complete from seen a long time ago', () => {
+    // seen_complete is 0 for a torrent nobody has ever finished. That is the
+    // difference between slow and hopeless, and rendering it as a 1970 date
+    // would bury it.
+    show({ progress: 0.4, availability: 0.62, seen_complete: 0 })
+    expect(subOf('Availability')).toContain('no whole copy seen yet')
+  })
+
+  it('reports how long ago data last moved', () => {
+    show({ last_activity: 1_770_009_400 })
+    expect(screen.getByText('10m ago')).toBeInTheDocument()
+  })
+
+  it('names an unlimited connection cap rather than printing -1', () => {
+    show({}, { nb_connections: 24, nb_connections_limit: -1 })
+    expect(subOf('Connections')).toContain('no limit')
+  })
+
+  it('shows the connection cap when there is one', () => {
+    show({}, { nb_connections: 24, nb_connections_limit: 100 })
+    expect(subOf('Connections')).toContain('of 100 allowed')
+  })
+
+  it('leaves popularity off the grid entirely', () => {
+    // It arrives on every row and reads as an obvious card, but nothing
+    // establishes what it measures: swarm totals of 12, 191 and 2521 gave
+    // 34.3, 42.0 and 112.5 on a real daemon, which fits no curve the client
+    // can reconstruct. A number nobody can explain is worse than a gap.
+    show({ popularity: 41.6 })
+    expect(screen.queryByText('Popularity')).not.toBeInTheDocument()
+    expect(screen.queryByText('41.6')).not.toBeInTheDocument()
+  })
+
+  it('fills the grid to whole rows', () => {
+    // Four across, so eleven cards would leave a ragged last row. Named rather
+    // than counted, so a failure says which card went missing.
+    show()
+    for (const label of [
+      'Status',
+      'Size',
+      'Down speed',
+      'Up speed',
+      'ETA',
+      'Ratio',
+      'Seeds / peers',
+      'Added on',
+      'Availability',
+      'Active for',
+      'Last activity',
+      'Connections',
+    ]) {
+      expect(screen.getByText(label)).toBeInTheDocument()
+    }
+  })
+})
