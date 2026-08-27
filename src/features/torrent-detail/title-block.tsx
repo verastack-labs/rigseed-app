@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui/badge'
 import { ProgressBar } from '@/components/ui/progress-bar'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatusDot } from '@/components/ui/status-dot'
@@ -60,7 +61,35 @@ export function TitleBlock({ torrent, className }: TitleBlockProps) {
 
   return (
     <div className={cn('flex flex-col gap-3.5 px-6 pt-5 pb-4', className)}>
-      <StatusDot tone={stateTone(torrent.state)} label={STATE_LABEL[torrent.state]} />
+      <div className="flex items-center gap-2.5">
+        <StatusDot tone={stateTone(torrent.state)} label={STATE_LABEL[torrent.state]} />
+        {/*
+          Private torrents, badged because the flag explains behaviour that
+          otherwise looks like a fault.
+
+          A private `.torrent` forbids DHT, peer exchange and local discovery,
+          so every peer has to come from the listed trackers. Without the badge
+          the Trackers tab shows three rows sitting there disabled and the peer
+          count stays low, and both read as something broken rather than as the
+          torrent working exactly as it was made to.
+
+          Neutral rather than a warning colour. It is a property of the file,
+          not a problem with it, and the one place a louder tone would be
+          justified is advice this app does not give.
+
+          `=== true` because the field is 5.0 and newer. On an older daemon it
+          is absent, and a badge saying nothing about a torrent nobody can
+          classify is worse than no badge.
+        */}
+        {torrent.private === true ? (
+          <Badge
+            tone="neutral"
+            title="Peers come only from the trackers. DHT, peer exchange and local discovery are not used."
+          >
+            PRIVATE
+          </Badge>
+        ) : null}
+      </div>
 
       <div className="flex items-start gap-6">
         {/* Wrapping is allowed here and nowhere else in the app. A torrent

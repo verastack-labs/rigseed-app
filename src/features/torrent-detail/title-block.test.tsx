@@ -102,3 +102,34 @@ describe('TitleBlock', () => {
     expect(revealInFolder).toHaveBeenCalledWith('C:/Downloads/thing')
   })
 })
+
+describe('the private badge', () => {
+  it('badges a private torrent', () => {
+    // The flag explains behaviour that otherwise looks like a fault: the
+    // Trackers tab shows DHT, PeX and LSD disabled and the peer count stays
+    // low, both of which read as broken without it.
+    render(<TitleBlock torrent={makeTorrent({ private: true })} />)
+    expect(screen.getByText('PRIVATE')).toBeInTheDocument()
+  })
+
+  it('says what being private actually costs', () => {
+    // "PRIVATE" alone names the flag without explaining any of the behaviour
+    // it accounts for, which is the only reason the badge is there.
+    render(<TitleBlock torrent={makeTorrent({ private: true })} />)
+    expect(screen.getByText('PRIVATE').getAttribute('title')).toMatch(/only from the trackers/)
+  })
+
+  it('leaves a public torrent unbadged', () => {
+    render(<TitleBlock torrent={makeTorrent({ private: false })} />)
+    expect(screen.queryByText('PRIVATE')).not.toBeInTheDocument()
+  })
+
+  it('stays quiet on a daemon too old to know', () => {
+    // `private` arrived in 5.0. Absent, the torrent is not public, it is
+    // unclassified, and a badge either way would be a claim nothing supports.
+    const old = makeTorrent()
+    delete (old as { private?: unknown }).private
+    render(<TitleBlock torrent={old} />)
+    expect(screen.queryByText('PRIVATE')).not.toBeInTheDocument()
+  })
+})
