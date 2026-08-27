@@ -112,3 +112,50 @@ describe('placement', () => {
     expect(region.className).not.toContain('top-4')
   })
 })
+
+describe('how a toast is put together', () => {
+  /** Renders the region, then raises one notice into it. */
+  const show = (what: string, tone: 'warn' | 'ok', detail?: string) => {
+    render(<Toaster />)
+    raise(what, tone, detail)
+  }
+
+  /** The toast card, which is the dismiss button's parent chain. */
+  const card = () => screen.getByRole('button', { name: 'Dismiss' }).parentElement!
+
+  it('centres a one-line toast rather than dropping its text', () => {
+    // Every confirmation is one line. Top-aligning it left the glyph and the
+    // cross riding above a label that sat lower than both.
+    show('Copied magnet link', 'ok')
+    expect(card().className).toContain('items-center')
+    expect(card().className).not.toContain('items-start')
+  })
+
+  it('aligns to the top once there is a second line', () => {
+    // The icon marks the first line of a two-line message. Centring it there
+    // would float it against the middle of a paragraph.
+    show('Copy magnet link', 'warn', 'Document is not focused')
+    expect(card().className).toContain('items-start')
+    expect(card().className).not.toContain('items-center')
+  })
+
+  it('dismisses with a bare mark, not a button with furniture', () => {
+    // IconButton brought a 32px box with a surface fill and a border, so a
+    // toast of five words carried a control heavier than its message.
+    show('Copied magnet link', 'ok')
+    const dismiss = screen.getByRole('button', { name: 'Dismiss' })
+    expect(dismiss.className).toContain('bg-transparent')
+    expect(dismiss.className).toContain('border-none')
+    expect(dismiss.className).not.toContain('bg-surface2')
+    expect(dismiss.className).not.toContain('border-line')
+  })
+
+  it('keeps the dismiss reachable without its chrome', () => {
+    // Losing the box should cost nothing to a keyboard or a screen reader.
+    show('Copied magnet link', 'ok')
+    const dismiss = screen.getByRole('button', { name: 'Dismiss' })
+    expect(dismiss.tagName).toBe('BUTTON')
+    expect(dismiss).toHaveAttribute('title', 'Dismiss')
+    expect(dismiss).not.toBeDisabled()
+  })
+})
