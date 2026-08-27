@@ -1,6 +1,6 @@
 import { MoreVertical } from 'lucide-react'
 
-import { ContextMenu } from '@/components/ui/context-menu'
+import { ContextMenu, type ContextMenuAction } from '@/components/ui/context-menu'
 import { copy } from '@/lib/clipboard'
 import { icons } from '@/lib/icons'
 import { usePointerMenu } from '@/lib/use-pointer-menu'
@@ -26,37 +26,48 @@ export interface TorrentActions {
 /**
  * Everything worth copying off a torrent, and where each value comes from.
  *
- * Matched against qBittorrent's own Copy submenu rather than invented, and
- * three of its seven entries are deliberately not here.
+ * Matched against qBittorrent's own Copy submenu rather than invented. Six of
+ * its seven entries are here now that the wire model declares the fields; the
+ * seventh is left out on purpose.
  *
- * **Torrent ID** is the row's id, which is the hash, so it would duplicate
- * Info hash under a second name.
+ * **Torrent ID** is the row's id, which is the hash, so it would put the same
+ * value on the menu twice under two names.
  *
- * **Info hash v1 and v2** separately, and **Comment**, are left for a
- * follow-up rather than ruled out. All three do arrive on the row: a 5.2.3
- * daemon sends `infohash_v1`, `infohash_v2` and `comment` in every
- * `torrents/info` reply, checked against a real one rather than assumed. What
- * is missing is only that rigseed's `Torrent` type does not declare them, so
- * adding the entries is a change to the wire model and belongs with the rest
- * of that work, not smuggled into a menu.
+ * The rest arrive on the row. A 5.2.3 daemon sends `infohash_v1`,
+ * `infohash_v2` and `comment` in every `torrents/info` reply, measured against
+ * a real one. An earlier version of this comment claimed they reached rigseed
+ * only through `torrents/properties`, so a menu entry would cost a request per
+ * open. That was wrong, and it kept three entries out of the menu for no
+ * reason.
  *
- * Until then one `Info hash` covers the common case, since `hash` is the v1
- * hash wherever there is one, and `infohash_v2` is empty on every non-v2
- * torrent anyway.
+ * Entries whose value is empty are shown **disabled** rather than hidden. A
+ * menu that changes length between torrents makes the one you want move, and
+ * a greyed row saying `Info hash v2` answers the question a missing row leaves
+ * open: this torrent has no v2 hash, rather than rigseed cannot copy one.
  */
 function copyItems(torrent: Torrent) {
   // Lower case, because it lands mid-sentence in "Copied magnet link". The
   // menu row keeps its own capitalisation; these name the content instead.
   const put = (what: string, value: string) => () => void copy(what, value)
+  /** A row that greys out rather than vanishing when there is nothing to copy. */
+  const entry = (label: string, what: string, value: string | undefined): ContextMenuAction =>
+    value ? { label, onSelect: put(what, value) } : { label, disabled: true }
+
   return [
-    { label: 'Name', onSelect: put('name', torrent.name) },
-    { label: 'Magnet link', onSelect: put('magnet link', torrent.magnet_uri) },
-    { label: 'Info hash', onSelect: put('info hash', torrent.hash) },
+    entry('Name', 'name', torrent.name),
+    entry('Magnet link', 'magnet link', torrent.magnet_uri),
+    // v1 and v2 separately, as qBittorrent has them. `hash` is whichever one
+    // identifies the torrent to this daemon and is usually the v1; these two
+    // say which is which, and `infohash_v2` is an empty string rather than a
+    // missing field on every torrent without one.
+    entry('Info hash v1', 'info hash v1', torrent.infohash_v1 ?? torrent.hash),
+    entry('Info hash v2', 'info hash v2', torrent.infohash_v2),
+    entry('Comment', 'comment', torrent.comment),
     // Two different paths, and the difference bites. `save_path` is the folder
     // the torrent was told to go in; `content_path` is the file or folder it
     // actually made, which for a single-file torrent is not the two joined.
-    { label: 'Content path', onSelect: put('content path', torrent.content_path) },
-    { label: 'Save path', onSelect: put('save path', torrent.save_path) },
+    entry('Content path', 'content path', torrent.content_path),
+    entry('Save path', 'save path', torrent.save_path),
   ]
 }
 
