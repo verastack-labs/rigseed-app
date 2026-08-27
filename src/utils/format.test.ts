@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  formatAvailability,
   formatBytes,
+  formatDuration,
   formatEta,
   formatEtaPlain,
   formatPercent,
   formatRatio,
+  formatSince,
   formatSpeed,
   isPaused,
   STATE_LABEL,
@@ -168,5 +171,64 @@ describe('stateTone', () => {
   it('flags real failures as danger', () => {
     expect(stateTone('error')).toBe('danger')
     expect(stateTone('missingFiles')).toBe('danger')
+  })
+})
+
+describe('formatDuration', () => {
+  it('says zero rather than infinity for a torrent just added', () => {
+    // formatEta looks close enough to reuse and is not: it treats 0 as
+    // unknowable and prints an infinity sign. Elapsed time of zero is a real
+    // answer.
+    expect(formatDuration(0)).toBe('0m')
+  })
+
+  it('does not give up past the ETA infinity sentinel', () => {
+    // 8640000 is where formatEta stops and prints an infinity sign. A torrent
+    // seeding for over a hundred days has been active for a sayable number.
+    expect(formatDuration(8_640_000)).toBe('100d 0h')
+    expect(formatDuration(12_000_000)).toBe('138d 21h')
+  })
+
+  it('drops to the two largest units that matter', () => {
+    expect(formatDuration(45)).toBe('0m')
+    expect(formatDuration(600)).toBe('10m')
+    expect(formatDuration(3_900)).toBe('1h 5m')
+    expect(formatDuration(348_980)).toBe('4d 0h')
+  })
+})
+
+describe('formatSince', () => {
+  const now = 1_780_000_000_000
+
+  it('says never for the zero the daemon sends', () => {
+    // seen_complete is 0 for a torrent nobody has ever finished, which is a
+    // different answer from "a long time ago" and must not render as 1970.
+    expect(formatSince(0, now)).toBe('never')
+  })
+
+  it('rounds a future timestamp to now rather than counting up', () => {
+    // The daemon's clock can sit slightly ahead of ours, and "in 3 seconds"
+    // reads as a bug.
+    expect(formatSince(1_780_000_030, now)).toBe('just now')
+  })
+
+  it('climbs through the units', () => {
+    expect(formatSince(1_780_000_000 - 30, now)).toBe('just now')
+    expect(formatSince(1_780_000_000 - 600, now)).toBe('10m ago')
+    expect(formatSince(1_780_000_000 - 7_200, now)).toBe('2h ago')
+    expect(formatSince(1_780_000_000 - 172_800, now)).toBe('2d ago')
+  })
+})
+
+describe('formatAvailability', () => {
+  it('declines to print the -1 a seeding torrent reports', () => {
+    // Not 0, which would read as "nobody has any of it" and is the opposite of
+    // what a seeding torrent means.
+    expect(formatAvailability(-1)).toBe('—')
+  })
+
+  it('keeps two decimals, where below 1 is the reading that matters', () => {
+    expect(formatAvailability(0.873)).toBe('0.87')
+    expect(formatAvailability(1.874)).toBe('1.87')
   })
 })

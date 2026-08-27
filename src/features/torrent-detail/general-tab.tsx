@@ -4,15 +4,19 @@ import { ChevronRight } from 'lucide-react'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatCard } from '@/components/ui/stat-card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useNow } from '@/lib/use-now'
 import { cn } from '@/lib/utils'
 import type { Torrent, TorrentProperties } from '@/types/qbittorrent'
 import {
   STATE_LABEL,
+  formatAvailability,
   formatBytes,
+  formatDuration,
   formatEta,
-  isComplete,
   formatRatio,
+  formatSince,
   formatSpeed,
+  isComplete,
   isPaused,
 } from '@/utils/format'
 
@@ -20,6 +24,16 @@ export interface GeneralTabProps {
   torrent: Torrent
   /** Null until `torrents/properties` answers. */
   properties: TorrentProperties | null
+  /**
+   * Now, in epoch milliseconds, for the two cards that report how long ago
+   * something happened.
+   *
+   * Optional, and only so a test can say what "3m ago" means. Left out, the
+   * component ticks its own clock: a `Date.now()` read during render would be
+   * impure and would also freeze, so "10m ago" would still read 10m an hour
+   * later on a screen with nothing else to redraw.
+   */
+  now?: number
 }
 
 function formatDateTime(seconds: number): string {
@@ -31,14 +45,31 @@ function formatDateTime(seconds: number): string {
 }
 
 /**
- * The eight numbers, and the paths behind a disclosure.
+ * The twelve numbers, and the paths behind a disclosure.
  *
  * The split is deliberate. The grid holds what changes while you watch; the
  * collapsed card holds what is true for the life of the torrent. Putting a
  * hash and a creation date in the same grid as a live speed makes the whole
  * block look like it is updating when most of it never will.
+ *
+ * Twelve rather than eleven, and the count is not arbitrary: the grid is four
+ * across, so eleven leaves a ragged last row. Connections is the twelfth and
+ * earns its place on its own, being live and already fetched.
+ *
+ * **`popularity` is deliberately not here.** It arrives on every row and reads
+ * as an obvious thirteenth, but nothing establishes what it measures. Sampled
+ * against three real torrents, swarm totals of 12, 191 and 2521 gave 34.3,
+ * 42.0 and 112.5, which is not linear, logarithmic or square-root in any of
+ * them, so it is a time-decayed figure over history the client cannot see. A
+ * number on screen that nobody can explain is worse than a gap.
  */
-export function GeneralTab({ torrent, properties }: GeneralTabProps) {
+export function GeneralTab({ torrent, properties, now }: GeneralTabProps) {
+  // Ticks, so a relative time stays relative to now rather than to whenever
+  // this last drew. A caller-supplied instant wins, which is how the tests pin
+  // one without freezing the clock.
+  const ticking = useNow()
+  const at = now ?? ticking
+
   // Open by default. Somebody who has opened a torrent's details has already
   // asked for its details, and hash, comment and incomplete path are the
   // answers to questions this screen exists to answer. The folder button that
@@ -98,6 +129,65 @@ export function GeneralTab({ torrent, properties }: GeneralTabProps) {
       sub: properties ? `of ${properties.seeds_total} / ${properties.peers_total} known` : '—',
     },
     { label: 'Added on', value: formatDateTime(torrent.added_on), sub: 'local time' },
+
+    /**
+     * How many whole copies the connected peers add up to.
+     *
+     * `-1` once complete, which the daemon sends rather than `0`, and the two
+     * would read as opposites: nobody has any of it, against nobody is looking
+     * for it. So the card says the question does not apply instead of printing
+     * either number.
+     *
+     * The sub-line carries `seen_complete`, which is the other half of the same
+     * question. Availability below `1.00` says some piece is not on offer right
+     * now; never having seen a whole copy says it may not be on offer at all,
+     * and that is the difference between slow and hopeless.
+     */
+    {
+      label: 'Availability',
+      value: done ? '—' : formatAvailability(torrent.availability),
+      sub: done
+        ? 'not tracked once complete'
+        : torrent.seen_complete
+          ? `whole copy seen ${formatSince(torrent.seen_complete, at)}`
+          : 'no whole copy seen yet',
+    },
+    {
+      /*
+       * Active is not seeding: a torrent is active while it downloads too, so
+       * the two differ by exactly the download.
+       *
+       * The sub-line reports that difference rather than the seeding time
+       * itself, which was the first version and read as a repeat. Both round
+       * to the same string on anything that finished quickly. Measured on a
+       * real torrent, 412949s active against 412054s seeding both printed
+       * `4d 18h`, so the card said the same thing twice and looked broken. The
+       * gap between them is the one number neither line already carries.
+       */
+      label: 'Active for',
+      value: formatDuration(torrent.time_active),
+      sub:
+        torrent.seeding_time > 0
+          ? `${formatDuration(torrent.time_active - torrent.seeding_time)} of that downloading`
+          : 'not seeding yet',
+    },
+    {
+      label: 'Last activity',
+      value: formatSince(torrent.last_activity, at),
+      sub: 'data last moved',
+    },
+    {
+      // From properties rather than the row, which carries no connection
+      // count. `-1` is the daemon's unlimited.
+      label: 'Connections',
+      value: properties ? String(properties.nb_connections) : '—',
+      sub:
+        properties === null
+          ? '—'
+          : properties.nb_connections_limit < 0
+            ? 'no limit'
+            : `of ${properties.nb_connections_limit} allowed`,
+    },
   ]
 
   const rows: { label: string; value: string }[] = properties

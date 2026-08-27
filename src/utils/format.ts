@@ -168,3 +168,62 @@ export function stateTone(state: TorrentState): 'accent' | 'accent2' | 'warn' | 
   if (state === 'moving' || state === 'allocating') return 'warn'
   return 'accent'
 }
+
+/**
+ * How long something has been running, as a duration rather than a countdown.
+ *
+ * Deliberately not `formatEta`, which looks close enough to reuse and is not.
+ * That one answers "how much longer" and treats both `0` and anything past
+ * `ETA_INFINITE` as unknowable, printing an infinity sign. Neither is true of
+ * elapsed time: a torrent added a moment ago has been active for zero seconds,
+ * and one seeding for four months has been active for a real, sayable number.
+ * Reusing it would have shown an infinity sign for both.
+ */
+export function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0m'
+  const d = Math.floor(seconds / 86400)
+  const h = Math.floor((seconds % 86400) / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  if (d) return `${d}d ${h}h`
+  if (h) return `${h}h ${m}m`
+  return `${m}m`
+}
+
+/**
+ * A past timestamp as how long ago it was.
+ *
+ * `now` is a parameter rather than a call to `Date.now()` so the behaviour is
+ * testable without freezing the clock, and so a grid of these cannot disagree
+ * with itself by a second mid-render.
+ *
+ * `0` means never, which is what the daemon sends for a torrent that has never
+ * completed or never moved data. That is a different answer from "a long time
+ * ago" and the caller usually wants to say so in its own words, so it comes
+ * back as `never` rather than as a date in 1970.
+ */
+export function formatSince(unixSeconds: number, now: number): string {
+  if (!Number.isFinite(unixSeconds) || unixSeconds <= 0) return 'never'
+  const seconds = Math.floor(now / 1000 - unixSeconds)
+  // Clock skew, or a daemon a little ahead of us. "In 3 seconds" is worse than
+  // rounding to now.
+  if (seconds < 60) return 'just now'
+  const m = Math.floor(seconds / 60)
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(seconds / 3600)
+  if (h < 24) return `${h}h ago`
+  const d = Math.floor(seconds / 86400)
+  return `${d}d ago`
+}
+
+/**
+ * How many complete copies the connected peers add up to.
+ *
+ * `-1` while seeding, because the question only applies to something still
+ * downloading, and the daemon says so rather than sending `0`. Below `1.0`
+ * some pieces are not currently offered by anyone, which is the one reading
+ * that actually matters.
+ */
+export function formatAvailability(availability: number): string {
+  if (!Number.isFinite(availability) || availability < 0) return '—'
+  return availability.toFixed(2)
+}
