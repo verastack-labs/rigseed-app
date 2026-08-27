@@ -8,6 +8,20 @@ const ROOTS = ['src/pages', 'src/features', 'src/components']
 /** Namespaces on the client. A call on one of these is a request. */
 const CALL = /\bapi\.(torrents|transfer|app|search|rss|log)\.[a-zA-Z]+\s*\(/g
 
+/**
+ * A clipboard write, which is a write like any other and was not being swept.
+ *
+ * Three files carried `void navigator.clipboard?.writeText(v)` and this sweep
+ * never looked, because it only matched `api.`. Each one could fail in three
+ * ways and report none of them: `writeText` rejects on a refused permission or
+ * an unfocused document, and where `navigator.clipboard` is undefined the `?.`
+ * turned the whole expression into a silent no-op.
+ *
+ * `copy` in `lib/clipboard.ts` is what these go through now, so the pattern
+ * below should never match again outside that file.
+ */
+const CLIPBOARD = /navigator\.clipboard\s*\??\.\s*write(Text)?\s*\(/g
+
 function sources(dir: string, found: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     const path = join(dir, entry)
@@ -62,6 +76,32 @@ describe('every write reports when it fails', () => {
       }
     }
 
+    expect(offenders).toEqual([])
+  })
+
+  it('leaves no clipboard write going straight to the browser', () => {
+    // The sweep above was written to catch requests thrown away behind a bare
+    // `void`, and it worked, but its pattern only ever matched `api.`. Three
+    // clipboard writes sat in plain sight the whole time with exactly the
+    // defect it exists to prevent, and one of them was in a menu shipped two
+    // days earlier.
+    //
+    // A copy that fails is the worst kind of silent failure, because there is
+    // nothing on screen to contradict it either way: the menu closes, and the
+    // clipboard still holds whatever it held before.
+    const offenders: string[] = []
+
+    for (const file of ROOTS.flatMap((root) => sources(root))) {
+      const text = readFileSync(file, 'utf8')
+      for (const match of text.matchAll(CLIPBOARD)) {
+        const at = match.index
+        if (at === undefined) continue
+        const line = text.slice(0, at).split('\n').length
+        offenders.push(`${file.replace(/\\/g, '/')}:${line} ${match[0]}`)
+      }
+    }
+
+    // Everything goes through `copy`, which reports all three failure modes.
     expect(offenders).toEqual([])
   })
 })

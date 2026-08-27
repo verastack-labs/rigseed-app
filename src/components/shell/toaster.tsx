@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 
-import { IconButton } from '@/components/ui/icon-button'
 import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { useNoticeStore, type Notice } from '@/state/notice-store'
@@ -39,10 +38,23 @@ function Toast({ notice, onDismiss }: { notice: Notice; onDismiss: () => void })
   const warn = notice.tone === 'warn'
   const Icon = warn ? icons.alert : icons.check
 
+  /**
+   * Where the icon and the dismiss sit against the text.
+   *
+   * Centred on a one-line toast, which is every confirmation, and aligned to
+   * the top on a two-line one. A single rule cannot do both: `items-start`
+   * left a one-line toast looking dropped, its glyph and cross riding above a
+   * centred label, and `items-center` on a toast with a detail line would
+   * float the icon against the middle of a paragraph instead of marking its
+   * first line.
+   */
+  const tall = notice.detail !== undefined && notice.detail !== ''
+
   return (
     <div
       className={cn(
-        'pointer-events-auto flex w-[340px] items-start gap-2.5 rounded-xl border px-3.5 py-3',
+        'pointer-events-auto flex w-[340px] gap-2.5 rounded-xl border px-3.5 py-3',
+        tall ? 'items-start' : 'items-center',
         'shadow-[0_8px_24px_rgba(0,0,0,0.18)] backdrop-blur-sm',
         'motion-safe:animate-[rigseed-arrive_200ms_ease]',
         warn ? 'border-warn bg-warn-soft' : 'border-accent2 bg-surface',
@@ -50,7 +62,9 @@ function Toast({ notice, onDismiss }: { notice: Notice; onDismiss: () => void })
     >
       <span
         aria-hidden="true"
-        className={cn('mt-px shrink-0', warn ? 'text-warn' : 'text-accent2')}
+        // The nudge only makes sense while top-aligned, where it drops the
+        // glyph onto the text baseline. Centred it would undo the centring.
+        className={cn('shrink-0', tall && 'mt-px', warn ? 'text-warn' : 'text-accent2')}
       >
         <Icon className="size-[15px]" strokeWidth={2} />
       </span>
@@ -65,9 +79,33 @@ function Toast({ notice, onDismiss }: { notice: Notice; onDismiss: () => void })
           </span>
         ) : null}
       </span>
-      <IconButton title="Dismiss" onClick={onDismiss}>
+      {/*
+        A mark, not a control with furniture.
+
+        `IconButton` was doing this job and brought its own 32px box with a
+        surface fill and a border, so a toast carrying five words ended up with
+        a button in it heavier than the message. The affordance a toast needs
+        here is smaller than that: it dismisses itself in seconds, and the
+        cross is for somebody who wants it gone sooner.
+
+        Still a real button. Losing the chrome should cost nothing to a
+        keyboard or a screen reader, so the name, the focus ring and the hit
+        target all stay. The padding is what keeps that target close to 25px
+        while the glyph itself is 13px, and the negative margin takes the
+        padding back off the toast's own edge so the mark still lines up.
+      */}
+      <button
+        type="button"
+        title="Dismiss"
+        aria-label="Dismiss"
+        onClick={onDismiss}
+        className={cn(
+          '-mr-1.5 shrink-0 rounded-md border-none bg-transparent p-1.5',
+          'text-text-dimmer transition-colors duration-fast hover:text-text',
+        )}
+      >
         <icons.clear className="size-[13px]" strokeWidth={2} />
-      </IconButton>
+      </button>
     </div>
   )
 }

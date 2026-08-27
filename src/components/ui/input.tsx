@@ -31,9 +31,17 @@ export function Input({ mono, size = 'md', unit, icon, invalid, className, ...pr
     <div
       className={cn(
         'bg-surface2 flex w-full items-center gap-2 rounded-lg border px-[11px]',
-        // No focus colour on this border. The field already gets the accent
-        // ring from the :focus-visible rule in tokens/base.css, and doing both
-        // drew two concentric outlines around one input.
+        // The shell wears the focus ring, not the field inside it. Same 2px
+        // accent and 2px offset every button gets, so focus looks the same
+        // everywhere, but here it follows the rounded corner rather than
+        // cutting a square inside it.
+        // The ring is always there, transparent until focus, so what changes is
+        // a colour rather than an outline style. `outline-style` is not an
+        // animatable property, so making the ring appear on focus alone would
+        // snap it into place; fading the colour of one that already exists is
+        // what makes it short rather than abrupt. It costs no layout, since an
+        // outline never occupies space.
+        'outline-2 outline-offset-2 outline-transparent focus-within:outline-accent',
         'transition-colors duration-fast',
         HEIGHT[size],
         invalid ? 'border-danger' : 'border-line',
@@ -44,7 +52,10 @@ export function Input({ mono, size = 'md', unit, icon, invalid, className, ...pr
       <input
         aria-invalid={invalid || undefined}
         className={cn(
-          'text-text min-w-0 flex-1 border-none bg-transparent outline-none',
+          // rs-inner-field, not outline-none. The rule that draws the ring is
+          // unlayered and a utility is not, so the utility loses whatever its
+          // specificity. See tokens/base.css.
+          'rs-inner-field text-text min-w-0 flex-1 border-none bg-transparent',
           'placeholder:text-text-dimmer',
           mono ? 'font-mono' : 'font-sans',
           TEXT[size],

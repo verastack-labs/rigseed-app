@@ -26,6 +26,7 @@
     "app:build": "tauri build"
   },
   "dependencies": {
+    "@floating-ui/react": "^0.27.20",
     "@formkit/auto-animate": "^0.10.0",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.2",
