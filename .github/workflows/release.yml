@@ -69,6 +69,14 @@ jobs:
           # Pinned rather than ubuntu-latest on purpose. The runner's glibc
           # becomes the floor for every user's machine, and -latest moving to a
           # newer Ubuntu would silently raise it.
+          # deb and rpm only, narrowed from the shared "all" in
+          # tauri.linux.conf.json. The AppImage does not build: linuxdeploy
+          # exits in under a second and Tauri reports only `failed to run
+          # linuxdeploy`, dropping linuxdeploy's own output even under
+          # --verbose. Setting APPIMAGE_EXTRACT_AND_RUN and installing libfuse2
+          # both changed nothing, and both were confirmed to have taken effect
+          # rather than assumed. The reasoning lives here because a Tauri
+          # config is strict JSON and rejects a comment key inside `bundle`.
           - os: ubuntu-22.04
             label: linux-x86_64
             triple: x86_64-unknown-linux-gnu
