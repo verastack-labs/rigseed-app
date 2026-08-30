@@ -135,6 +135,11 @@ function Editor({
       <div className="flex flex-col">
         <Row
           name="Ratio"
+          // The same word Settings now defines, glossed again because this
+          // dialog is reachable without ever opening Settings. Kept to three
+          // words: the row already carries a mode strip, a value box and a
+          // resolved summary, and the hint is the part that gives way first.
+          hint="uploaded against downloaded"
           mode={draft.ratioMode}
           value={draft.ratio}
           placeholder="e.g. 2.0"

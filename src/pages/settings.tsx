@@ -400,7 +400,14 @@ export function Settings() {
                       label="Connections per torrent"
                     />
                   </SettingRow>
-                  <SettingRow label="Upload slots" dirty={isDirty('max_uploads')}>
+                  <SettingRow
+                    label="Upload slots"
+                    // "Slot" is the jargon. It sounds like a capacity the app
+                    // reserves and is really just how many peers are being
+                    // sent data at once, which nothing on this screen said.
+                    hint="How many peers you upload to at the same time."
+                    dirty={isDirty('max_uploads')}
+                  >
                     <NumberField
                       value={draft.max_uploads}
                       onChange={(n) => set('max_uploads', n)}
@@ -409,6 +416,7 @@ export function Settings() {
                   </SettingRow>
                   <SettingRow
                     label="Upload slots per torrent"
+                    hint="The same cap, applied to one torrent rather than to all of them."
                     dirty={isDirty('max_uploads_per_torrent')}
                   >
                     <NumberField
@@ -600,8 +608,27 @@ export function Settings() {
                 </Card>
 
                 <Card title="Seeding" api="max_ratio" padding="none">
-                  {toggle('max_ratio_enabled', 'Stop seeding at a ratio')}
-                  <SettingRow label="Ratio" dirty={isDirty('max_ratio')}>
+                  {/*
+                    Ratio is defined here because nothing else in the app
+                    defines it, and it is the one piece of BitTorrent
+                    vocabulary somebody new cannot work out from context. It
+                    decides when seeding stops, it is what a private tracker
+                    measures, and it now appears twice over: this card and the
+                    per-torrent Share limits dialog.
+                  */}
+                  {toggle(
+                    'max_ratio_enabled',
+                    'Stop seeding at a ratio',
+                    'Ratio is how much you have uploaded compared with what you downloaded. 1.0 means you have given back as much as you took.',
+                  )}
+                  <SettingRow
+                    label="Ratio"
+                    // Says where the number reaches, which is the half the
+                    // definition above does not cover: this is the global
+                    // limit, and a torrent with its own set overrides it.
+                    hint="Applies to every torrent that has not been given a limit of its own."
+                    dirty={isDirty('max_ratio')}
+                  >
                     <NumberField
                       value={draft.max_ratio}
                       onChange={(n) => set('max_ratio', n)}
