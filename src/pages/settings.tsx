@@ -7,6 +7,7 @@ import { SegmentedControl } from '@/components/ui/segmented-control'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { NumberField } from '@/features/settings/number-field'
+import { SpeedField } from '@/features/settings/speed-field'
 import { SettingRow } from '@/features/settings/setting-row'
 import { askForAlerts } from '@/services/desktop-alert'
 import { useAlertStore } from '@/state/alert-store'
@@ -472,11 +473,10 @@ export function Settings() {
                     hint="Zero is unlimited."
                     dirty={isDirty('dl_limit')}
                   >
-                    <NumberField
-                      value={draft.dl_limit}
+                    <SpeedField
+                      bytesPerSecond={draft.dl_limit}
                       onChange={(n) => set('dl_limit', n)}
                       label="Download limit"
-                      unit="KiB/s"
                     />
                   </SettingRow>
                   <SettingRow
@@ -484,11 +484,10 @@ export function Settings() {
                     hint="Zero is unlimited."
                     dirty={isDirty('up_limit')}
                   >
-                    <NumberField
-                      value={draft.up_limit}
+                    <SpeedField
+                      bytesPerSecond={draft.up_limit}
                       onChange={(n) => set('up_limit', n)}
                       label="Upload limit"
-                      unit="KiB/s"
                     />
                   </SettingRow>
                   {toggle(
@@ -504,20 +503,26 @@ export function Settings() {
                 </Card>
 
                 <Card title="Alternative limits" api="alt_dl_limit" padding="none">
-                  <SettingRow label="Download limit" dirty={isDirty('alt_dl_limit')}>
-                    <NumberField
-                      value={draft.alt_dl_limit}
+                  <SettingRow
+                    label="Download limit"
+                    hint="Zero is unlimited."
+                    dirty={isDirty('alt_dl_limit')}
+                  >
+                    <SpeedField
+                      bytesPerSecond={draft.alt_dl_limit}
                       onChange={(n) => set('alt_dl_limit', n)}
                       label="Alternative download limit"
-                      unit="KiB/s"
                     />
                   </SettingRow>
-                  <SettingRow label="Upload limit" dirty={isDirty('alt_up_limit')}>
-                    <NumberField
-                      value={draft.alt_up_limit}
+                  <SettingRow
+                    label="Upload limit"
+                    hint="Zero is unlimited."
+                    dirty={isDirty('alt_up_limit')}
+                  >
+                    <SpeedField
+                      bytesPerSecond={draft.alt_up_limit}
                       onChange={(n) => set('alt_up_limit', n)}
                       label="Alternative upload limit"
-                      unit="KiB/s"
                     />
                   </SettingRow>
                 </Card>
