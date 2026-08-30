@@ -139,3 +139,14 @@ describe('ShareLimitDialog', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
   })
 })
+
+describe('the vocabulary', () => {
+  it('says what a ratio is, since this dialog is reachable without Settings', () => {
+    // Ratio is the one piece of BitTorrent vocabulary somebody new cannot work
+    // out from context, and it decides when seeding stops. Settings defines it
+    // too; a person can reach this from a right-click having never opened
+    // Settings at all.
+    setup()
+    expect(screen.getByText('uploaded against downloaded')).toBeInTheDocument()
+  })
+})
