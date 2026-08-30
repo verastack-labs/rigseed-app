@@ -52,27 +52,144 @@ jobs:
           path: dist/licences/
           retention-days: 90
 
-  # ---------------------------------------------------------------------------
-  # The application build lands here once there is an app to build. It should
-  # produce the Tauri bundles per platform and depend on compliance-assets, so a
-  # release can never publish a binary without its corresponding source.
-  #
-  #  build-app:
-  #    needs: compliance-assets
-  #    strategy:
-  #      matrix:
-  #        platform: [macos-latest, ubuntu-latest, windows-latest]
-  # ---------------------------------------------------------------------------
+  # The application build. Depends on compliance-assets so a release can never
+  # publish a binary without its corresponding source, which is the whole point
+  # of the ordering: GPLv3 section 6(d) wants both offered from the same place.
+  build-app:
+    name: ${{ matrix.label }}
+    needs: compliance-assets
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing should still let the others produce their bundles.
+      # A partial release is visible and fixable; a cancelled matrix tells you
+      # nothing about the platforms that would have worked.
+      fail-fast: false
+      matrix:
+        include:
+          # Pinned rather than ubuntu-latest on purpose. The runner's glibc
+          # becomes the floor for every user's machine, and -latest moving to a
+          # newer Ubuntu would silently raise it.
+          - os: ubuntu-22.04
+            label: linux-x86_64
+            triple: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            label: windows-x86_64
+            triple: x86_64-pc-windows-msvc
+          # Apple Silicon only. The sidecar release carries no x86_64 macOS
+          # build, so an Intel bundle would ship without its daemon.
+          - os: macos-latest
+            label: macos-aarch64
+            triple: aarch64-apple-darwin
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Confirm the tag matches the version being built
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          version=$(jq -r .version package.json)
+          if [ "$tag" != "v$version" ]; then
+            echo "::error::tag $tag does not match package.json version $version"
+            exit 1
+          fi
+          echo "building $version for $tag"
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # Tauri v2 needs webkit2gtk-4.1. libxdo is for the tray, librsvg for icon
+      # rendering, patchelf for the AppImage.
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
+            patchelf libxdo-dev libssl-dev build-essential file
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Downloads the pinned qbittorrent-nox for this runner's triple along with
+      # the Qt libraries it cannot start without. Both, or the script fails.
+      - name: Fetch the sidecar
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/fetch-sidecar-binary.sh ${{ matrix.triple }}
+
+      - name: Build the bundles
+        run: pnpm run app:build
+
+      # Unsigned on every platform for this release, which is a deliberate
+      # choice recorded in the release notes rather than an oversight. Checksums
+      # matter more because of it: they are the only way a user can tell the
+      # download is the one this workflow produced.
+      - name: Collect the bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/bundles
+          find src-tauri/target/release/bundle \
+            \( -name '*.msi' -o -name '*-setup.exe' -o -name '*.dmg' \
+               -o -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) \
+            -type f -exec cp {} dist/bundles/ \;
+          if [ -z "$(ls -A dist/bundles)" ]; then
+            echo "::error::no bundles produced for ${{ matrix.label }}"
+            exit 1
+          fi
+          # Proves the version actually resolved. tauri.conf.json points its
+          # version at package.json rather than repeating the number, and a path
+          # that failed to resolve would fall back to the Cargo.toml version
+          # silently. Tauri puts the version in every bundle's filename, so the
+          # filename is where that failure becomes visible.
+          version=$(jq -r .version package.json)
+          if ! ls dist/bundles | grep -q "$version"; then
+            echo "::error::no bundle filename carries version $version:"
+            ls dist/bundles
+            exit 1
+          fi
+          cd dist/bundles
+          for f in *; do
+            { sha256sum "$f" 2>/dev/null || shasum -a 256 "$f"; } > "$f.sha256"
+          done
+          ls -la
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundles-${{ matrix.label }}
+          path: dist/bundles/
+          retention-days: 90
 
   publish:
     name: Attach assets to the release
-    needs: compliance-assets
+    # Both, so the release page can never carry a binary without the source that
+    # licenses it, and never carry source for a build that failed.
+    needs: [compliance-assets, build-app]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: compliance-bundle
           path: dist/licences
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bundles-*
+          merge-multiple: true
+          path: dist/bundles
 
       - name: Confirm the source archive is present before publishing
         run: |
@@ -89,12 +206,41 @@ jobs:
           fi
           echo "source archive present: $archive ($size bytes)"
 
+      - name: Confirm there is something to install
+        run: |
+          set -euo pipefail
+          installers=$(find dist/bundles -type f ! -name '*.sha256' | wc -l)
+          if [ "$installers" -eq 0 ]; then
+            echo "::error::no installers in the bundle set, refusing to publish"
+            exit 1
+          fi
+          echo "$installers installers:"
+          find dist/bundles -type f ! -name '*.sha256' -printf '  %f (%s bytes)\n'
+
+      # Created as a draft when it does not already exist. Pushing a tag should
+      # not put a download in front of anyone before someone has looked at it,
+      # and an unsigned build in particular is worth looking at first.
+      - name: Make sure the release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "release $TAG already exists"
+          else
+            gh release create "$TAG" --repo "${{ github.repository }}" \
+              --draft --title "$TAG" \
+              --notes "Draft. Assets attached by the release workflow."
+            echo "created $TAG as a draft"
+          fi
+
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          gh release upload "$TAG" dist/licences/* \
+          gh release upload "$TAG" dist/licences/* dist/bundles/* \
             --repo "${{ github.repository }}" --clobber
-          echo "attached the compliance bundle to $TAG"
+          echo "attached the installers and the compliance bundle to $TAG"
