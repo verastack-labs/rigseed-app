@@ -2,6 +2,8 @@
   "bundle": {
     "resources": {
       "binaries/lib": "./lib"
-    }
+    },
+    "$comment": "Narrowed from the shared \"all\" because the AppImage does not build. linuxdeploy exits in under a second and Tauri reports only `failed to run linuxdeploy`, dropping linuxdeploy's own output even under --verbose. Setting APPIMAGE_EXTRACT_AND_RUN and installing libfuse2 both changed nothing, and both were confirmed to have taken effect rather than assumed. deb and rpm build on every run, so those are what ships until there is a way to see why the third one fails.",
+    "targets": ["deb", "rpm"]
   }
 }
