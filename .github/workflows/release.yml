@@ -128,7 +128,10 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: scripts/fetch-sidecar-binary.sh ${{ matrix.triple }}
+        # Invoked through bash rather than executed. The mode bit is set in
+        # git, but Windows checkouts do not carry one, so relying on it would
+        # work on two runners out of three.
+        run: bash scripts/fetch-sidecar-binary.sh ${{ matrix.triple }}
 
       - name: Build the bundles
         run: pnpm run app:build
