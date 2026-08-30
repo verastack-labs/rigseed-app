@@ -60,15 +60,40 @@ to the shipped binary. Re-run the fetch script and confirm the release workflow 
 the new archive. A version bump and a stale source archive is the most likely way this
 compliance quietly breaks.
 
-### Still open
+### The sidecar is self-built, so the obligation is wider than the tarball
 
-`qbittorrent-nox` itself links Qt, libtorrent-rasterbar, Boost, OpenSSL and zlib. If
-rigseed ever ships a **self-built** sidecar rather than an upstream release binary, the
-Corresponding Source obligation extends to the build scripts and configuration used, and
-the licence texts of those dependencies need collecting too. Shipping the upstream release
-binary keeps that surface small, because upstream has already assembled it.
+This was written as a hypothetical - *if* rigseed ever ships a self-built sidecar - and it
+is not one. Upstream publishes no `qbittorrent-nox` for any platform, only GUI builds, so
+`.github/workflows/build-sidecar.yml` compiles it from the pinned tag with `-DGUI=OFF`.
+rigseed has always shipped a binary it built itself.
 
-This is flagged rather than solved. Decide it when the packaging approach is decided.
+That widens Corresponding Source. GPLv3 defines it to include "the scripts used to control
+compilation and installation", not only the upstream sources. For rigseed that means:
+
+| Part | Where it is |
+|---|---|
+| Upstream sources at the pinned tag | `qbittorrent-nox-<version>-source.tar.gz`, attached to every release |
+| The exact toolchain pairing | `sidecar.json`, the `build` block |
+| The scripts that control the build | `.github/workflows/build-sidecar.yml` |
+
+The first is an asset on the release. The other two are files in this repository, which
+satisfies 6(d) only while this repository is publicly readable from the same place the
+binary is offered. **If this repository is ever made private again, the release assets stop
+being sufficient on their own** and the build scripts have to be attached to the release
+instead.
+
+### Still open: the sidecar's own dependencies
+
+`qbittorrent-nox` links Qt, libtorrent-rasterbar, Boost, OpenSSL and zlib, and the Qt
+libraries are redistributed inside the installer alongside it. `licenses/qbittorrent/`
+holds the GPL texts and qBittorrent's own `COPYING`; it does **not** yet hold the licence
+texts of those five, and it should, because we ship their compiled output.
+
+Qt is the pressing one, since `Qt6Core`, `Qt6Network`, `Qt6Sql` and `Qt6Xml` are physically
+in the bundle. Qt Base under LGPLv3 carries relinking obligations that the others do not.
+
+Flagged rather than solved. The versions to collect for are the ones pinned in
+`sidecar.json`.
 
 ## Fonts
 
