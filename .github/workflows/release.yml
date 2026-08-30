@@ -133,7 +133,27 @@ jobs:
         # work on two runners out of three.
         run: bash scripts/fetch-sidecar-binary.sh ${{ matrix.triple }}
 
+      # The bundler downloads WiX and NSIS on Windows, and linuxdeploy plus its
+      # plugins on Linux, on every run. Caching them takes that network round
+      # trip off the critical path: a release already failed once at
+      # "connection forcibly closed by the remote host" after the whole Rust
+      # build had succeeded.
+      - name: Cache the bundler tooling
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/tauri
+            ~/AppData/Local/tauri
+          key: tauri-bundler-${{ matrix.label }}-v1
+
       - name: Build the bundles
+        env:
+          # linuxdeploy is an AppImage, and mounting one needs FUSE, which the
+          # runners do not have. Told to extract itself instead, it works. The
+          # variable is meaningless on the other two platforms and ignored
+          # there, so it stays unconditional rather than becoming a third way
+          # for this step to differ per OS.
+          APPIMAGE_EXTRACT_AND_RUN: 1
         run: pnpm run app:build
 
       # Unsigned on every platform for this release, which is a deliberate
