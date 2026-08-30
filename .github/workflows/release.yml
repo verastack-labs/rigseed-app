@@ -117,8 +117,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
-            patchelf libxdo-dev libssl-dev build-essential file \
-            libfuse2
+            patchelf libxdo-dev libssl-dev build-essential file
 
       - name: Install
         run: pnpm install --frozen-lockfile
@@ -148,18 +147,7 @@ jobs:
           key: tauri-bundler-${{ matrix.label }}-v1
 
       - name: Build the bundles
-        env:
-          # linuxdeploy is an AppImage, and mounting one needs FUSE, which the
-          # runners do not have. Told to extract itself instead, it works. The
-          # variable is meaningless on the other two platforms and ignored
-          # there, so it stays unconditional rather than becoming a third way
-          # for this step to differ per OS.
-          APPIMAGE_EXTRACT_AND_RUN: 1
-        # Verbose because the bundlers report failures through Tauri, which
-        # summarises them to a single line. "failed to run linuxdeploy" is
-        # the whole message; the reason is in output that is otherwise
-        # dropped.
-        run: pnpm run app:build -- --verbose
+        run: pnpm run app:build
 
       # Unsigned on every platform for this release, which is a deliberate
       # choice recorded in the release notes rather than an oversight. Checksums
