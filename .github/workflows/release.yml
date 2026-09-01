@@ -66,20 +66,36 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Pinned rather than ubuntu-latest on purpose. The runner's glibc
-          # becomes the floor for every user's machine, and -latest moving to a
-          # newer Ubuntu would silently raise it.
-          - os: ubuntu-22.04
-            label: linux-x86_64
-            triple: x86_64-unknown-linux-gnu
+          # Windows only for now. Linux and macOS are both absent for the
+          # same underlying reason: the sidecar published for them cannot find
+          # its Qt libraries on a machine that is not the one that built it.
+          #
+          # build-sidecar.yml does the right rewriting. On Linux it runs
+          # `patchelf --set-rpath '$ORIGIN/lib:$ORIGIN/../lib/rigseed/lib'`,
+          # on macOS `install_name_tool -add_rpath @executable_path/lib` plus
+          # install-name rewriting, and it then proves the result runs with the
+          # build machine's Qt moved aside. All of that is applied to
+          # `bundle/`, and the release publishes `out/`. Nothing copies back,
+          # so the asset everyone downloads is the copy from before the fix.
+          #
+          # Measured on the published assets rather than inferred. The Linux
+          # binary's RUNPATH is /home/runner/work/rigseed-app/Qt/6.8.3/gcc_64,
+          # and unpacking the deb and running it gives exit 127, `error while
+          # loading shared libraries: libQt6Network.so.6`. The macOS binary's
+          # only LC_RPATH is /Users/runner/work/rigseed-app/Qt/6.8.3/macos/lib,
+          # and it additionally names /opt/homebrew/opt/openssl@3 absolutely.
+          #
+          # Windows is unaffected because it embeds no such paths: the loader
+          # searches the executable's own directory and the DLLs sit there.
+          #
+          # Neither platform packages any differently for being broken. deb,
+          # rpm and dmg all build green, which is why this was invisible until
+          # someone unpacked one and asked the loader. Both come back once the
+          # sidecar publishes its patched binary and that has been checked on
+          # the artefact itself.
           - os: windows-latest
             label: windows-x86_64
             triple: x86_64-pc-windows-msvc
-          # Apple Silicon only. The sidecar release carries no x86_64 macOS
-          # build, so an Intel bundle would ship without its daemon.
-          - os: macos-latest
-            label: macos-aarch64
-            triple: aarch64-apple-darwin
 
     steps:
       - uses: actions/checkout@v4
@@ -108,16 +124,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-
-      # Tauri v2 needs webkit2gtk-4.1. libxdo is for the tray, librsvg for icon
-      # rendering, patchelf for the AppImage.
-      - name: Linux build dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
-            patchelf libxdo-dev libssl-dev build-essential file
 
       - name: Install
         run: pnpm install --frozen-lockfile

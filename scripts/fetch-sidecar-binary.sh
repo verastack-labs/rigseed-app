@@ -107,9 +107,16 @@ chmod +x "$TARGET" 2>/dev/null || true
 echo "Downloading the runtime libraries..."
 if gh release download "$RELEASE" --repo "$REPO" --pattern "$RUNTIME" --dir "$DEST" --clobber; then
   verify "$RUNTIME"
-  # Extracted in place: on Linux and macOS the binary's RPATH names
-  # $ORIGIN/lib, and on Windows the loader searches the executable's own
-  # directory first, which is why that tarball has no lib subdirectory.
+  # Extracted in place. On macOS the binary's install names are rewritten to
+  # @executable_path/../lib by the build workflow, and on Windows the loader
+  # searches the executable's own directory first, which is why that tarball
+  # has no lib subdirectory.
+  #
+  # Linux is NOT set up this way, despite what this comment used to claim.
+  # readelf on the published binary shows its RUNPATH is still the Qt path
+  # from the machine that built it, /home/runner/work/rigseed-app/Qt/..., so
+  # it finds nothing on a user's system. That is one of three reasons Linux is
+  # excluded from releases; see the matrix comment in release.yml.
   tar -xzf "$DEST/$RUNTIME" -C "$DEST"
   rm -f "$DEST/$RUNTIME" "$DEST/$RUNTIME.sha256"
 else
