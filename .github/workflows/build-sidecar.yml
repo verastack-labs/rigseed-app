@@ -745,6 +745,57 @@ jobs:
             echo "Ran with the build machine's Qt moved out of the way."
           fi
 
+      # The bundle check above proves bundle/. This proves out/, which is the
+      # file the release publishes and fetch-sidecar-binary.sh downloads. They
+      # were different files for the whole of 5.2.3, and every check we had
+      # looked at the one that was fine.
+      #
+      # Asserted on the artefact rather than on the steps that produced it,
+      # because the bug was never in the rewriting. The rewriting was correct
+      # and even self-verifying; it simply ran on a copy nobody shipped.
+      - name: Prove the published binary is the patched one
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="out/qbittorrent-nox-${{ matrix.triple }}"
+
+          case "$RUNNER_OS" in
+            Linux)
+              paths=$(readelf -d "$bin" | awk '/RUNPATH|RPATH/ {print}')
+              echo "$paths"
+              case "$paths" in
+                *'$ORIGIN'*) ;;
+                *) echo "::error::published binary has no \$ORIGIN runpath"; exit 1 ;;
+              esac
+              if printf '%s' "$paths" | grep -q "$QT_ROOT_DIR"; then
+                echo "::error::published binary still names the build machine's Qt"
+                exit 1
+              fi
+              ;;
+            macOS)
+              rpaths=$(otool -l "$bin" | awk '/LC_RPATH/{f=1} f&&/path /{print $2; f=0}')
+              echo "$rpaths"
+              case "$rpaths" in
+                *@executable_path*) ;;
+                *) echo "::error::published binary has no @executable_path rpath"; exit 1 ;;
+              esac
+              bad=0
+              for ref in $(otool -L "$bin" | tail -n +2 | awk '{print $1}'); do
+                case "$ref" in
+                  /usr/lib/*|/System/*|@rpath/*|@loader_path/*|@executable_path/*) ;;
+                  *) echo "::error::published binary still references $ref"; bad=1 ;;
+                esac
+              done
+              if printf '%s' "$rpaths" | grep -q "$QT_ROOT_DIR"; then
+                echo "::error::published binary still names the build machine's Qt"
+                bad=1
+              fi
+              [ "$bad" = 0 ] || exit 1
+              ;;
+          esac
+          echo "the published binary carries the rewritten paths"
+
       - name: Stage the runtime bundle
         shell: bash
         run: |
