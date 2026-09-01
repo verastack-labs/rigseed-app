@@ -499,6 +499,14 @@ jobs:
 
           ls -la bundle bundle/lib
 
+          # The patched binary is the one that ships. patchelf rewrote bundle/,
+          # and the release publishes out/, so without this copy the asset
+          # people download still carries the build machine's Qt path in its
+          # RUNPATH. That is what shipped: a deb whose qbittorrent-nox exits
+          # 127 with `error while loading shared libraries: libQt6Network.so.6`
+          # on any machine that is not this runner.
+          cp "bundle/$bin" "out/$bin"
+
       - name: Collect the runtime libraries (macOS)
         if: runner.os == 'macOS'
         shell: bash
@@ -645,6 +653,14 @@ jobs:
 
           echo "--- binary ---"; otool -L "bundle/$bin"
           ls -la bundle bundle/lib
+
+          # The patched binary is the one that ships. Everything above rewrote
+          # bundle/, and the release publishes out/, so without this copy the
+          # asset people download is the pre-patch file. That is what shipped:
+          # its only LC_RPATH was the runner's Qt directory and it named
+          # /opt/homebrew/opt/openssl@3 absolutely, so Qt resolved on no Mac
+          # but this one.
+          cp "bundle/$bin" "out/$bin"
 
       - name: Collect the runtime libraries (Windows)
         if: runner.os == 'Windows'
