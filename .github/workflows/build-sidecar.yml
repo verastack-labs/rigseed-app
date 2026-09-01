@@ -617,6 +617,18 @@ jobs:
           # exist and the packaged layout still resolves when it does not.
           install_name_tool -add_rpath "@executable_path/../Resources/lib" "bundle/$bin"
 
+          # add_rpath adds; it never replaces. The Qt prefix the binary was
+          # linked against is still LC_RPATH entry one, ahead of both entries
+          # above, so a published binary named the build machine first and only
+          # worked because dyld falls through an rpath that does not resolve.
+          #
+          # patchelf --set-rpath on Linux replaces outright, which is why only
+          # macOS needs this and why only macOS shipped the stale entry.
+          #
+          # Not fatal if absent: a future Qt layout that never adds it should
+          # not fail the build.
+          install_name_tool -delete_rpath "$QT_ROOT_DIR/lib" "bundle/$bin" 2>/dev/null || true
+
           # Stripping invalidated whatever signature the binary carried, and an
           # arm64 Mach-O with a modified load command and no signature will not
           # launch at all. Ad-hoc is enough here; real signing happens when the
