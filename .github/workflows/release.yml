@@ -66,36 +66,33 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Windows only for now. Linux and macOS are both absent for the
-          # same underlying reason: the sidecar published for them cannot find
-          # its Qt libraries on a machine that is not the one that built it.
+          # Windows and macOS. Both sidecars were verified on the artefact
+          # that ships, not on the copy the build made: the macOS binary's only
+          # rpaths are @executable_path/lib and @executable_path/../Resources/
+          # lib, its OpenSSL references are @rpath, and no build-machine path
+          # survives anywhere in its load commands.
           #
-          # build-sidecar.yml does the right rewriting. On Linux it runs
-          # `patchelf --set-rpath '$ORIGIN/lib:$ORIGIN/../lib/rigseed/lib'`,
-          # on macOS `install_name_tool -add_rpath @executable_path/lib` plus
-          # install-name rewriting, and it then proves the result runs with the
-          # build machine's Qt moved aside. All of that is applied to
-          # `bundle/`, and the release publishes `out/`. Nothing copies back,
-          # so the asset everyone downloads is the copy from before the fix.
+          # macOS is unsigned and unnotarized, so Gatekeeper refuses it on a
+          # first open and the user has to go through Finder's open-anyway
+          # path. That is a real cost for an app whose whole point is being
+          # approachable, and it is the reason to buy a Developer ID rather
+          # than a reason to delay the release.
           #
-          # Measured on the published assets rather than inferred. The Linux
-          # binary's RUNPATH is /home/runner/work/rigseed-app/Qt/6.8.3/gcc_64,
-          # and unpacking the deb and running it gives exit 127, `error while
-          # loading shared libraries: libQt6Network.so.6`. The macOS binary's
-          # only LC_RPATH is /Users/runner/work/rigseed-app/Qt/6.8.3/macos/lib,
-          # and it additionally names /opt/homebrew/opt/openssl@3 absolutely.
-          #
-          # Windows is unaffected because it embeds no such paths: the loader
-          # searches the executable's own directory and the DLLs sit there.
-          #
-          # Neither platform packages any differently for being broken. deb,
-          # rpm and dmg all build green, which is why this was invisible until
-          # someone unpacked one and asked the loader. Both come back once the
-          # sidecar publishes its patched binary and that has been checked on
-          # the artefact itself.
+          # Linux stays out. Its packaging bug is fixed and confirmed, with all
+          # four Qt and three ICU libraries now resolving through
+          # /usr/bin/../lib/rigseed/lib inside the deb. What remains is not a
+          # packaging fault: the binary inherits the CI runner's glibc, so it
+          # needs GLIBC_2.38 and GLIBCXX_3.4.32 and will not start on Ubuntu
+          # 22.04. glibc is the one library that cannot be bundled around, and
+          # choosing the floor is a distribution decision rather than a fix.
           - os: windows-latest
             label: windows-x86_64
             triple: x86_64-pc-windows-msvc
+          # Apple Silicon only. The sidecar release carries no x86_64 macOS
+          # build, so an Intel bundle would ship without its daemon.
+          - os: macos-latest
+            label: macos-aarch64
+            triple: aarch64-apple-darwin
 
     steps:
       - uses: actions/checkout@v4
