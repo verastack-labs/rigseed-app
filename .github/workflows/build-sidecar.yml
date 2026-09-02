@@ -512,7 +512,47 @@ jobs:
             patchelf --set-rpath '$ORIGIN' "$lib"
           done
 
+          # Qt plugins are dlopen'd, so they appear in no link list and the
+          # walk above cannot see them. windeployqt knows about them, which is
+          # why Windows shipped them and these two platforms did not: the
+          # Linux bundle went out with lib/ and nothing else, and the daemon
+          # answered every HTTPS tracker with `No TLS backend is available`.
+          #
+          # tls is the one that matters. sqldrivers carries qsqlite, which
+          # qBittorrent uses for its resume store, and networkinformation is
+          # what Windows already ships.
+          for group in tls sqldrivers networkinformation; do
+            src="$QT_ROOT_DIR/plugins/$group"
+            [ -d "$src" ] || { echo "no $group plugins at $src"; continue; }
+            mkdir -p "bundle/plugins/$group"
+            cp -Lv "$src"/*.so "bundle/plugins/$group/" 2>/dev/null || true
+          done
+
+          # The plugins link Qt themselves, and sit two levels below the
+          # bundle root, so their rpath is not the binary's.
+          for plugin in bundle/plugins/*/*.so; do
+            [ -e "$plugin" ] || continue
+            patchelf --set-rpath '$ORIGIN/../../lib' "$plugin"
+            for dep in $(collect "$plugin"); do
+              case "$dep" in
+                "$QT_ROOT_DIR"/*)
+                  name=$(basename "$dep")
+                  [ -e "bundle/lib/$name" ] || cp -Lv "$dep" "bundle/lib/$name"
+                  ;;
+              esac
+            done
+          done
+
+          # The TLS backend is the whole point of the loop above, so its
+          # absence fails here rather than showing up as a tracker that never
+          # connects.
+          if ! ls bundle/plugins/tls/*.so >/dev/null 2>&1; then
+            echo "::error::no TLS backend plugin collected"
+            exit 1
+          fi
+
           ls -la bundle bundle/lib
+          find bundle/plugins -type f
 
           # The patched binary is the one that ships. patchelf rewrote bundle/,
           # and the release publishes out/, so without this copy the asset
@@ -644,12 +684,42 @@ jobs:
           # not fail the build.
           install_name_tool -delete_rpath "$QT_ROOT_DIR/lib" "bundle/$bin" 2>/dev/null || true
 
+          # Qt plugins are dlopen'd, so no otool -L walk can find them. That is
+          # why macdeployqt was collecting them and this hand-rolled walk was
+          # not, and why the bundle went out with frameworks but no TLS
+          # backend: every HTTPS tracker met `No TLS backend is available`.
+          #
+          # Collected deliberately rather than by going back to macdeployqt,
+          # which is what dragged QtGui and QtWidgets into a -DGUI=OFF build.
+          for group in tls sqldrivers networkinformation; do
+            src="$QT_ROOT_DIR/plugins/$group"
+            [ -d "$src" ] || { echo "no $group plugins at $src"; continue; }
+            mkdir -p "bundle/plugins/$group"
+            cp -Lv "$src"/*.dylib "bundle/plugins/$group/" 2>/dev/null || true
+          done
+
+          # Two levels below the bundle root, so the rpath is not the binary's.
+          # relink pulls in whatever they name, the same as for the binary.
+          for plugin in bundle/plugins/*/*.dylib; do
+            [ -e "$plugin" ] || continue
+            chmod u+w "$plugin"
+            install_name_tool -add_rpath "@loader_path/../../lib" "$plugin" 2>/dev/null || true
+            relink "$plugin"
+          done
+
+          # The TLS backend is the point of the loop above, so its absence
+          # fails here rather than as a tracker that never connects.
+          if ! ls bundle/plugins/tls/*.dylib >/dev/null 2>&1; then
+            echo "::error::no TLS backend plugin collected"
+            exit 1
+          fi
+
           # Stripping invalidated whatever signature the binary carried, and an
           # arm64 Mach-O with a modified load command and no signature will not
           # launch at all. Ad-hoc is enough here; real signing happens when the
           # app itself is signed, and has to come after this.
           codesign --force --sign - --timestamp=none "bundle/$bin"
-          for lib in bundle/lib/*.dylib bundle/lib/*.framework; do
+          for lib in bundle/lib/*.dylib bundle/lib/*.framework bundle/plugins/*/*.dylib; do
             [ -e "$lib" ] || continue
             codesign --force --sign - --timestamp=none "$lib"
           done
