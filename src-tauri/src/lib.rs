@@ -436,13 +436,30 @@ pub fn run() {
 
             // Its own profile, so the bundled instance never touches settings
             // or torrents belonging to a qBittorrent the user already runs.
+            // Qt loads its TLS backend and SQL driver as plugins, by
+            // dlopen, so nothing in the binary's link list names them and
+            // nothing finds them by accident. Without this the daemon starts,
+            // reports its version, and answers every HTTPS tracker with
+            // `No TLS backend is available`.
+            //
+            // The resource directory rather than a path beside the binary: on
+            // Linux the sidecar installs to /usr/bin and its libraries to
+            // /usr/lib/rigseed, and a qt.conf in /usr/bin would be read by
+            // every other Qt program there too.
+            let plugins = app.path().resource_dir().ok();
+
             match app.shell().sidecar("qbittorrent-nox") {
-                Ok(command) => match command
-                    .args([
+                Ok(command) => match {
+                    let command = command.args([
                         format!("--profile={}", profile.display()),
                         format!("--webui-port={port}"),
-                    ])
-                    .spawn()
+                    ]);
+                    match &plugins {
+                        Some(dir) => command.env("QT_PLUGIN_PATH", dir),
+                        None => command,
+                    }
+                }
+                .spawn()
                 {
                     Ok((_rx, child)) => {
                         log::info!("qbittorrent-nox started on port {port}");

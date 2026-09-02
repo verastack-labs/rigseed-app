@@ -1,7 +1,10 @@
 {
   "bundle": {
     "resources": {
-      "binaries/lib": "./lib"
+      "binaries/lib": "./lib",
+      "binaries/plugins/tls": "./tls",
+      "binaries/plugins/sqldrivers": "./sqldrivers",
+      "binaries/plugins/networkinformation": "./networkinformation"
     },
     "targets": ["deb", "rpm"]
   }
