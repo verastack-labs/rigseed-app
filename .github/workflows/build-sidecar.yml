@@ -560,7 +560,7 @@ jobs:
           # RUNPATH. That is what shipped: a deb whose qbittorrent-nox exits
           # 127 with `error while loading shared libraries: libQt6Network.so.6`
           # on any machine that is not this runner.
-          cp "bundle/$bin" "out/$bin\"
+          cp "bundle/$bin" "out/$bin"
 
       - name: Collect the runtime libraries (macOS)
         if: runner.os == 'macOS'
