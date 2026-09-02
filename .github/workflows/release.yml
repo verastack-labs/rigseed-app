@@ -66,25 +66,25 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Windows and macOS. Both sidecars were verified on the artefact
-          # that ships, not on the copy the build made: the macOS binary's only
-          # rpaths are @executable_path/lib and @executable_path/../Resources/
-          # lib, its OpenSSL references are @rpath, and no build-machine path
-          # survives anywhere in its load commands.
+          # All three. Every sidecar is verified on the artefact that ships
+          # rather than on the copy the build made, which is the distinction
+          # that hid three separate faults in this file's history.
           #
-          # macOS is unsigned and unnotarized, so Gatekeeper refuses it on a
-          # first open and the user has to go through Finder's open-anyway
-          # path. That is a real cost for an app whose whole point is being
-          # approachable, and it is the reason to buy a Developer ID rather
-          # than a reason to delay the release.
+          # Linux is verified by running it: on Ubuntu 22.04, the deb's
+          # qbittorrent-nox resolves all four Qt and three ICU libraries
+          # through /usr/bin/../lib/rigseed/lib and prints its version with no
+          # warnings. Without QT_PLUGIN_PATH the same binary still answers
+          # `No TLS backend is available`, so the variable rigseed sets at
+          # spawn is doing the work.
           #
-          # Linux stays out. Its packaging bug is fixed and confirmed, with all
-          # four Qt and three ICU libraries now resolving through
-          # /usr/bin/../lib/rigseed/lib inside the deb. What remains is not a
-          # packaging fault: the binary inherits the CI runner's glibc, so it
-          # needs GLIBC_2.38 and GLIBCXX_3.4.32 and will not start on Ubuntu
-          # 22.04. glibc is the one library that cannot be bundled around, and
-          # choosing the floor is a distribution decision rather than a fix.
+          # macOS is verified structurally and not behaviourally, because
+          # nobody here has a Mac. Its load commands are correct on both
+          # architectures of the universal binary, and its plugins carry
+          # @loader_path/../../lib. Whether it launches is unproven, and
+          # Gatekeeper will refuse it unsigned regardless.
+          - os: ubuntu-22.04
+            label: linux-x86_64
+            triple: x86_64-unknown-linux-gnu
           - os: windows-latest
             label: windows-x86_64
             triple: x86_64-pc-windows-msvc
@@ -121,6 +121,15 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+
+      # Tauri v2 needs webkit2gtk-4.1. libxdo is for the tray, librsvg for
+      # icon rendering, patchelf for relocation. xdg-utils is copied into the
+      # bundle by Tauri itself and its absence stops the build outright.
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libxdo-dev libssl-dev build-essential file xdg-utils
 
       - name: Install
         run: pnpm install --frozen-lockfile
