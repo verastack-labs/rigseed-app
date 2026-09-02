@@ -434,41 +434,41 @@ pub fn run() {
                 Err(error) => log::error!("could not prepare credentials: {error}"),
             }
 
-            // Its own profile, so the bundled instance never touches settings
-            // or torrents belonging to a qBittorrent the user already runs.
-            // Qt loads its TLS backend and SQL driver as plugins, by
-            // dlopen, so nothing in the binary's link list names them and
-            // nothing finds them by accident. Without this the daemon starts,
-            // reports its version, and answers every HTTPS tracker with
+            // Qt loads its TLS backend and SQL driver as plugins, by dlopen,
+            // so nothing in the binary's link list names them and nothing
+            // finds them by accident. Without this the daemon starts, reports
+            // its version, and answers every HTTPS tracker with
             // `No TLS backend is available`.
             //
             // The resource directory rather than a path beside the binary: on
             // Linux the sidecar installs to /usr/bin and its libraries to
             // /usr/lib/rigseed, and a qt.conf in /usr/bin would be read by
-            // every other Qt program there too.
+            // every other Qt program in that directory too.
             let plugins = app.path().resource_dir().ok();
 
             match app.shell().sidecar("qbittorrent-nox") {
-                Ok(command) => match {
-                    let command = command.args([
+                Ok(command) => {
+                    // Its own profile, so the bundled instance never touches
+                    // settings or torrents belonging to a qBittorrent the user
+                    // already runs.
+                    let mut command = command.args([
                         format!("--profile={}", profile.display()),
                         format!("--webui-port={port}"),
                     ]);
-                    match &plugins {
-                        Some(dir) => command.env("QT_PLUGIN_PATH", dir),
-                        None => command,
+                    if let Some(dir) = &plugins {
+                        command = command.env("QT_PLUGIN_PATH", dir);
+                    }
+
+                    match command.spawn() {
+                        Ok((_rx, child)) => {
+                            log::info!("qbittorrent-nox started on port {port}");
+                            if let Ok(mut slot) = app.state::<Daemon>().0.lock() {
+                                *slot = Some(child);
+                            }
+                        }
+                        Err(error) => log::warn!("could not start qbittorrent-nox: {error}"),
                     }
                 }
-                .spawn()
-                {
-                    Ok((_rx, child)) => {
-                        log::info!("qbittorrent-nox started on port {port}");
-                        if let Ok(mut slot) = app.state::<Daemon>().0.lock() {
-                            *slot = Some(child);
-                        }
-                    }
-                    Err(error) => log::warn!("could not start qbittorrent-nox: {error}"),
-                },
                 // The app still opens without the sidecar. The frontend falls
                 // back to the mock transport, which is what makes the UI
                 // reviewable before the binary is vendored.
