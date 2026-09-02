@@ -94,7 +94,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # Pinned, and this pin is the Linux support floor.
+          #
+          # glibc is the one library a bundle cannot carry: it loads everything
+          # else, so a newer copy placed beside the binary is never the one
+          # used. Whatever this runner's glibc is becomes a hard minimum for
+          # every user, and ubuntu-latest silently raises it whenever GitHub
+          # moves the label.
+          #
+          # It already had. Built on 24.04 the binary demanded GLIBC_2.38 and
+          # GLIBCXX_3.4.32 and would not start on Ubuntu 22.04 LTS, which is
+          # supported until 2027. 22.04 gives glibc 2.35, covering 22.04 and
+          # 24.04, Debian 12 and 13, and anything newer.
+          #
+          # Raising this is a decision about who can run rigseed, so it is made
+          # here deliberately rather than inherited from a runner label.
+          - os: ubuntu-22.04
             label: linux-x86_64
             triple: x86_64-unknown-linux-gnu
             binary: qbittorrent-nox
@@ -782,6 +797,22 @@ jobs:
               esac
               if printf '%s' "$paths" | grep -q "$QT_ROOT_DIR"; then
                 echo "::error::published binary still names the build machine's Qt"
+                exit 1
+              fi
+
+              # The support floor, asserted rather than left to a runner label.
+              # glibc cannot be bundled, so whatever this binary asks for is
+              # the minimum every user needs. It rose to 2.38 once, by
+              # ubuntu-latest moving under us, which excluded Ubuntu 22.04 LTS
+              # and was noticed only because someone unpacked the deb and ran
+              # the binary.
+              floor=2.35
+              want=$(objdump -T "$bin" | grep -oE 'GLIBC_2\.[0-9]+' | sed 's/GLIBC_//' | sort -uV | tail -1)
+              highest=$({ echo "$floor"; echo "$want"; } | sort -V | tail -1)
+              echo "needs glibc $want, floor is $floor"
+              if [ "$highest" != "$floor" ]; then
+                echo "::error::binary needs glibc $want but the floor is $floor"
+                echo "::error::the runner moved, or a dependency raised it"
                 exit 1
               fi
               ;;
