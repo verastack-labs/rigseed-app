@@ -14,7 +14,7 @@ no separate qBittorrent install to keep in step.
 ![tauri](https://img.shields.io/badge/Tauri-2.11-24C8DB?style=flat-square)
 ![react](https://img.shields.io/badge/React-19.2-58C4DC?style=flat-square)
 ![rust](https://img.shields.io/badge/Rust-1.77+-B7410E?style=flat-square)
-![tests](https://img.shields.io/badge/tests-430%20+%2021-5E8C63?style=flat-square)
+![tests](https://img.shields.io/badge/tests-950%20+%2030-5E8C63?style=flat-square)
 ![licence](https://img.shields.io/badge/licence-Apache--2.0-8E5A42?style=flat-square)
 
 </div>
@@ -80,6 +80,22 @@ libtorrent **2.0.11**. Every build runs the binary with the build machine's Qt
 moved out of the way, because a bundle missing a library runs perfectly on the
 machine that built it.
 
+## Download
+
+Installers for Windows, macOS and Linux are attached to every
+[release](https://github.com/verastack-labs/rigseed-app/releases/latest), each with a
+matching `.sha256`. There is nothing else to install: qBittorrent ships inside.
+
+| Platform | What you get | What to expect |
+|---|---|---|
+| Windows 10 and 11 | `.exe` installer, `.msi` | SmartScreen warns, because the build is not signed. More info, then Run anyway. |
+| macOS, Apple Silicon | `.dmg` | Not notarised, so Gatekeeper refuses a first open. Right-click, Open, confirm. **This build has been checked but never launched on a Mac.** |
+| Linux x86-64 | `.deb`, `.rpm` | Needs glibc 2.35 or newer, so Ubuntu 22.04 and Debian 12 and up. |
+
+Nothing is signed yet, which makes the checksums the only way to confirm a download is the file
+the build produced. Every release also carries the source that built the bundled
+`qbittorrent-nox`, which is what its licence requires.
+
 ## Getting started
 
 ```bash
@@ -93,8 +109,8 @@ what makes every screen reviewable before a daemon exists. The connection chip
 in the top bar always says which it is.
 
 ```bash
-pnpm test          # 430 frontend tests
-cargo test         # 21, in src-tauri
+pnpm test          # 950 frontend tests
+cargo test         # 30, in src-tauri
 pnpm tauri build   # MSI + NSIS on Windows
 ```
 
