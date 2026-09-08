@@ -9,7 +9,7 @@
 Install it, open it, add a torrent. No server to set up, no WebUI to configure,
 no separate qBittorrent install to keep in step.
 
-![version](https://img.shields.io/badge/version-0.1.0-4E7C9B?style=flat-square)
+![version](https://img.shields.io/badge/version-0.1.1-4E7C9B?style=flat-square)
 ![platform](https://img.shields.io/badge/platform-Windows%20·%20macOS%20·%20Linux-2E343D?style=flat-square)
 ![tauri](https://img.shields.io/badge/Tauri-2.11-24C8DB?style=flat-square)
 ![react](https://img.shields.io/badge/React-19.2-58C4DC?style=flat-square)
@@ -90,7 +90,7 @@ matching `.sha256`. There is nothing else to install: qBittorrent ships inside.
 |---|---|---|
 | Windows 10 and 11 | `.exe` installer, `.msi` | SmartScreen warns, because the build is not signed. More info, then Run anyway. |
 | macOS, Apple Silicon | `.dmg` | Not notarised, so Gatekeeper refuses a first open. Right-click, Open, confirm. **This build has been checked but never launched on a Mac.** |
-| Linux x86-64 | `.deb`, `.rpm` | Needs glibc 2.35 or newer, so Ubuntu 22.04 and Debian 12 and up. |
+| Linux x86-64 | `.deb`, `.rpm`, `.AppImage` | Needs glibc 2.35 or newer, so Ubuntu 22.04 and Debian 12 and up. The AppImage runs anywhere without installing. |
 
 Nothing is signed yet, which makes the checksums the only way to confirm a download is the file
 the build produced. Every release also carries the source that built the bundled
