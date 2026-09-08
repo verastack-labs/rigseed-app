@@ -521,18 +521,41 @@ jobs:
           # tls is the one that matters. sqldrivers carries qsqlite, which
           # qBittorrent uses for its resume store, and networkinformation is
           # what Windows already ships.
-          for group in tls sqldrivers networkinformation; do
-            src="$QT_ROOT_DIR/plugins/$group"
-            [ -d "$src" ] || { echo "no $group plugins at $src"; continue; }
+          # Per group, and sqldrivers is not a wildcard on purpose. Qt ships
+          # drivers for PostgreSQL, MySQL, ODBC and Mimer beside SQLite, and
+          # each links its own client library. qBittorrent uses SQLite only, so
+          # the rest are dead weight that drags in libraries nobody installed:
+          # collecting all of them broke the AppImage with
+          # `Could not find dependency: libpq.so.5`.
+          copy_plugins() {
+            local group="$1" pattern="$2"
+            local src="$QT_ROOT_DIR/plugins/$group"
+            [ -d "$src" ] || { echo "no $group plugins at $src"; return 0; }
             mkdir -p "bundle/plugins/$group"
-            cp -Lv "$src"/*.so "bundle/plugins/$group/" 2>/dev/null || true
-          done
+            # shellcheck disable=SC2086
+            cp -Lv $src/$pattern "bundle/plugins/$group/" 2>/dev/null || true
+          }
+          copy_plugins tls '*.so'
+          copy_plugins sqldrivers 'libqsqlite.so'
+          copy_plugins networkinformation '*.so'
 
-          # The plugins link Qt themselves, and sit two levels below the
-          # bundle root, so their rpath is not the binary's.
+          # Two candidates, because the plugins sit at a different depth in the
+          # bundle than in an installed tree. In bundle/ they are
+          # plugins/<group>/x.so, two levels above lib/. Installed, the resource
+          # mapping flattens the plugins/ level away and they land beside lib/
+          # as <group>/x.so, one level.
+          #
+          # With only the two-level form, an installed plugin resolves
+          # $ORIGIN/../../lib to usr/lib/lib, which does not exist. It survives
+          # at runtime because the main binary has already loaded Qt and dlopen
+          # finds an already-loaded soname without searching, so the deb works
+          # and looks correct. linuxdeploy does static analysis rather than
+          # runtime resolution, which is what caught it:
+          #
+          #   ERROR: Could not find dependency: libQt6Sql.so.6
           for plugin in bundle/plugins/*/*.so; do
             [ -e "$plugin" ] || continue
-            patchelf --set-rpath '$ORIGIN/../../lib' "$plugin"
+            patchelf --set-rpath '$ORIGIN/../lib:$ORIGIN/../../lib' "$plugin"
             for dep in $(collect "$plugin"); do
               case "$dep" in
                 "$QT_ROOT_DIR"/*)
@@ -548,6 +571,10 @@ jobs:
           # connects.
           if ! ls bundle/plugins/tls/*.so >/dev/null 2>&1; then
             echo "::error::no TLS backend plugin collected"
+            exit 1
+          fi
+          if ! ls bundle/plugins/sqldrivers/libqsqlite.so >/dev/null 2>&1; then
+            echo "::error::no SQLite driver collected"
             exit 1
           fi
 
@@ -691,18 +718,30 @@ jobs:
           #
           # Collected deliberately rather than by going back to macdeployqt,
           # which is what dragged QtGui and QtWidgets into a -DGUI=OFF build.
-          for group in tls sqldrivers networkinformation; do
-            src="$QT_ROOT_DIR/plugins/$group"
-            [ -d "$src" ] || { echo "no $group plugins at $src"; continue; }
+          # SQLite only, for the reason spelled out in the Linux step: the
+          # other drivers link client libraries for databases qBittorrent does
+          # not use, and shipping them is weight at best and a broken bundle at
+          # worst.
+          copy_plugins() {
+            local group="$1" pattern="$2"
+            local src="$QT_ROOT_DIR/plugins/$group"
+            [ -d "$src" ] || { echo "no $group plugins at $src"; return 0; }
             mkdir -p "bundle/plugins/$group"
-            cp -Lv "$src"/*.dylib "bundle/plugins/$group/" 2>/dev/null || true
-          done
+            # shellcheck disable=SC2086
+            cp -Lv $src/$pattern "bundle/plugins/$group/" 2>/dev/null || true
+          }
+          copy_plugins tls '*.dylib'
+          copy_plugins sqldrivers 'libqsqlite.dylib'
+          copy_plugins networkinformation '*.dylib'
 
           # Two levels below the bundle root, so the rpath is not the binary's.
           # relink pulls in whatever they name, the same as for the binary.
           for plugin in bundle/plugins/*/*.dylib; do
             [ -e "$plugin" ] || continue
             chmod u+w "$plugin"
+            # Both depths, for the reason spelled out in the Linux step: the
+            # bundle nests plugins one level deeper than an installed tree does.
+            install_name_tool -add_rpath "@loader_path/../lib" "$plugin" 2>/dev/null || true
             install_name_tool -add_rpath "@loader_path/../../lib" "$plugin" 2>/dev/null || true
             relink "$plugin"
           done
@@ -711,6 +750,10 @@ jobs:
           # fails here rather than as a tracker that never connects.
           if ! ls bundle/plugins/tls/*.dylib >/dev/null 2>&1; then
             echo "::error::no TLS backend plugin collected"
+            exit 1
+          fi
+          if ! ls bundle/plugins/sqldrivers/libqsqlite.dylib >/dev/null 2>&1; then
+            echo "::error::no SQLite driver collected"
             exit 1
           fi
 
