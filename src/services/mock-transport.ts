@@ -1252,6 +1252,23 @@ export function createMockTransport({
         }
       }
 
+      if (path === 'torrents/setLocation') {
+        // The real daemon moves the files and re-points the torrent. The mock
+        // has no files, so it does the half that is observable: the save path
+        // changes and the torrent keeps running, which is what the screen
+        // shows and therefore what a test can assert.
+        const location = String(body?.location ?? '')
+        if (location !== '') {
+          for (const h of hashes) {
+            const t = torrents.get(h)
+            if (t) {
+              t.save_path = location
+              pendingTorrents.add(h)
+            }
+          }
+        }
+      }
+
       if (path === 'torrents/recheck') {
         for (const h of hashes) {
           const t = torrents.get(h)

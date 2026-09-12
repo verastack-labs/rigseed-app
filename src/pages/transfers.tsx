@@ -16,10 +16,12 @@ import type { Torrent } from '@/types/qbittorrent'
 import { AddFab, type AddSource } from '@/features/transfers/add-fab'
 import { AltSpeedToggle } from '@/features/transfers/alt-speed-toggle'
 import { Sidebar } from '@/features/transfers/sidebar'
+import { MoveDialog } from '@/features/transfers/move-dialog'
+import { moveFailureDetail } from '@/features/transfers/move-failure'
 import { ShareLimitDialog } from '@/features/transfers/share-limit-dialog'
 import { SpeedLimitDialog } from '@/features/transfers/speed-limit-dialog'
 import { saveTorrentFile } from '@/services/torrent-file'
-import { notify } from '@/state/notice-store'
+import { detailOf, notify } from '@/state/notice-store'
 import { TorrentEasy } from '@/features/transfers/torrent-easy'
 import { TorrentGrid } from '@/features/transfers/torrent-grid'
 import { write } from '@/lib/write'
@@ -104,6 +106,9 @@ export function Transfers() {
   const [limiting, setLimiting] = useState<string | null>(null)
   /** Which torrent's share limits are open, by hash. Its own dialog. */
   const [sharing, setSharing] = useState<string | null>(null)
+  /** Which torrent is being moved, by hash, and whether the daemon is at it. */
+  const [moving, setMoving] = useState<string | null>(null)
+  const [movingBusy, setMovingBusy] = useState(false)
 
   const act = {
     onResume: (hashes: readonly string[]) =>
@@ -117,6 +122,7 @@ export function Transfers() {
     // live torrent through every poll, which the row's copy would not.
     onSpeedLimits: (torrent: Torrent) => setLimiting(torrent.hash),
     onShareLimits: (torrent: Torrent) => setSharing(torrent.hash),
+    onMove: (torrent: Torrent) => setMoving(torrent.hash),
     // Named for what it does rather than for the endpoint. "Set force start"
     // is the API's sentence; a failure notice has to be the user's.
     onForceStart: (hashes: readonly string[], value: boolean) =>
@@ -355,6 +361,47 @@ export function Transfers() {
           freeSpace={serverState.free_space_on_disk ?? 0}
         />
       ) : null}
+
+      {/*
+        Moving files. The torrent is looked up fresh so the dialog's "currently
+        in" line follows the live save path rather than a copy taken when the
+        menu was opened.
+      */}
+      {(() => {
+        const target = moving ? torrents.find((t) => t.hash === moving) : undefined
+        if (!target) return null
+        return (
+          <MoveDialog
+            open
+            count={1}
+            currentPath={target.save_path ?? ''}
+            busy={movingBusy}
+            onCancel={() => setMoving(null)}
+            onConfirm={(destination) => {
+              setMovingBusy(true)
+              void api.torrents
+                .setLocation([target.hash], destination)
+                .then(() => {
+                  notify({ tone: 'ok', what: 'Moving files', detail: destination })
+                  setMoving(null)
+                })
+                .catch((cause: unknown) => {
+                  // The daemon answers with a status and no body, so the three
+                  // refusals are turned into sentences here. Without it the
+                  // notice names our endpoint and their problem in the wrong
+                  // order.
+                  const detail = moveFailureDetail(cause) ?? detailOf(cause)
+                  notify(
+                    detail === undefined
+                      ? { tone: 'warn', what: 'Move files' }
+                      : { tone: 'warn', what: 'Move files', detail },
+                  )
+                })
+                .finally(() => setMovingBusy(false))
+            }}
+          />
+        )
+      })()}
 
       {/* Looked up fresh each render rather than held in state, so the fields
           follow the daemon through every poll. A torrent removed while its

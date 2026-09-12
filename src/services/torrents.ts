@@ -114,6 +114,20 @@ export function createTorrentsApi(transport: Transport, caps: Capabilities = DEF
     reannounce: (list: readonly string[]) =>
       transport.post<void>('torrents/reannounce', hashes(list)),
 
+    /**
+     * Moves a torrent's files to another folder.
+     *
+     * The daemon does the move itself: it copies, re-points the torrent at the
+     * new folder and carries on seeding, so nothing is downloaded again. That
+     * also means it is not instant for a large torrent, and the call returns
+     * as soon as the move is accepted rather than when it has finished.
+     *
+     * Three ways it refuses, and each says something different, so they are
+     * turned into sentences at the call site rather than surfaced as a number.
+     */
+    setLocation: (list: readonly string[], location: string) =>
+      transport.post<void>('torrents/setLocation', { ...hashes(list), location }),
+
     setCategory: (list: readonly string[], category: string) =>
       transport.post<void>('torrents/setCategory', { ...hashes(list), category }),
     addTags: (list: readonly string[], tags: readonly string[]) =>
