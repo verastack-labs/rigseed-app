@@ -197,19 +197,35 @@ pub fn write_config(
     // in. Naming the real folder puts them where the rest of the machine's
     // downloads are.
     //
-    // Only when the key is absent, because the save path is the user's after
-    // the first launch. Every WebUI key above is ours and is restated on each
-    // start; stating this one would quietly undo a change they made in
+    // Only when no save path is set at all, because the path is the user's
+    // after the first launch. Every WebUI key above is ours and is restated on
+    // each start; stating this one would quietly undo a change they made in
     // Settings the next time the app opened.
     let defaults: Vec<(&str, String, String)> = save_path
         .map(|path| {
-            vec![(
-                "Preferences",
-                "Downloads\\SavePath".to_string(),
-                // qBittorrent writes paths with forward slashes on every
-                // platform and compares them that way.
-                path.to_string_lossy().replace('\\', "/"),
-            )]
+            // qBittorrent writes paths with forward slashes on every platform
+            // and compares them that way.
+            let value = path.to_string_lossy().replace('\\', "/");
+            vec![
+                // The key the running daemon actually reads.
+                //
+                // `Downloads\SavePath` below is the qBittorrent 4 name. A
+                // configuration written fresh by qBittorrent 5 records itself
+                // as already migrated, so the old key is never consulted, and
+                // setting only that one did nothing whatsoever: downloads went
+                // to the profile directory this block exists to avoid, while
+                // every screen reported the folder named here. Opening a
+                // finished file then failed too, because the path the app
+                // built from the reported folder had never existed.
+                (
+                    "BitTorrent",
+                    "Session\\DefaultSavePath".to_string(),
+                    value.clone(),
+                ),
+                // Kept as well. It is one line, it is what an older
+                // qBittorrent reads, and the Web API still reports it.
+                ("Preferences", "Downloads\\SavePath".to_string(), value),
+            ]
         })
         .unwrap_or_default();
 
@@ -236,8 +252,47 @@ pub fn write_config(
         }
     }
 
+    // Repairing a configuration an earlier rigseed wrote.
+    //
+    // Those carry only the qBittorrent 4 key, which the running daemon never
+    // reads, so the daemon has been saving to the profile directory while the
+    // app reported somewhere else entirely. The value is carried across rather
+    // than replaced with rigseed's own default, because the user may well have
+    // chosen it since.
+    const NEW_SAVE_KEY: &str = "Session\\DefaultSavePath";
+    const OLD_SAVE_KEY: &str = "Downloads\\SavePath";
+
+    let has_new = lines
+        .iter()
+        .any(|l| l.starts_with(&format!("{NEW_SAVE_KEY}=")));
+    let legacy_value = lines
+        .iter()
+        .find(|l| l.starts_with(&format!("{OLD_SAVE_KEY}=")))
+        .and_then(|l| l.split_once('=').map(|(_, value)| value.to_string()));
+
+    if !has_new {
+        if let Some(value) = legacy_value {
+            let at = match lines.iter().position(|l| l.trim() == "[BitTorrent]") {
+                Some(at) => at,
+                None => {
+                    lines.push("[BitTorrent]".to_string());
+                    lines.len() - 1
+                }
+            };
+            lines.insert(at + 1, format!("{NEW_SAVE_KEY}={value}"));
+        }
+    }
+
+    // Either key present means the question has already been answered, by the
+    // user, by an earlier run, or by the migration just above. Checking them
+    // one at a time would let a half-written file gain a second, disagreeing
+    // answer to the same question.
+    let save_path_decided = defaults
+        .iter()
+        .any(|(_, key, _)| lines.iter().any(|l| l.starts_with(&format!("{key}="))));
+
     for (section, key, value) in defaults {
-        if lines.iter().any(|l| l.starts_with(&format!("{key}="))) {
+        if save_path_decided {
             continue;
         }
         let line = format!("{key}={value}");
@@ -334,6 +389,89 @@ mod tests {
         assert!(
             written.contains(r"Downloads\SavePath=C:/Users/someone/Downloads"),
             "forward slashes, which is how qBittorrent writes and compares paths: {written}"
+        );
+        // The key the running daemon actually reads. Writing only the one
+        // above is what put real downloads in the profile directory while
+        // every screen in the app reported the folder named here.
+        assert!(
+            written.contains(r"Session\DefaultSavePath=C:/Users/someone/Downloads"),
+            "the qBittorrent 5 key has to be there too: {written}"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn repairs_a_config_that_only_has_the_old_save_path_key() {
+        // What every install written by an earlier rigseed looks like. The
+        // daemon ignored the key, saved into its profile, and the app pointed
+        // at a folder that never held the files.
+        let dir = std::env::temp_dir().join(format!("rigseed-test-migrate-{}", std::process::id()));
+        let path = dir.join("qBittorrent.conf");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(&path, "[Preferences]\nDownloads\\SavePath=D:/media\n").unwrap();
+
+        write_config(
+            &path,
+            "rigseed",
+            "hash",
+            8080,
+            Some(Path::new(r"C:\Downloads")),
+        )
+        .unwrap();
+        let written = fs::read_to_string(&path).unwrap();
+
+        // Carried across, not replaced. The value in a config that has already
+        // run is the user's answer, whoever wrote it first.
+        assert!(
+            written.contains(r"Session\DefaultSavePath=D:/media"),
+            "the old value has to carry across: {written}"
+        );
+        assert!(
+            !written.contains("C:/Downloads"),
+            "rigseed's default must not overwrite it: {written}"
+        );
+        assert_eq!(
+            written.matches(r"Session\DefaultSavePath=").count(),
+            1,
+            "exactly one answer to the question: {written}"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn leaves_a_config_alone_once_the_new_key_is_set() {
+        // Somebody changed the folder in Settings. qBittorrent writes the new
+        // key; rigseed must not then add a stale copy of the old one beside it
+        // saying something different.
+        let dir = std::env::temp_dir().join(format!("rigseed-test-settled-{}", std::process::id()));
+        let path = dir.join("qBittorrent.conf");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            &path,
+            "[BitTorrent]\nSession\\DefaultSavePath=E:/torrents\n",
+        )
+        .unwrap();
+
+        write_config(
+            &path,
+            "rigseed",
+            "hash",
+            8080,
+            Some(Path::new(r"C:\Downloads")),
+        )
+        .unwrap();
+        let written = fs::read_to_string(&path).unwrap();
+
+        assert!(
+            written.contains(r"Session\DefaultSavePath=E:/torrents"),
+            "{written}"
+        );
+        assert!(!written.contains("C:/Downloads"), "{written}");
+        assert!(
+            !written.contains(r"Downloads\SavePath="),
+            "no stale second answer: {written}"
         );
         let _ = fs::remove_dir_all(&dir);
     }
