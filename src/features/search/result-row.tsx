@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { DataValue } from '@/components/ui/data-value'
 import { cn } from '@/lib/utils'
+import { canReachDesktop, openUrl } from '@/services/shell'
 import { swatchColor, swatchFor } from '@/lib/labels'
 import type { SearchResult } from '@/types/qbittorrent'
 import { formatBytes } from '@/utils/format'
@@ -114,15 +115,21 @@ export function ResultRow({
             <Button variant="secondary" size="sm" onClick={onCopyMagnet}>
               Copy magnet
             </Button>
-            {result.descrLink ? (
-              <a
-                href={result.descrLink}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="rounded-lg border border-line px-3 py-[7px] text-[11.5px] font-semibold text-text-dim transition-colors duration-quick hover:text-accent"
-              >
+            {/*
+              A button that hands the link to the system browser, not an
+              anchor. target="_blank" asks the webview to open a window, and a
+              Tauri window has no tab strip to open one in, so this did nothing
+              at all: it looked like a link, took a click, and went nowhere.
+
+              openUrl is also the rule the rest of the app follows. rigseed's
+              window has no address bar and no back button, so navigating it to
+              a tracker's page would strand somebody inside something that
+              looks like the app and is not.
+            */}
+            {result.descrLink && canReachDesktop() ? (
+              <Button variant="secondary" size="sm" onClick={() => void openUrl(result.descrLink)}>
                 Description page
-              </a>
+              </Button>
             ) : null}
             <span className="flex-1" />
             <span className="max-w-[420px] truncate font-mono text-[10.5px] text-text-dimmer">

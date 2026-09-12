@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -6,10 +7,14 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { SectionHeader } from '@/components/ui/section-header'
 import { SegmentedControl } from '@/components/ui/segmented-control'
+import { Switch } from '@/components/ui/switch'
+import { AddTorrentDialog } from '@/features/add-torrent/add-torrent-dialog'
 import { PluginManager } from '@/features/search/plugin-manager'
 import { PluginSource } from '@/features/search/plugin-source'
 import { PythonSource } from '@/features/search/python-source'
-import { RESULT_COLUMNS, ResultRow } from '@/features/search/result-row'
+import { ResultHeader } from '@/features/search/result-header'
+import { ResultRow } from '@/features/search/result-row'
+import { DEFAULT_SORT, sortResults, type Sort } from '@/features/search/sort'
 import { copy } from '@/lib/clipboard'
 import { icons } from '@/lib/icons'
 import { swatchColor, swatchFor } from '@/lib/labels'
@@ -26,7 +31,11 @@ import {
 } from '@/services/search'
 import { notify } from '@/state/notice-store'
 import { useSearchJob } from '@/state/use-search-job'
+import { useTorrentStore } from '@/state/torrent-store'
 import type { SearchPlugin } from '@/types/qbittorrent'
+
+/** Where the "set options before adding" preference is remembered. */
+const ASK_KEY = 'rigseed:search:ask-before-adding'
 
 const CATEGORIES = [
   { value: 'all', label: 'All' },
@@ -84,7 +93,42 @@ export function Search() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [managing, setManaging] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [sort, setSort] = useState<Sort>(DEFAULT_SORT)
+
+  /*
+   * Which hit is waiting on the dialog, held as its URL rather than a boolean.
+   * The dialog is mounted only while something is pending, which is what makes
+   * every field start fresh for the next one.
+   */
+  const [pending, setPending] = useState<string | null>(null)
+
+  /*
+   * Remembered, because it is a working preference rather than a per-search
+   * choice: somebody who wants to pick a save path wants to pick one every
+   * time, and somebody who does not never wants to be asked. Reading is
+   * wrapped because a browser with storage blocked throws here rather than
+   * returning null, and losing the page to a preference would be a poor trade.
+   */
+  const [askBeforeAdding, setAskBeforeAdding] = useState(() => {
+    try {
+      return localStorage.getItem(ASK_KEY) === 'true'
+    } catch {
+      return false
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ASK_KEY, String(askBeforeAdding))
+    } catch {
+      // The choice still holds for this session, which is the part that matters.
+    }
+  }, [askBeforeAdding])
   const [failure, setFailure] = useState<string | null>(null)
+
+  const categories = useTorrentStore(useShallow((st) => Object.keys(st.categories)))
+  const tags = useTorrentStore(useShallow((st) => st.tags))
+  const freeSpace = useTorrentStore((st) => st.serverState.free_space_on_disk ?? 0)
 
   const refreshPlugins = useCallback(async () => {
     try {
@@ -172,9 +216,21 @@ export function Search() {
     return [...names].sort()
   }, [perEngine, plugins])
 
+  /*
+   * Filtered, then sorted across everything.
+   *
+   * Sorting has to happen here rather than inside a per-engine group, which is
+   * what the list effectively was: `search/results` answers per plugin and the
+   * daemon appends, so the array arrives engine-major and nothing had ever
+   * reordered it, while the header claimed it was sorted by seeds.
+   */
   const shown = useMemo(
-    () => results.filter((r) => !muted.includes(r.engine ?? 'unknown')),
-    [results, muted],
+    () =>
+      sortResults(
+        results.filter((r) => !muted.includes(r.engine ?? 'unknown')),
+        sort,
+      ),
+    [results, muted, sort],
   )
 
   const enabledCount = (plugins ?? []).filter((p) => p.enabled).length
@@ -435,25 +491,26 @@ export function Search() {
             size="sm"
           />
           <span className="flex-1" />
-          <span className="font-mono text-[10.5px] text-text-dimmer">sorted by seeds</span>
+          {/*
+            Off is the quick path: the hit starts downloading where the daemon
+            already puts things. On opens the same dialog the toolbar's Add
+            button opens, for a save path, a category, or starting it paused.
+
+            Named for what turning it on does, rather than for a mode. "Easy"
+            would describe the person rather than the behaviour, and a control
+            has to say what it changes.
+          */}
+          <Switch
+            checked={askBeforeAdding}
+            onChange={setAskBeforeAdding}
+            label="Set options before adding"
+          />
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-5">
         <Card title="Results" api="search/results" padding="none">
-          <div
-            className={cn(
-              'grid gap-2 border-b border-line bg-surface2 px-4 py-2',
-              'text-[9.5px] font-bold tracking-[0.08em] text-text-dimmer uppercase',
-              RESULT_COLUMNS,
-            )}
-          >
-            <span>Name</span>
-            <span className="text-right">Size</span>
-            <span className="text-right">Seeds</span>
-            <span className="text-right">Peers</span>
-            <span>Engine</span>
-          </div>
+          <ResultHeader sort={sort} onSort={setSort} />
 
           {shown.length === 0 ? (
             <div className="px-4 py-8">
@@ -490,11 +547,15 @@ export function Search() {
                 onToggle={() =>
                   setExpanded((prev) => (prev === result.fileUrl ? null : result.fileUrl))
                 }
-                onAdd={() =>
+                onAdd={() => {
+                  if (askBeforeAdding) {
+                    setPending(result.fileUrl)
+                    return
+                  }
                   void write('Add torrent', () => api.torrents.add({ urls: [result.fileUrl] }), {
                     announce: 'Torrent added',
                   })
-                }
+                }}
                 onCopyMagnet={() => void copy('magnet link', result.fileUrl)}
               />
             ))
@@ -544,6 +605,23 @@ export function Search() {
         onUninstall={(name) => void pluginWrite(() => api.search.uninstallPlugin([name]))}
         onCheckUpdates={() => void checkUpdates()}
       />
+
+      {/*
+        Mounted only while a hit is waiting, which is what makes the next one
+        open with empty fields rather than inheriting the last one's category.
+        The link is handed over as the magnet source, because the user has
+        already chosen which torrent; the dialog is for everything else.
+      */}
+      {pending !== null ? (
+        <AddTorrentDialog
+          initialSource="magnet"
+          initialMagnet={pending}
+          onClose={() => setPending(null)}
+          categories={categories}
+          tags={tags}
+          freeSpace={freeSpace}
+        />
+      ) : null}
     </div>
   )
 }
