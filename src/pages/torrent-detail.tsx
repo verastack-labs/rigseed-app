@@ -154,6 +154,17 @@ export function TorrentDetail() {
                 prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index],
               )
             }
+            // A folder ticks or unticks everything beneath it in one write,
+            // rather than one call per file. A Set because a folder can hold
+            // thousands of files and `includes` on an array would turn a
+            // single click into a quadratic scan.
+            onSelect={(indices, next) =>
+              setSelectedFiles((prev) => {
+                const changing = new Set(indices)
+                const kept = prev.filter((i) => !changing.has(i))
+                return next ? [...kept, ...indices] : kept
+              })
+            }
             onPriority={(indices, priority) => void applyPriority(indices, priority)}
           />
         ) : null}

@@ -4,8 +4,8 @@
     {
       "name": "rigseed-app",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 1420
+      "runtimeArgs": ["run", "dev", "--port", "5174", "--strictPort"],
+      "port": 5174
     }
   ]
 }
