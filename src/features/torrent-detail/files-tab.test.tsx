@@ -42,6 +42,7 @@ const base: FilesTabProps = {
   files,
   selected: [],
   onToggle: vi.fn(),
+  onSelect: vi.fn(),
   onPriority: vi.fn(),
 }
 
@@ -65,8 +66,8 @@ describe('FilesTab', () => {
     // The full path is on the title attribute. A column of rows all beginning
     // "ubuntu/" spends its width saying the same thing three times.
     setup()
-    expect(screen.getByText('artwork.tar.gz')).toBeInTheDocument()
-    expect(screen.getByTitle('ubuntu/extras/artwork.tar.gz')).toBeInTheDocument()
+    expect(screen.getByText('SHA256SUMS')).toBeInTheDocument()
+    expect(screen.getByTitle('ubuntu/SHA256SUMS')).toBeInTheDocument()
   })
 
   it('offers every priority the API accepts, including High', () => {
@@ -93,6 +94,9 @@ describe('FilesTab', () => {
   it('reflects each file’s current priority', () => {
     setup()
     expect(screen.getByLabelText('Priority for ubuntu.iso')).toHaveValue('7')
+    // It sits inside a folder that starts shut, so it has no row until the
+    // folder is opened.
+    fireEvent.click(screen.getByRole('button', { name: 'Expand extras' }))
     expect(screen.getByLabelText('Priority for artwork.tar.gz')).toHaveValue('0')
   })
 
@@ -114,63 +118,86 @@ describe('FilesTab', () => {
     expect(onPriority).toHaveBeenCalledWith([0, 2], 0)
   })
 
-  describe('indentation', () => {
-    it('puts the shallowest level flush, not one step in', () => {
-      // Almost every torrent wraps its files in a folder named after itself,
-      // and that folder has no row of its own. Measuring depth from the root
-      // indented every row against an invisible parent, so the column looked
-      // like it had failed to line up with its own header.
-      render(<FilesTab {...base} />)
-      const row = screen.getByText('ubuntu.iso').closest('div[style]')
-      expect(row).toHaveStyle({ paddingLeft: '0px' })
+  describe('the tree', () => {
+    it('opens the wrapper folder rather than starting on a single row', () => {
+      // Almost every torrent wraps everything in one folder named after
+      // itself. Leaving that shut would open the tab on one row repeating the
+      // title above it, with the contents a mandatory click away.
+      setup()
+      expect(screen.getByText('ubuntu')).toBeInTheDocument()
+      expect(screen.getByText('ubuntu.iso')).toBeInTheDocument()
     })
 
-    it('still steps in for real nesting', () => {
-      render(<FilesTab {...base} />)
-      const row = screen.getByText('artwork.tar.gz').closest('div[style]')
-      expect(row).toHaveStyle({ paddingLeft: '14px' })
-    })
-  })
-
-  describe('opening a file', () => {
-    const withPath = { ...base, savePath: 'C:/Downloads' }
-
-    it('opens on a single click, not a double one', () => {
-      openPath.mockClear()
-      render(<FilesTab {...withPath} />)
-      fireEvent.click(screen.getByText('ubuntu.iso'))
-      expect(openPath).toHaveBeenCalledWith('C:/Downloads/ubuntu/ubuntu.iso')
+    it('leaves a nested folder shut, its files absent rather than hidden', () => {
+      // Absent, not display:none. A torrent with thousands of files must not
+      // render thousands of rows to show ten.
+      setup()
+      expect(screen.getByText('extras')).toBeInTheDocument()
+      expect(screen.queryByText('artwork.tar.gz')).not.toBeInTheDocument()
     })
 
-    it('leaves the checkbox alone', () => {
-      // The row and the checkbox overlap, and a tick that also launched a
-      // video would make the list unusable.
-      openPath.mockClear()
-      render(<FilesTab {...withPath} />)
-      fireEvent.click(screen.getByRole('checkbox', { name: 'Select ubuntu.iso' }))
-      expect(openPath).not.toHaveBeenCalled()
+    it('opens and shuts a folder from the chevron in front of its name', () => {
+      setup()
+      fireEvent.click(screen.getByRole('button', { name: 'Expand extras' }))
+      expect(screen.getByText('artwork.tar.gz')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Collapse extras' }))
+      expect(screen.queryByText('artwork.tar.gz')).not.toBeInTheDocument()
     })
 
-    it('leaves the priority select alone', () => {
-      openPath.mockClear()
-      render(<FilesTab {...withPath} />)
-      fireEvent.click(screen.getByLabelText('Priority for ubuntu.iso'))
-      expect(openPath).not.toHaveBeenCalled()
+    it('tells a screen reader whether a folder is open', () => {
+      setup()
+      expect(screen.getByRole('button', { name: 'Expand extras' })).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      )
     })
 
-    it('does nothing without a save path to join to', () => {
-      openPath.mockClear()
-      render(<FilesTab {...base} />)
-      fireEvent.click(screen.getByText('ubuntu.iso'))
-      expect(openPath).not.toHaveBeenCalled()
+    it('steps every level in by one', () => {
+      setup()
+      expect(screen.getByText('ubuntu').closest('div[style]')).toHaveStyle({
+        paddingLeft: '0px',
+      })
+      expect(screen.getByText('ubuntu.iso').closest('div[style]')).toHaveStyle({
+        paddingLeft: '16px',
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Expand extras' }))
+      expect(screen.getByText('artwork.tar.gz').closest('div[style]')).toHaveStyle({
+        paddingLeft: '32px',
+      })
     })
-  })
 
-  it('reports a tick', () => {
-    const onToggle = vi.fn()
-    setup({ onToggle })
-    fireEvent.click(screen.getByLabelText('Select SHA256SUMS'))
-    expect(onToggle).toHaveBeenCalledWith(2)
+    it('sorts folders above files', () => {
+      // The API returns them in torrent order, so directories and loose files
+      // used to interleave.
+      setup()
+      const names = screen.getAllByTitle(/^ubuntu/).map((n) => n.textContent)
+      expect(names.slice(0, 3)).toEqual(['ubuntu', 'extras', 'SHA256SUMS'])
+    })
+
+    it('ticks every file beneath a folder in one write', () => {
+      // Not one call per file: a folder can hold thousands, and whether they
+      // all land would depend on how the owner happens to update its state.
+      const onSelect = vi.fn()
+      setup({ onSelect })
+      fireEvent.click(screen.getByLabelText('Select extras'))
+      expect(onSelect).toHaveBeenCalledWith([1], true)
+    })
+
+    it('repriorises everything beneath a folder at once', () => {
+      const onPriority = vi.fn()
+      setup({ onPriority })
+      fireEvent.change(screen.getByLabelText('Priority for extras'), {
+        target: { value: '7' },
+      })
+      expect(onPriority).toHaveBeenCalledWith([1], 7)
+    })
+
+    it('says Mixed rather than claiming one of the priorities it holds', () => {
+      // ubuntu contains 7, 0 and 1. Showing any one of them would assert the
+      // others are that too, and the next change would silently flatten them.
+      setup()
+      expect(screen.getByLabelText('Priority for ubuntu')).toHaveValue('')
+    })
   })
 })
 

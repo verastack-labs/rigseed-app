@@ -105,9 +105,12 @@ describe('flattenTree', () => {
   it('reveals a nested folder only once its parent is open too', () => {
     // Expanding a child whose parent is shut must not teleport rows to the top.
     expect(flattenTree(tree, new Set(['Ubuntu/docs'])).map((r) => r.node.name)).toEqual(['Ubuntu'])
-    expect(
-      flattenTree(tree, new Set(['Ubuntu', 'Ubuntu/docs'])).map((r) => r.node.name),
-    ).toEqual(['Ubuntu', 'docs', 'readme.txt', 'ubuntu.iso'])
+    expect(flattenTree(tree, new Set(['Ubuntu', 'Ubuntu/docs'])).map((r) => r.node.name)).toEqual([
+      'Ubuntu',
+      'docs',
+      'readme.txt',
+      'ubuntu.iso',
+    ])
   })
 
   it('reports the depth each row sits at, for the indent', () => {
