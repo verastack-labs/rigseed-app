@@ -32,6 +32,15 @@ export interface AddTorrentDialogProps {
   onClose: () => void
   /** Which control opened it, so the right source starts selected. */
   initialSource?: Source
+  /**
+   * Links the dialog opens with, one per line.
+   *
+   * Search opens this with the hit already chosen, so retyping a magnet the
+   * user just clicked would be the whole point of the dialog inverted. It is
+   * an initial value rather than a controlled one: the field is theirs to edit
+   * once it is on screen.
+   */
+  initialMagnet?: string
   categories: readonly string[]
   tags: readonly string[]
   freeSpace: number
@@ -66,6 +75,7 @@ function magnetLinks(raw: string): string[] {
 export function AddTorrentDialog({
   onClose,
   initialSource = 'file',
+  initialMagnet = '',
   categories,
   tags,
   freeSpace,
@@ -79,7 +89,7 @@ export function AddTorrentDialog({
   const [file, setFile] = useState<File | null>(null)
   const [meta, setMeta] = useState<TorrentMeta | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
-  const [magnet, setMagnet] = useState('')
+  const [magnet, setMagnet] = useState(initialMagnet)
   const [savePath, setSavePath] = useState(defaultSavePath)
   const [category, setCategory] = useState('')
   const [chosenTags, setChosenTags] = useState<string[]>([])

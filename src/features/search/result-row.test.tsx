@@ -2,6 +2,12 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ResultRow } from '@/features/search/result-row'
+
+const openUrl = vi.fn<(url: string) => Promise<void>>(() => Promise.resolve())
+vi.mock('@/services/shell', () => ({
+  canReachDesktop: () => true,
+  openUrl: (url: string) => openUrl(url),
+}))
 import type { SearchResult } from '@/types/qbittorrent'
 
 const result: SearchResult = {
@@ -82,15 +88,27 @@ describe('ResultRow', () => {
     expect(screen.getByText(/Nobody is sharing this right now./)).toBeInTheDocument()
   })
 
-  it('opens the description page in a new tab, safely', () => {
+  // This was an anchor with target="_blank", which does nothing in a Tauri
+  // window: there is no tab strip to open a tab in. It looked like a link,
+  // took the click, and went nowhere.
+  it('hands the description page to the system browser', () => {
+    openUrl.mockClear()
     setup({ expanded: true })
-    const link = screen.getByRole('link', { name: 'Description page' })
-    expect(link).toHaveAttribute('target', '_blank')
-    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Description page' }))
+
+    expect(openUrl).toHaveBeenCalledWith('https://linuxtracker.org/x')
   })
 
-  it('leaves the description link out when there is none', () => {
-    setup({ expanded: true, result: { ...result, descrLink: '' } })
+  it('never navigates the app window itself', () => {
+    setup({ expanded: true })
+    // An anchor here would strand somebody on a tracker's page inside a window
+    // with no address bar and no way back.
     expect(screen.queryByRole('link', { name: 'Description page' })).not.toBeInTheDocument()
+  })
+
+  it('leaves the description control out when there is no link', () => {
+    setup({ expanded: true, result: { ...result, descrLink: '' } })
+    expect(screen.queryByRole('button', { name: 'Description page' })).not.toBeInTheDocument()
   })
 })

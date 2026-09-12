@@ -21,6 +21,8 @@ export interface TorrentActions {
   onForceStart: (hashes: readonly string[], value: boolean) => void
   /** Saves the torrent's own .torrent file, via a dialog and a Rust write. */
   onSaveTorrentFile: (torrent: Torrent) => void
+  /** Opens the move dialog. The daemon does the move, not the app. */
+  onMove: (torrent: Torrent) => void
 }
 
 /**
@@ -113,6 +115,17 @@ function menuItems(torrent: Torrent, actions: TorrentActions) {
       label: 'Share limits…',
       icon: <icons.scale className="size-[13px]" strokeWidth={2} />,
       onSelect: () => actions.onShareLimits(torrent),
+    },
+    /*
+     * Not inside the desktop-only block below. The daemon performs the move,
+     * so this works perfectly well against an instance on another machine;
+     * gating it on a local desktop would remove it from exactly the setup
+     * where somebody is most likely to have put files in the wrong place.
+     */
+    {
+      label: 'Move files…',
+      icon: <icons.folder className="size-[13px]" strokeWidth={2} />,
+      onSelect: () => actions.onMove(torrent),
     },
     { separator: true as const },
     {

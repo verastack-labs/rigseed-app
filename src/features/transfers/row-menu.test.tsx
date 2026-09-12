@@ -30,6 +30,7 @@ const actions: TorrentActions = {
   onShareLimits: vi.fn(),
   onForceStart: vi.fn(),
   onSaveTorrentFile: vi.fn(),
+  onMove: vi.fn(),
 }
 
 /** A card, because RowMenu finds its right-click target by climbing to one. */
@@ -156,7 +157,11 @@ describe('the items that were not there', () => {
     inACard()
     fireEvent.click(screen.getByRole('button', { name: `Actions for ${torrent.name}` }))
     const labels = screen.getAllByRole('menuitem').map((i) => i.textContent?.trim())
-    expect(labels.filter((l) => l?.endsWith('…'))).toEqual(['Speed limits…', 'Share limits…'])
+    expect(labels.filter((l) => l?.endsWith('…'))).toEqual([
+      'Speed limits…',
+      'Share limits…',
+      'Move files…',
+    ])
   })
 })
 
