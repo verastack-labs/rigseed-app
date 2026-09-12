@@ -9,7 +9,7 @@
 Install it, open it, add a torrent. No server to set up, no WebUI to configure,
 no separate qBittorrent install to keep in step.
 
-![version](https://img.shields.io/badge/version-0.1.1-4E7C9B?style=flat-square)
+![version](https://img.shields.io/badge/version-0.1.2-4E7C9B?style=flat-square)
 ![platform](https://img.shields.io/badge/platform-Windows%20·%20macOS%20·%20Linux-2E343D?style=flat-square)
 ![tauri](https://img.shields.io/badge/Tauri-2.11-24C8DB?style=flat-square)
 ![react](https://img.shields.io/badge/React-19.2-58C4DC?style=flat-square)
