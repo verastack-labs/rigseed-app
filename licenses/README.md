@@ -82,18 +82,33 @@ binary is offered. **If this repository is ever made private again, the release 
 being sufficient on their own** and the build scripts have to be attached to the release
 instead.
 
-### Still open: the sidecar's own dependencies
+### The sidecar's own dependencies: collected
 
-`qbittorrent-nox` links Qt, libtorrent-rasterbar, Boost, OpenSSL and zlib, and the Qt
-libraries are redistributed inside the installer alongside it. `licenses/qbittorrent/`
-holds the GPL texts and qBittorrent's own `COPYING`; it does **not** yet hold the licence
-texts of those five, and it should, because we ship their compiled output.
+Was open through v0.1.3. `qbittorrent-nox` links Qt, libtorrent-rasterbar, Boost, OpenSSL
+and zlib, and rigseed shipped none of their licence texts. libtorrent's BSD-3-Clause asks
+in as many words that a binary distribution reproduce its notice, so this was an unmet
+obligation rather than an untidiness.
 
-Qt is the pressing one, since `Qt6Core`, `Qt6Network`, `Qt6Sql` and `Qt6Xml` are physically
-in the bundle. Qt Base under LGPLv3 carries relinking obligations that the others do not.
+`THIRD-PARTY.md` is now the index, the texts sit in one directory each, and `release.yml`
+attaches all of them with a guard that fails the build if any is missing or empty.
 
-Flagged rather than solved. The versions to collect for are the ones pinned in
-`sidecar.json`.
+Two things were learned collecting them, both of which would have made a guess wrong:
+
+- **What ships differs by platform, and the build scripts do not say so plainly.** The list
+  came from the published runtime bundles instead. macOS redistributes OpenSSL as
+  `libssl.3` and `libcrypto.3`; Windows links it statically; Linux uses the system's and
+  redistributes none. Linux alone carries ICU, pulled in by Qt, and a fifth Qt library,
+  DBus, that the other two do not. The earlier note here named four Qt libraries.
+- **Static linking is still redistribution.** libtorrent, Boost and zlib appear in no file
+  listing because they are inside the executable. The notice is owed all the same.
+
+Qt is the one with a requirement beyond a text file. LGPLv3 wants a user able to replace
+the Qt libraries with their own build. rigseed satisfies that by linking Qt **dynamically**
+and shipping it as separate shared libraries, so the replacement is swapping a file and
+nothing needs relinking. `THIRD-PARTY.md` records where those files are on each platform.
+
+The versions tracked are the ones pinned in `sidecar.json`. Changing that file changes
+these.
 
 ## Fonts
 
