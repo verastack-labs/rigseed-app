@@ -31,11 +31,16 @@ import {
 } from '@/services/search'
 import { notify } from '@/state/notice-store'
 import { useSearchJob } from '@/state/use-search-job'
+import {
+  readAskPreference,
+  shouldAskBeforeAdding,
+  writeAskPreference,
+} from '@/features/search/add-behaviour'
+import { useThemeStore } from '@/state/theme-store'
 import { useTorrentStore } from '@/state/torrent-store'
 import type { SearchPlugin } from '@/types/qbittorrent'
 
 /** Where the "set options before adding" preference is remembered. */
-const ASK_KEY = 'rigseed:search:ask-before-adding'
 
 const CATEGORIES = [
   { value: 'all', label: 'All' },
@@ -103,27 +108,35 @@ export function Search() {
   const [pending, setPending] = useState<string | null>(null)
 
   /*
-   * Remembered, because it is a working preference rather than a per-search
-   * choice: somebody who wants to pick a save path wants to pick one every
-   * time, and somebody who does not never wants to be asked. Reading is
-   * wrapped because a browser with storage blocked throws here rather than
-   * returning null, and losing the page to a preference would be a poor trade.
+   * Whether adding a hit stops at the dialog first.
+   *
+   * The default follows the layout the visitor chose at setup, because that
+   * choice already said how much detail they want put in front of them. Easy
+   * is the one that asks for fewer decisions, so it adds straight away; Grid
+   * and List are the denser views and get the dialog, with its save path,
+   * category and start-paused.
+   *
+   * It defaulted to plain `false` before, so every layout skipped the dialog
+   * and somebody on List had to find a switch to get back the behaviour their
+   * layout already implied.
+   *
+   * The switch below still wins, and only once it has actually been used.
+   * Storage holding null means untouched, which is what lets the layout drive
+   * it; the old version wrote the default into storage on mount, so the answer
+   * froze on first visit and changing layout afterwards did nothing. Reads and
+   * writes are wrapped because a browser with storage blocked throws here
+   * rather than returning null, and losing the page to a preference would be a
+   * poor trade.
    */
-  const [askBeforeAdding, setAskBeforeAdding] = useState(() => {
-    try {
-      return localStorage.getItem(ASK_KEY) === 'true'
-    } catch {
-      return false
-    }
-  })
+  const defaultLayout = useThemeStore((st) => st.defaultLayout)
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(ASK_KEY, String(askBeforeAdding))
-    } catch {
-      // The choice still holds for this session, which is the part that matters.
-    }
-  }, [askBeforeAdding])
+  const [askOverride, setAskOverride] = useState<boolean | null>(readAskPreference)
+  const askBeforeAdding = shouldAskBeforeAdding(askOverride, defaultLayout)
+
+  const setAskBeforeAdding = (next: boolean) => {
+    setAskOverride(next)
+    writeAskPreference(next)
+  }
   const [failure, setFailure] = useState<string | null>(null)
 
   const categories = useTorrentStore(useShallow((st) => Object.keys(st.categories)))
@@ -495,6 +508,10 @@ export function Search() {
             Off is the quick path: the hit starts downloading where the daemon
             already puts things. On opens the same dialog the toolbar's Add
             button opens, for a save path, a category, or starting it paused.
+
+            It starts wherever the chosen layout implies and stays where it is
+            put after that, so this is an override rather than the only way to
+            get a sensible answer.
 
             Named for what turning it on does, rather than for a mode. "Easy"
             would describe the person rather than the behaviour, and a control
