@@ -39,12 +39,43 @@ jobs:
       - name: Bundle the licence texts that ship with the app
         run: |
           set -euo pipefail
+
+          # rigseed's own, and the things it bundles directly.
           cp licenses/fonts/Inter-OFL.txt            dist/licences/
           cp licenses/fonts/JetBrainsMono-OFL.txt    dist/licences/
           cp licenses/lucide/ISC.txt                 dist/licences/lucide-ISC.txt
           cp LICENSE                                 dist/licences/rigseed-LICENSE-Apache-2.0.txt
           cp NOTICE                                  dist/licences/rigseed-NOTICE.txt
+
+          # The sidecar's own dependencies, whose compiled output we
+          # redistribute. Which of these ships in which installer differs by
+          # platform, and the release is one page for all three, so all of them
+          # are attached and THIRD-PARTY.md says which applies where.
+          cp licenses/THIRD-PARTY.md                 dist/licences/
+          cp licenses/qt/LGPL-3.0-only.txt           dist/licences/qt-LGPL-3.0-only.txt
+          cp licenses/qt/GPL-3.0-only.txt            dist/licences/qt-GPL-3.0-only.txt
+          cp licenses/icu/LICENSE.txt                dist/licences/icu-LICENSE.txt
+          cp licenses/openssl/LICENSE.txt            dist/licences/openssl-LICENSE-Apache-2.0.txt
+          cp licenses/boost/LICENSE_1_0.txt          dist/licences/boost-LICENSE-1.0.txt
+          cp licenses/libtorrent/LICENSE.txt         dist/licences/libtorrent-LICENSE-BSD-3-Clause.txt
+          cp licenses/zlib/LICENSE.txt               dist/licences/zlib-LICENSE.txt
+
           ls -la dist/licences
+
+      # A missing cp above is a silent omission: the release still publishes,
+      # and nobody notices the obligation was dropped until somebody asks for
+      # the text. Named explicitly so the build fails instead.
+      - name: Check every third-party licence text is present
+        run: |
+          set -euo pipefail
+          missing=0
+          for f in THIRD-PARTY.md                    qt-LGPL-3.0-only.txt qt-GPL-3.0-only.txt icu-LICENSE.txt                    openssl-LICENSE-Apache-2.0.txt boost-LICENSE-1.0.txt                    libtorrent-LICENSE-BSD-3-Clause.txt zlib-LICENSE.txt                    Inter-OFL.txt JetBrainsMono-OFL.txt lucide-ISC.txt                    rigseed-LICENSE-Apache-2.0.txt rigseed-NOTICE.txt; do
+            if [ ! -s "dist/licences/$f" ]; then
+              echo "::error::licence text missing or empty: $f"
+              missing=1
+            fi
+          done
+          [ "$missing" = "0" ]
 
       - uses: actions/upload-artifact@v4
         with:
