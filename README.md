@@ -9,12 +9,12 @@
 Install it, open it, add a torrent. No server to set up, no WebUI to configure,
 no separate qBittorrent install to keep in step.
 
-![version](https://img.shields.io/badge/version-0.1.2-4E7C9B?style=flat-square)
+![version](https://img.shields.io/badge/version-0.1.3-4E7C9B?style=flat-square)
 ![platform](https://img.shields.io/badge/platform-Windows%20·%20macOS%20·%20Linux-2E343D?style=flat-square)
 ![tauri](https://img.shields.io/badge/Tauri-2.11-24C8DB?style=flat-square)
 ![react](https://img.shields.io/badge/React-19.2-58C4DC?style=flat-square)
 ![rust](https://img.shields.io/badge/Rust-1.77+-B7410E?style=flat-square)
-![tests](https://img.shields.io/badge/tests-950%20+%2030-5E8C63?style=flat-square)
+![tests](https://img.shields.io/badge/tests-1001%20+%2030-5E8C63?style=flat-square)
 ![licence](https://img.shields.io/badge/licence-Apache--2.0-8E5A42?style=flat-square)
 
 </div>
@@ -38,6 +38,20 @@ layer.
 | **The API is visible** | Every screen prints the endpoints it exercises in mono. The audience is technical, and it doubles as living documentation. |
 | **Its own profile** | The bundled daemon runs under `--profile`, so it never touches a qBittorrent you already have. |
 | **Or point at your own** | Remote instances are a first-class mode, not an afterthought. |
+
+## What people who are not me have said
+
+> **I was REALLY trying to find something that bugs me or irritates or is somewhat
+> not working… found pretty much nothing.**
+>
+> Everything in my experience on my Debian machine has been FLAWLESS.
+>
+> — [**Artto Aunap**](https://artto.name), GNU/Linux automation developer
+
+The first test of rigseed by somebody other than its author, run on Debian.
+Quoted with permission, verbatim, capitals and all. He also found one layout
+fault in the speed limits dialog, which is the half of the report that was
+actually worth having.
 
 ## How the daemon works
 
