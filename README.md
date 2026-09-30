@@ -39,7 +39,7 @@ layer.
 | **Its own profile** | The bundled daemon runs under `--profile`, so it never touches a qBittorrent you already have. |
 | **Or point at your own** | Remote instances are a first-class mode, not an afterthought. |
 
-## What people who are not me have said
+## What a tester said
 
 > **I was REALLY trying to find something that bugs me or irritates or is somewhat
 > not working… found pretty much nothing.**
@@ -48,10 +48,7 @@ layer.
 >
 > — [**Artto Aunap**](https://artto.name), GNU/Linux automation developer
 
-The first test of rigseed by somebody other than its author, run on Debian.
-Quoted with permission, verbatim, capitals and all. He also found one layout
-fault in the speed limits dialog, which is the half of the report that was
-actually worth having.
+Quoted with permission, verbatim.
 
 ## How the daemon works
 
