@@ -12,6 +12,9 @@ import { SettingRow } from '@/features/settings/setting-row'
 import { askForAlerts } from '@/services/desktop-alert'
 import { useAlertStore } from '@/state/alert-store'
 import { useWindowPrefs } from '@/state/window-prefs'
+import { UpdateCard } from '@/features/updates/update-card'
+import { useTorrentStore } from '@/state/torrent-store'
+import { isActive } from '@/utils/format'
 import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { canReachDesktop, pickFolder } from '@/services/shell'
@@ -140,6 +143,17 @@ export function Settings() {
 
   const alerts = useAlertStore()
   const windowPrefs = useWindowPrefs()
+
+  /*
+   * What a restart would actually interrupt, for the update card's warning.
+   *
+   * Active rather than merely unpaused, which is the same reading the status
+   * filter uses: a torrent moving no bytes loses nothing to a restart, so
+   * counting it would inflate a caution people are meant to take seriously.
+   */
+  const activeTransfers = useTorrentStore(
+    (st) => Object.values(st.torrents).filter(isActive).length,
+  )
   /**
    * Turning one on is what asks the operating system, never startup.
    *
@@ -648,6 +662,8 @@ export function Settings() {
 
             {section === 'app' ? (
               <>
+                <UpdateCard currentVersion={__APP_VERSION__} activeTransfers={activeTransfers} />
+
                 <Card title="Closing the window" api="this machine" padding="none">
                   <SettingRow
                     label="When the close button is pressed"
