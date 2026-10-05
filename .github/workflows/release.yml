@@ -189,8 +189,38 @@ jobs:
             ~/AppData/Local/tauri
           key: tauri-bundler-${{ matrix.label }}-v1
 
+      # createUpdaterArtifacts signs at build time, so a missing key does not
+      # produce unsigned archives: it fails the bundler partway through a build
+      # that takes many minutes. Checked first, by name, so the failure says
+      # which secret is missing rather than surfacing as a bundler error.
+      - name: Confirm the updater signing key is present
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY is not set. tauri.conf.json has createUpdaterArtifacts enabled, so the build cannot sign the updater archives. Add the secret, or turn createUpdaterArtifacts off."
+            exit 1
+          fi
+          # Warned rather than failed, because a key generated without a
+          # password legitimately needs no secret here. For a key that does
+          # have one, the bundler fails later with "Wrong password for that
+          # key", and this line sitting above it in the log is the difference
+          # between that being obvious and being a mystery.
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" ]; then
+            echo "::warning::TAURI_SIGNING_PRIVATE_KEY_PASSWORD is empty. That is correct only if the signing key was generated without a password. If it has one, the bundler will fail with 'Wrong password for that key'."
+          fi
+          echo "signing key present"
+
       - name: Build the bundles
         run: pnpm run app:build
+        env:
+          # Read by the bundler to sign the updater archives. Only the public
+          # half of this keypair is committed, in tauri.conf.json.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       # Unsigned on every platform for this release, which is a deliberate
       # choice recorded in the release notes rather than an oversight. Checksums
@@ -205,6 +235,18 @@ jobs:
             \( -name '*.msi' -o -name '*-setup.exe' -o -name '*.dmg' \
                -o -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) \
             -type f -exec cp {} dist/bundles/ \;
+
+          # The updater's own artifacts, which are not installers: one archive
+          # per platform and a .sig beside each. Kept apart from dist/bundles so
+          # the "at least one installer exists" check cannot be satisfied by an
+          # archive, which would let a release publish with no installer in it.
+          mkdir -p dist/updater
+          find src-tauri/target/release/bundle \
+            -type f \( -name '*.tar.gz' -o -name '*.tar.gz.sig' \
+                    -o -name '*.nsis.zip' -o -name '*.nsis.zip.sig' \) \
+            -exec cp {} dist/updater/ \; || true
+          echo "updater artifacts for ${{ matrix.label }}:"
+          ls -la dist/updater || true
           if [ -z "$(ls -A dist/bundles)" ]; then
             echo "::error::no bundles produced for ${{ matrix.label }}"
             exit 1
@@ -232,6 +274,13 @@ jobs:
           path: dist/bundles/
           retention-days: 90
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: updater-${{ matrix.label }}
+          path: dist/updater/
+          retention-days: 90
+          if-no-files-found: error
+
   publish:
     name: Attach assets to the release
     # Both, so the release page can never carry a binary without the source that
@@ -249,6 +298,78 @@ jobs:
           pattern: bundles-*
           merge-multiple: true
           path: dist/bundles
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: updater-*
+          merge-multiple: true
+          path: dist/updater
+
+      # The file every installed copy polls. Tauri reads it, compares the
+      # version against its own, and verifies the archive it names against the
+      # signature here using the public key compiled into the app.
+      #
+      # Assembled rather than hand-written, because a signature pasted by hand
+      # that does not match its archive fails on the user's machine and nowhere
+      # else: the build is green, the release looks complete, and every update
+      # silently refuses to apply.
+      - name: Assemble the updater manifest
+        shell: bash
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          base="https://github.com/$REPO/releases/download/$TAG"
+
+          # The release body, when a human has already written it. A draft that
+          # has only the workflow's placeholder contributes nothing, so the app
+          # links out instead of printing "Draft. Assets attached by the
+          # release workflow." as though it were a changelog.
+          notes="See https://github.com/$REPO/releases/tag/$TAG for what changed."
+          body=$(gh release view "$TAG" --repo "$REPO" --json body -q .body 2>/dev/null || true)
+          case "$body" in
+            ''|'Draft. Assets attached by the release workflow.') ;;
+            *) notes="$body" ;;
+          esac
+
+          platforms='{}'
+          add() {
+            # $1 = Tauri platform key, $2 = filename glob
+            local key="$1" glob="$2" file sig
+            file=$(find dist/updater -type f -name "$glob" ! -name '*.sig' | head -1)
+            if [ -z "$file" ]; then
+              echo "::warning::no updater archive for $key (looked for $glob)"
+              return
+            fi
+            sig="$file.sig"
+            if [ ! -s "$sig" ]; then
+              echo "::error::$file has no signature beside it. The bundler signs these, so an archive without one means the signing key was wrong or absent."
+              exit 1
+            fi
+            platforms=$(jq -n --argjson p "$platforms" --arg k "$key" \
+              --arg sig "$(cat "$sig")" --arg url "$base/$(basename "$file")" \
+              '$p + {($k): {signature: $sig, url: $url}}')
+            echo "  $key -> $(basename "$file")"
+          }
+
+          echo "platforms in this manifest:"
+          add "windows-x86_64" '*.nsis.zip'
+          add "darwin-aarch64" '*.app.tar.gz'
+          add "linux-x86_64"   '*.AppImage.tar.gz'
+
+          if [ "$(jq 'length' <<<"$platforms")" -eq 0 ]; then
+            echo "::error::no updater archives at all, refusing to publish a manifest that offers nothing"
+            exit 1
+          fi
+
+          jq -n --arg v "$version" --arg n "$notes" \
+                --arg d "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson p "$platforms" \
+                '{version: $v, notes: $n, pub_date: $d, platforms: $p}' \
+            > dist/updater/latest.json
+
+          cat dist/updater/latest.json
 
       - name: Confirm the source archive is present before publishing
         run: |
@@ -300,6 +421,10 @@ jobs:
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          gh release upload "$TAG" dist/licences/* dist/bundles/* \
+          # dist/updater carries latest.json, the per-platform archives it
+          # names, and a .sig for each. The manifest URLs point at this
+          # release, so the archives have to be attached here or every update
+          # resolves to a 404 the app can only report as a failed download.
+          gh release upload "$TAG" dist/licences/* dist/bundles/* dist/updater/* \
             --repo "${{ github.repository }}" --clobber
-          echo "attached the installers and the compliance bundle to $TAG"
+          echo "attached the installers, the compliance bundle and the updater manifest to $TAG"

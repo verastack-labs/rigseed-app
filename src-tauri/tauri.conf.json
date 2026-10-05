@@ -30,6 +30,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "externalBin": ["binaries/qbittorrent-nox"],
     "icon": [
       "icons/32x32.png",
@@ -40,6 +41,17 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM0QjI2NTIyNkJEODM0RTMKUldUak5OaHJJbVd5TkZxTit3bDZZOS8wd3A2aStZOUswcldEcGpHRmJyZ2tUL3QxWlNxTkFzSzgK",
+      "endpoints": [
+        "https://github.com/verastack-labs/rigseed-app/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }
