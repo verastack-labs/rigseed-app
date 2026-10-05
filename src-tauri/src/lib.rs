@@ -370,6 +370,27 @@ pub fn run() {
             tray::quit_app
         ])
         .setup(|app| {
+            // Desktop only, behind the same cfg the dependency carries: a
+            // plugin registered on a target that does not have it is a link
+            // error rather than a no-op.
+            //
+            // Registered here rather than as another `.plugin()` in the chain
+            // because both of these are added at runtime from a handle, and
+            // because a second `.setup()` would not run: the builder replaces
+            // the closure rather than chaining, so the first one written
+            // silently disappears.
+            //
+            // Both stay inert until an endpoint and a public key exist in the
+            // Tauri config. `check()` then fails with a configuration error
+            // the caller reports plainly, which is what lets this ship ahead
+            // of the signing key.
+            #[cfg(desktop)]
+            {
+                app.handle()
+                    .plugin(tauri_plugin_updater::Builder::new().build())?;
+                app.handle().plugin(tauri_plugin_process::init())?;
+            }
+
             if let Some(window) = app.get_webview_window("main") {
                 fit_within_screen(&window);
             }
