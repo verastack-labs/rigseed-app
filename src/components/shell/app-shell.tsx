@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Menu } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router'
 
@@ -17,6 +17,7 @@ import { useConnection } from '@/services/api-context'
 import { useTorrentStore } from '@/state/torrent-store'
 import { useThemeAttributes } from '@/state/use-theme-attributes'
 import { useWindowIcon } from '@/state/use-window-icon'
+import { updateNeedsAttention, useUpdateStore } from '@/state/update-store'
 
 const DESTINATIONS = [
   { to: '/', label: 'Transfers', Icon: icons.transfers, breadcrumb: undefined },
@@ -54,6 +55,28 @@ export function AppShell() {
   // Live, from the poll loop. The connection state only knows how startup went.
   const reachable = useTorrentStore((s) => s.reachable)
 
+  /*
+   * One quiet look for a newer version, per launch.
+   *
+   * In an effect with an empty dependency list, not on a timer and not on
+   * every navigation: this asks a remote server, and asking it repeatedly
+   * because somebody moved between screens would be rude to them and to us.
+   * The store refuses a second run anyway, so a double invoke in StrictMode
+   * costs nothing.
+   *
+   * Nothing is shown when it finds something. The result is a dot on the rail
+   * and a filled-in card in Settings for whenever somebody goes looking. An
+   * update is not a live thing, and interrupting a running transfer to
+   * announce one would be the application talking about itself over the work
+   * it is supposed to be doing.
+   */
+  const checkQuietly = useUpdateStore((s) => s.checkQuietly)
+  useEffect(() => {
+    void checkQuietly()
+  }, [checkQuietly])
+
+  const updateWaiting = useUpdateStore((s) => updateNeedsAttention(s.state))
+
 
   return (
     <div className="bg-bg flex h-full">
@@ -82,8 +105,25 @@ export function AppShell() {
           >
             {({ isActive }) => (
               <RailItem
-                icon={<d.Icon className="size-[17px]" strokeWidth={2} />}
-                label={d.label}
+                icon={
+                  <span className="relative inline-flex">
+                    <d.Icon className="size-[17px]" strokeWidth={2} />
+                    {/*
+                      The whole announcement. A dot on the destination that can
+                      do something about it, rather than a banner over the
+                      screen somebody is using. It is drawn with a ring in the
+                      rail's own background so it reads as sitting on the icon
+                      at either rail width.
+                    */}
+                    {d.to === '/settings' && updateWaiting ? (
+                      <span
+                        aria-hidden="true"
+                        className="bg-accent ring-sidebar absolute -top-0.5 -right-0.5 size-[7px] rounded-full ring-2"
+                      />
+                    ) : null}
+                  </span>
+                }
+                label={d.to === '/settings' && updateWaiting ? `${d.label} (update available)` : d.label}
                 active={isActive}
                 expanded={railExpanded}
               />
