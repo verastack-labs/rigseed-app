@@ -2,6 +2,18 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath, URL } from 'node:url'
+import { createRequire } from 'node:module'
+
+/*
+ * One version number, the same one the bundler uses.
+ *
+ * tauri.conf.json already points its version at package.json rather than
+ * repeating it, so the app reads it from the same place. Taking it from Tauri's
+ * getVersion() instead would mean the number is unavailable in the browser dev
+ * server, where there is no Tauri to ask, and that is exactly where the update
+ * card gets looked at most.
+ */
+const pkg = createRequire(import.meta.url)('./package.json') as { version: string }
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_')
@@ -21,6 +33,9 @@ export default defineConfig(({ mode }) => {
   const daemon = env['VITE_QBT_URL']
 
   return {
+    define: {
+      __APP_VERSION__: JSON.stringify(pkg.version),
+    },
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

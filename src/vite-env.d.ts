@@ -20,4 +20,13 @@ declare global {
     readonly VITE_QBT_USER?: string
     readonly VITE_QBT_PASS?: string
   }
+
+  /**
+   * Injected by vite from package.json. See the define in vite.config.ts.
+   *
+   * Inside `declare global` for the same reason the interface above is: this
+   * file imports, so it is a module, and a bare `declare const` here would be
+   * scoped to it and invisible to every file that actually uses the constant.
+   */
+  const __APP_VERSION__: string
 }
