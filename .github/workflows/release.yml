@@ -197,11 +197,20 @@ jobs:
         shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
             echo "::error::TAURI_SIGNING_PRIVATE_KEY is not set. tauri.conf.json has createUpdaterArtifacts enabled, so the build cannot sign the updater archives. Add the secret, or turn createUpdaterArtifacts off."
             exit 1
+          fi
+          # Warned rather than failed, because a key generated without a
+          # password legitimately needs no secret here. For a key that does
+          # have one, the bundler fails later with "Wrong password for that
+          # key", and this line sitting above it in the log is the difference
+          # between that being obvious and being a mystery.
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" ]; then
+            echo "::warning::TAURI_SIGNING_PRIVATE_KEY_PASSWORD is empty. That is correct only if the signing key was generated without a password. If it has one, the bundler will fail with 'Wrong password for that key'."
           fi
           echo "signing key present"
 
