@@ -10,6 +10,8 @@
     "shell:allow-execute",
     "store:default",
     "notification:default",
+    "updater:default",
+    "process:allow-restart",
     {
       "identifier": "opener:allow-open-path",
       "allow": [{ "path": "**" }]
