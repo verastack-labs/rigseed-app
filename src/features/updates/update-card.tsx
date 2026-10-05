@@ -3,7 +3,7 @@ import { Card } from '@/components/ui/card'
 import { ProgressBar } from '@/components/ui/progress-bar'
 import { SettingRow } from '@/features/settings/setting-row'
 import { describeFailure, restartWarning } from '@/features/updates/update-status'
-import { useUpdate } from '@/features/updates/use-update'
+import { useUpdateStore } from '@/state/update-store'
 import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { formatBytes } from '@/utils/format'
@@ -37,7 +37,13 @@ export interface UpdateCardProps {
  * is a third button that stays unpressed until it suits the person reading it.
  */
 export function UpdateCard({ currentVersion, activeTransfers }: UpdateCardProps) {
-  const { state, checkNow, install, restart, dismiss } = useUpdate()
+  // One store, because the rail marker shows the same thing. Two copies of
+  // this state would let the card and the dot disagree about what happened.
+  const state = useUpdateStore((s) => s.state)
+  const checkNow = useUpdateStore((s) => s.checkNow)
+  const install = useUpdateStore((s) => s.install)
+  const restart = useUpdateStore((s) => s.restart)
+  const dismiss = useUpdateStore((s) => s.dismiss)
   const busy = state.kind === 'checking' || state.kind === 'downloading'
 
   return (
