@@ -45,11 +45,21 @@ tauri-plugin-dialog = "2.7.2"
 # platform whose store owns installation, and declaring it unconditionally
 # fails the mobile target rather than being ignored there.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
-tauri-plugin-updater = "2"
+# Pinned to a minor, not just "2".
+#
+# The Tauri CLI refuses to build when a plugin's Rust crate and its npm package
+# are on different minors, and a bare "2" resolves to whatever the registry has
+# while pnpm resolves the JS half independently. The two drifted apart the
+# moment they were added: the crate came out at 2.12.0 against a 2.13.1 package,
+# and all three platform builds failed with a version mismatch.
+#
+# `cargo check` and the test suite never run the Tauri CLI, so nothing before a
+# release build can catch this. Keep these aligned with package.json by hand.
+tauri-plugin-updater = "2.13"
 # Applying an update restarts the app. `process` is what performs that
 # restart; without it the update lands and the running copy is still the old
 # one until somebody closes it by hand.
-tauri-plugin-process = "2"
+tauri-plugin-process = "2.4"
 
 [dev-dependencies]
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros"] }
