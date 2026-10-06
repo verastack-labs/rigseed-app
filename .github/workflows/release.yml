@@ -318,6 +318,13 @@ jobs:
     needs: [compliance-assets, build-app]
     runs-on: ubuntu-latest
     steps:
+      # Only for the changelog below. The job otherwise works entirely from
+      # the artifacts the build jobs uploaded, and fetch-depth 0 because a
+      # shallow clone has no previous tag to diff against.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: actions/download-artifact@v4
         with:
           name: compliance-bundle
@@ -361,6 +368,7 @@ jobs:
           body=$(gh release view "$TAG" --repo "$REPO" --json body -q .body 2>/dev/null || true)
           case "$body" in
             ''|'Draft. Assets attached by the release workflow.') ;;
+            *UNREVIEWED*) ;;
             *) notes="$body" ;;
           esac
 
@@ -447,12 +455,61 @@ jobs:
         run: |
           set -euo pipefail
           if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            echo "release $TAG already exists"
+            echo "release $TAG already exists, leaving its notes alone"
           else
+            # A starting changelog rather than a placeholder. v0.1.4 shipped
+            # with "Draft. Assets attached by the release workflow." as its
+            # body while latest.json told every user to read that page for
+            # what changed, so the one page the update prompt pointed at said
+            # nothing. Writing notes by hand is the step that gets skipped, so
+            # the draft now arrives with the commits already sorted and a
+            # human prunes rather than composes.
+            version="${TAG#v}"
+            prev=$(git tag --sort=-v:refname | grep -vxF "$TAG" | head -1)
+            if [ -n "$prev" ]; then range="$prev..$TAG"; else range="$TAG"; fi
+            echo "describing $range"
+
+            sec() {
+              local title="$1" pattern="$2" lines
+              lines=$(git log --no-merges --pretty='%s' "$range" | grep -E "$pattern" || true)
+              [ -n "$lines" ] || return 0
+              echo "### $title"
+              echo "$lines" | sed -E 's/^[a-z]+(\([^)]*\))?: //; s/^/- /'
+              echo
+            }
+
+            {
+              # Deleting this line is what marks the notes as reviewed. The
+              # manifest step reads it: while it is here the update prompt
+              # links to the release page rather than quoting a raw commit
+              # list into a dialog box.
+              echo '<!-- UNREVIEWED: edit these notes, then delete this line -->'
+              echo
+              echo "## Changes"
+              echo
+              sec "Added" '^feat(\([^)]*\))?: '
+              sec "Fixed" '^fix(\([^)]*\))?: '
+              sec "Documentation" '^docs(\([^)]*\))?: '
+              sec "Internal" '^(chore|refactor|test|ci|build|perf)(\([^)]*\))?: '
+              echo "## Which file do I want"
+              echo
+              echo "| Platform | File |"
+              echo "|---|---|"
+              echo "| Windows | \`rigseed_${version}_x64-setup.exe\` |"
+              echo "| macOS (Apple silicon) | \`rigseed_${version}_aarch64.dmg\` |"
+              echo "| Linux, any distribution | \`rigseed_${version}_amd64.AppImage\` |"
+              echo "| Debian or Ubuntu | \`rigseed_${version}_amd64.deb\` |"
+              echo "| Fedora or RHEL | \`rigseed-${version}-1.x86_64.rpm\` |"
+              echo
+              echo "A \`.sha256\` sits beside each one if you want to check your download."
+              echo "The \`.sig\` files and \`rigseed.app.tar.gz\` are what the in-app updater"
+              echo "consumes; you do not need to download them by hand."
+            } > release-notes.md
+
             gh release create "$TAG" --repo "${{ github.repository }}" \
-              --draft --title "$TAG" \
-              --notes "Draft. Assets attached by the release workflow."
-            echo "created $TAG as a draft"
+              --draft --title "$TAG" --notes-file release-notes.md
+            rm -f release-notes.md
+            echo "created $TAG as a draft with a starting changelog"
           fi
 
       - name: Upload to the release
