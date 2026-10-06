@@ -236,17 +236,47 @@ jobs:
                -o -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) \
             -type f -exec cp {} dist/bundles/ \;
 
-          # The updater's own artifacts, which are not installers: one archive
-          # per platform and a .sig beside each. Kept apart from dist/bundles so
-          # the "at least one installer exists" check cannot be satisfied by an
-          # archive, which would let a release publish with no installer in it.
+          # The updater's payloads, found by their signatures rather than by
+          # guessing filenames.
+          #
+          # The first attempt globbed for *.tar.gz and *.nsis.zip on the belief
+          # that every platform produces a separate archive. Two of three do
+          # not. Tauri 2.12 signs the installers in place on Windows and the
+          # packages in place on Linux; only macOS gets an archive of its own:
+          #
+          #   windows  the x64-setup.exe and the .msi, each with a .sig
+          #   linux    the .deb, .rpm and .AppImage, each with a .sig
+          #   macos    rigseed.app.tar.gz with a .sig
+          #
+          # Worse than failing, that glob quietly matched control.tar.gz and
+          # data.tar.gz out of the deb's own build directory, so Linux uploaded
+          # the innards of a Debian package and the job went green.
+          #
+          # A .sig comes from exactly one place, the signer, so anything
+          # carrying one is a payload and anything without one is not.
           mkdir -p dist/updater
-          find src-tauri/target/release/bundle \
-            -type f \( -name '*.tar.gz' -o -name '*.tar.gz.sig' \
-                    -o -name '*.nsis.zip' -o -name '*.nsis.zip.sig' \) \
-            -exec cp {} dist/updater/ \; || true
+          find src-tauri/target/release/bundle -type f -name '*.sig' > updater-sigs.txt
+          while IFS= read -r sig; do
+            [ -n "$sig" ] || continue
+            payload="${sig%.sig}"
+            [ -f "$payload" ] || continue
+            cp "$sig" dist/updater/
+            # The payload is copied only when it is not already going up as an
+            # installer. On Windows and Linux the signed file IS the installer,
+            # already in dist/bundles, and sending a 120MB AppImage twice would
+            # double the upload to say the same thing.
+            if [ ! -f "dist/bundles/$(basename "$payload")" ]; then
+              cp "$payload" dist/updater/
+            fi
+          done < updater-sigs.txt
+          rm -f updater-sigs.txt
+
           echo "updater artifacts for ${{ matrix.label }}:"
-          ls -la dist/updater || true
+          ls -la dist/updater
+          if [ -z "$(ls -A dist/updater)" ]; then
+            echo "::error::nothing was signed for ${{ matrix.label }}. createUpdaterArtifacts is on, so the bundler should have produced a .sig beside at least one artifact."
+            exit 1
+          fi
           if [ -z "$(ls -A dist/bundles)" ]; then
             echo "::error::no bundles produced for ${{ matrix.label }}"
             exit 1
@@ -338,12 +368,15 @@ jobs:
           add() {
             # $1 = Tauri platform key, $2 = filename glob
             local key="$1" glob="$2" file sig
-            file=$(find dist/updater -type f -name "$glob" ! -name '*.sig' | head -1)
+            # Both directories: the signature is always in dist/updater, but
+            # the thing it signs is in dist/bundles whenever that thing is the
+            # installer itself, which on Windows and Linux it is.
+            file=$(find dist/updater dist/bundles -type f -name "$glob" ! -name '*.sig' ! -name '*.sha256' | head -1)
             if [ -z "$file" ]; then
               echo "::warning::no updater archive for $key (looked for $glob)"
               return
             fi
-            sig="$file.sig"
+            sig="dist/updater/$(basename "$file").sig"
             if [ ! -s "$sig" ]; then
               echo "::error::$file has no signature beside it. The bundler signs these, so an archive without one means the signing key was wrong or absent."
               exit 1
@@ -354,10 +387,17 @@ jobs:
             echo "  $key -> $(basename "$file")"
           }
 
+          # One artifact per platform key, chosen rather than whatever matched
+          # first. Windows is given the NSIS installer and not the MSI: both are
+          # signed, both would work, and offering two for one platform key is
+          # not a thing the manifest can express. Linux is given the AppImage
+          # because it is the only Linux format the updater can apply; a deb or
+          # rpm is owned by the package manager and must not be rewritten
+          # underneath it, which is why those are signed but never offered here.
           echo "platforms in this manifest:"
-          add "windows-x86_64" '*.nsis.zip'
+          add "windows-x86_64" '*-setup.exe'
           add "darwin-aarch64" '*.app.tar.gz'
-          add "linux-x86_64"   '*.AppImage.tar.gz'
+          add "linux-x86_64"   '*.AppImage'
 
           if [ "$(jq 'length' <<<"$platforms")" -eq 0 ]; then
             echo "::error::no updater archives at all, refusing to publish a manifest that offers nothing"
