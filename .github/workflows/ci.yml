@@ -40,6 +40,25 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # Every Tauri plugin exists twice, as a Rust crate and an npm package,
+      # and the CLI refuses to build when a pair is on different minors. Nothing
+      # else in CI runs the Tauri CLI: typecheck, lint, test and build never
+      # touch it, so a mismatch stays invisible until a release build fails on
+      # all three platforms at once, which is exactly how v0.1.4 failed.
+      #
+      # `tauri info` reads the manifests and resolves nothing, so this costs
+      # seconds and needs no Rust toolchain.
+      - name: Tauri crate and package versions agree
+        run: |
+          set -uo pipefail
+          out=$(pnpm tauri info 2>&1) || true
+          echo "$out"
+          if printf '%s' "$out" | grep -qi 'version mismatched'; then
+            echo "::error::A Tauri plugin's Rust crate and npm package are on different minor versions. The release build will refuse this on every platform. The offending pair is named above."
+            exit 1
+          fi
+          echo "all Tauri crate and package pairs agree"
+
       - name: Typecheck
         run: pnpm run typecheck
 
