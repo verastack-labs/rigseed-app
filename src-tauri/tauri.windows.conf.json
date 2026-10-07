@@ -7,6 +7,7 @@
       "binaries/sqldrivers": "./sqldrivers",
       "binaries/tls": "./tls",
       "binaries/networkinformation": "./networkinformation"
-    }
+    },
+    "targets": ["nsis"]
   }
 }
