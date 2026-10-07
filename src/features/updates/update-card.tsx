@@ -50,7 +50,7 @@ export function UpdateCard({ currentVersion, activeTransfers }: UpdateCardProps)
     <Card title="Updates" api="updater" padding="none">
       <SettingRow
         label="This copy"
-        hint="rigseed does not check on its own, and never installs anything without being asked."
+        hint="rigseed looks once when it starts, and never downloads or installs anything without being asked."
       >
         <div className="flex items-center gap-2.5">
           <span className="font-mono text-[11.5px] text-text-dim tabular-nums">
