@@ -8,6 +8,11 @@
       "binaries/tls": "./tls",
       "binaries/networkinformation": "./networkinformation"
     },
-    "targets": ["nsis"]
+    "targets": ["nsis"],
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico"
+      }
+    }
   }
 }
