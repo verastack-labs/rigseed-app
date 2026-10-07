@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 import { Card } from '@/components/ui/card'
 import { ProgressBar } from '@/components/ui/progress-bar'
 import { SettingRow } from '@/features/settings/setting-row'
@@ -57,6 +58,7 @@ export function UpdateCard({ currentVersion, activeTransfers }: UpdateCardProps)
             {currentVersion}
           </span>
           <Button size="sm" onClick={() => void checkNow()} disabled={busy}>
+            {state.kind === 'checking' ? <Spinner /> : null}
             {state.kind === 'checking' ? 'Checking…' : 'Check for updates'}
           </Button>
         </div>

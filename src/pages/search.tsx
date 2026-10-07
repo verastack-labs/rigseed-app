@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 
 import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
@@ -450,6 +451,7 @@ export function Search() {
             disabled={problem !== null || (phase !== 'searching' && !query.trim())}
             onClick={submit}
           >
+            {phase === 'searching' ? <Spinner /> : null}
             {phase === 'searching' ? 'Stop' : 'Search'}
           </Button>
         </div>
