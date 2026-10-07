@@ -77,6 +77,45 @@ jobs:
           done
           [ "$missing" = "0" ]
 
+      # Sixteen of a release's thirty-five files were licence texts, which
+      # buried the five installers people actually come for. They are archived
+      # after the check above rather than instead of it, so the obligation is
+      # still verified file by file and only the presentation changes.
+      #
+      # THIRD-PARTY.md stays loose on purpose. It is the index that says which
+      # text applies to which platform, and it is worth reading in a browser
+      # without downloading anything first. The sidecar's source tarball stays
+      # loose for the same reason it exists: GPLv3 section 6(d) wants it
+      # offered from the same place as the binary, not nested inside another
+      # archive somebody has to know to open.
+      - name: Put the licence texts in one archive
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          cd dist/licences
+          archive="rigseed-${version}-licences.zip"
+
+          expected=$(ls -1 ./*.txt | wc -l)
+          zip -q -X "$archive" ./*.txt
+
+          # Counted before the originals go, not after. A half-written archive
+          # that still exits zero would otherwise take the only copies of the
+          # texts with it, and the first anyone would know is a licence file
+          # somebody asked for and could not be given.
+          packed=$(unzip -Z1 "$archive" | wc -l)
+          if [ "$packed" != "$expected" ]; then
+            echo "::error::archived $packed of $expected licence texts, keeping the originals"
+            exit 1
+          fi
+          rm -f ./*.txt
+
+          echo "archived $packed texts into $archive:"
+          unzip -Z1 "$archive" | sed 's/^/  /'
+          echo "still loose:"
+          ls -1 | sed 's/^/  /'
+
       - uses: actions/upload-artifact@v4
         with:
           name: compliance-bundle
