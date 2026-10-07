@@ -1,6 +1,7 @@
 import { HashRouter, Route, Routes } from 'react-router'
 
 import { AppShell } from '@/components/shell/app-shell'
+import { Splash } from '@/components/shell/splash'
 import { ApiProvider } from '@/services/context'
 import { TorrentDetail } from '@/pages/torrent-detail'
 import { Categories } from '@/pages/categories'
@@ -22,6 +23,10 @@ import { Transfers } from '@/pages/transfers'
 export function App() {
   return (
     <ApiProvider>
+      {/* Inside the provider, because it covers until the connection
+          settles. Mounted once here, which is the whole of how it stays a
+          first-start thing: returning from the tray does not remount. */}
+      <Splash />
       <HashRouter>
         <Routes>
           <Route element={<AppShell />}>
