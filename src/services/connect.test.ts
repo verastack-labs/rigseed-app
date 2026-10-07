@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { connect } from '@/services/connect'
+import { connect, connectingConnection, mockConnection } from '@/services/connect'
 import { capabilitiesFor } from '@/services/torrents'
 import { ApiError } from '@/services/transport'
 import * as transportModule from '@/services/transport'
@@ -179,5 +179,33 @@ describe('waiting for a daemon that is still starting', () => {
     const result = await connect(target, { waitMs: 5_000 })
     expect(result.status).toBe('failed')
     expect(attempts).toBe(1)
+  })
+})
+
+describe('connectingConnection', () => {
+  /*
+   * 0.1.6 and earlier opened on `mockConnection`, so an installed build spent
+   * its first frames listing eight torrents nobody had downloaded before the
+   * daemon answered and replaced them. The fix is only correct if the state a
+   * launch starts in is genuinely empty, which is what these assert.
+   */
+  it('carries a client, because useApi throws without one', () => {
+    const state = connectingConnection()
+    expect(state.status).toBe('connecting')
+    expect('client' in state && state.client).toBeTruthy()
+  })
+
+  it('serves no torrents, so a launch paints nothing it has to take back', async () => {
+    const state = connectingConnection()
+    if (!('client' in state) || !state.client) throw new Error('expected a client')
+    const main = await state.client.sync.maindata(0)
+    expect(Object.keys(main.torrents ?? {})).toHaveLength(0)
+  })
+
+  it('differs from the sample daemon, which still has its torrents', async () => {
+    const sample = mockConnection('for comparison')
+    if (!('client' in sample)) throw new Error('expected a client')
+    const main = await sample.client.sync.maindata(0)
+    expect(Object.keys(main.torrents ?? {}).length).toBeGreaterThan(0)
   })
 })

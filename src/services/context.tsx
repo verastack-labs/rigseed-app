@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { ClientContext, ConnectionContext } from '@/services/api-context'
 import {
   connect,
+  connectingConnection,
   mockConnection,
   type ConnectionState,
   type DaemonTarget,
@@ -107,7 +108,25 @@ export function ApiProvider({ target, children }: ApiProviderProps) {
    */
   const key = target ? 'explicit' : (activeId ?? 'built-in')
 
-  const [state, setState] = useState<ConnectionState>(() => mockConnection('Looking for a daemon.'))
+  /**
+   * Connecting, not the mock.
+   *
+   * This used to start on `mockConnection('Looking for a daemon.')`, so every
+   * launch painted a list of invented torrents for as long as the daemon took
+   * to answer, then replaced them with the real ones. In dev that reads as
+   * convenience. In an installed build it reads as the app showing somebody
+   * else's downloads, which is the worst possible first frame.
+   *
+   * `connecting` is the state the context already defaults to, and switching
+   * daemons already sets it, so the loading surfaces for it exist. It carries
+   * no client, which consumers already handle because the default carries
+   * none either.
+   *
+   * The mock itself is kept for the case it was written for: a daemon that
+   * cannot be reached at all, where the footer and the chip both say "sample
+   * data" rather than letting it pass for real.
+   */
+  const [state, setState] = useState<ConnectionState>(connectingConnection)
 
   /**
    * The connection attempt itself, not a "have we started" flag.
@@ -136,7 +155,7 @@ export function ApiProvider({ target, children }: ApiProviderProps) {
   const [owner, setOwner] = useState(key)
   if (owner !== key) {
     setOwner(key)
-    setState({ status: 'connecting' })
+    setState(connectingConnection())
   }
 
   /**
