@@ -15,7 +15,9 @@ export interface SkeletonProps {
  * jump when it arrives. Later rows fade out, because a wall of identical bars
  * reads as content rather than as absence.
  *
- * There are no spinners anywhere in rigseed except the Search run button.
+ * There are no spinners anywhere in rigseed except Spinner, which is used
+ * on the Search run button and the update check: the two waits that are a
+ * single opaque call rather than content arriving in pieces.
  */
 export function Skeleton({ rows = 5, rowHeight = 40, className }: SkeletonProps) {
   return (
