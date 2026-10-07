@@ -232,9 +232,28 @@ jobs:
           set -euo pipefail
           mkdir -p dist/bundles
           find src-tauri/target/release/bundle \
-            \( -name '*.msi' -o -name '*-setup.exe' -o -name '*.dmg' \
+            \( -name '*-setup.exe' -o -name '*.dmg' \
                -o -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) \
             -type f -exec cp {} dist/bundles/ \;
+
+          # No MSI, deliberately. latest.json can name exactly one artifact per
+          # platform key, so shipping both Windows installers meant whichever
+          # the manifest named was wrong for everybody who had chosen the
+          # other: an NSIS package installed over an MSI registration does not
+          # upgrade it, it registers alongside it. Found by looking at a real
+          # MSI install while rehearsing 0.1.4 to 0.1.5.
+          #
+          # Set in tauri.windows.conf.json, which replaces the main config's
+          # targets array wholesale rather than extending it, the same way
+          # tauri.linux.conf.json already pins its three Linux formats.
+          #
+          # Guarded rather than trusted, because that array is one edit away
+          # from letting the MSI back in and the breakage is silent for
+          # whoever installed the format we stopped offering.
+          if find src-tauri/target/release/bundle -type f -name '*.msi' | grep -q .; then
+            echo "::error::an .msi was produced. Windows ships NSIS only, because the manifest can offer one artifact per platform and MSI and NSIS installs do not upgrade each other. Windows targets are set in src-tauri/tauri.windows.conf.json, which replaces the main config's array wholesale."
+            exit 1
+          fi
 
           # The updater's payloads, found by their signatures rather than by
           # guessing filenames.
@@ -244,7 +263,7 @@ jobs:
           # not. Tauri 2.12 signs the installers in place on Windows and the
           # packages in place on Linux; only macOS gets an archive of its own:
           #
-          #   windows  the x64-setup.exe and the .msi, each with a .sig
+          #   windows  the x64-setup.exe, with a .sig (NSIS only, see above)
           #   linux    the .deb, .rpm and .AppImage, each with a .sig
           #   macos    rigseed.app.tar.gz with a .sig
           #
