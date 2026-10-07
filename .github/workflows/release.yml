@@ -576,11 +576,29 @@ jobs:
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          # dist/updater carries latest.json, the per-platform archives it
-          # names, and a .sig for each. The manifest URLs point at this
-          # release, so the archives have to be attached here or every update
-          # resolves to a 404 the app can only report as a failed download.
-          gh release upload "$TAG" dist/licences/* dist/bundles/* dist/updater/* \
+          # dist/updater carries latest.json, the per-platform payloads it
+          # names, and a .sig for each. The payloads have to be attached: the
+          # manifest URLs point at this release, so a missing one is a 404 the
+          # app can only report as a failed download.
+          #
+          # The .sig files are not attached, because nothing reads them. The
+          # updater takes each signature from latest.json, which carries the
+          # same bytes inline, so three of the five were exact duplicates of
+          # the manifest and the other two signed the .deb and .rpm, which the
+          # manifest never offers: Linux is only ever handed the AppImage.
+          # They are still produced, and still read here to build the
+          # manifest. They just stop being published.
+          mapfile -t updater < <(find dist/updater -type f ! -name '*.sig' | sort)
+          # Named rather than counted, because the thing that would actually go
+          # wrong here is latest.json quietly not being among them.
+          if [ ! -s dist/updater/latest.json ]; then
+            echo "::error::dist/updater/latest.json is missing or empty, so there is nothing for an installed copy to poll"
+            exit 1
+          fi
+          echo "attaching from dist/updater:"
+          printf '  %s\n' "${updater[@]}"
+
+          gh release upload "$TAG" dist/licences/* dist/bundles/* "${updater[@]}" \
             --repo "${{ github.repository }}" --clobber
           echo "attached the installers, the compliance bundle and the updater manifest to $TAG"
 
