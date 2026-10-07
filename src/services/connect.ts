@@ -28,7 +28,18 @@ export interface DaemonTarget {
 }
 
 export type ConnectionState =
-  | { status: 'connecting' }
+  /**
+   * Connecting, with a client that answers and holds nothing.
+   *
+   * The client is here so `useApi` has something to return. Without it every
+   * screen that calls `useApi` throws while the daemon is still being reached,
+   * which is why this state used to be filled with the sample daemon instead
+   * and why every launch began by painting invented torrents.
+   *
+   * Optional because the context's own default is this status with no client,
+   * and outside a provider throwing is the right answer.
+   */
+  | { status: 'connecting'; client?: Client }
   | { status: 'mock'; client: Client; reason: string }
   | {
       status: 'connected'
@@ -233,4 +244,20 @@ export async function connect(
 /** The mock, wrapped in the same shape so the caller has one thing to hold. */
 export function mockConnection(reason: string): ConnectionState {
   return { status: 'mock', client: createClient(createMockTransport()), reason }
+}
+
+/**
+ * The state a launch starts in, and the one a daemon switch returns to.
+ *
+ * The same mock daemon with nothing in it. `torrentCount: 0` is the whole
+ * difference from `mockConnection`, and it is the difference between a first
+ * frame that is empty and one that lists eight torrents nobody downloaded.
+ *
+ * It is a real client rather than none because `useApi` throws on a missing
+ * one, so a bare `{ status: 'connecting' }` takes down every screen that reads
+ * it. That applies equally to switching daemons, which set this state without
+ * a client until now.
+ */
+export function connectingConnection(): ConnectionState {
+  return { status: 'connecting', client: createClient(createMockTransport({ torrentCount: 0 })) }
 }
