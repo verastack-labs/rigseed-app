@@ -99,13 +99,37 @@ matching `.sha256`. There is nothing else to install: qBittorrent ships inside.
 
 | Platform | What you get | What to expect |
 |---|---|---|
-| Windows 10 and 11 | `.exe` installer, `.msi` | SmartScreen warns, because the build is not signed. More info, then Run anyway. |
+| Windows 10 and 11 | `.exe` installer | SmartScreen warns, because the build is not signed. More info, then Run anyway. **See the Defender note below.** |
 | macOS, Apple Silicon | `.dmg` | Not notarised, so Gatekeeper refuses a first open. Right-click, Open, confirm. **This build has been checked but never launched on a Mac.** |
 | Linux x86-64 | `.deb`, `.rpm`, `.AppImage` | Needs glibc 2.35 or newer, so Ubuntu 22.04 and Debian 12 and up. The AppImage runs anywhere without installing. |
 
 Nothing is signed yet, which makes the checksums the only way to confirm a download is the file
 the build produced. Every release also carries the source that built the bundled
 `qbittorrent-nox`, which is what its licence requires.
+
+### Windows Defender may delete rigseed
+
+Defender has flagged recent builds as `Trojan:Win32/Bearfoos!ml` and removed
+`rigseed.exe` outright, rather than only warning. We believe this is a
+misclassification and are disputing it with Microsoft: the `!ml` suffix marks a
+machine-learning guess rather than a signature match, and the same binary has
+come back under three different family names, which is a classifier guessing
+rather than recognising something.
+
+rigseed does look like the sort of thing those models are trained to catch. It
+is unsigned, it has no download reputation, it starts a bundled background
+process, it listens on a port, and it writes shortcuts and an uninstall entry.
+That is also a fair description of a torrent client.
+
+What we can offer in the meantime is provenance. Every installer is built by
+GitHub-hosted CI from the source in this repository, and is signed with a key
+that exists only there; the `.sha256` beside each download tells you the file is
+the one that build produced. That is evidence of where it came from, not a
+clean bill of health, and the honest position is that those are different
+claims. [Issue #121](https://github.com/verastack-labs/rigseed-app/issues/121)
+tracks this.
+
+Code signing is the real fix and is not in place yet.
 
 ## Getting started
 
@@ -120,9 +144,9 @@ what makes every screen reviewable before a daemon exists. The connection chip
 in the top bar always says which it is.
 
 ```bash
-pnpm test          # 950 frontend tests
-cargo test         # 30, in src-tauri
-pnpm tauri build   # MSI + NSIS on Windows
+pnpm test          # the frontend suite
+cargo test         # the Rust side, in src-tauri
+pnpm tauri build   # NSIS on Windows
 ```
 
 ## Stack
