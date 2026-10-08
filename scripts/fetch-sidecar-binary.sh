@@ -92,9 +92,37 @@ EOF
   exit 1
 fi
 
+# Fails rather than skipping when the checksum cannot be had.
+#
+# This used to end the download line with `|| return 0`, so a missing or
+# unreachable .sha256 meant the function returned success and the binary was
+# used unverified. That is the wrong way round: the checksum exists to decide
+# whether to trust the thing already on disk, and not being able to ask is not
+# an answer of yes.
+#
+# What it guards is worth stating plainly. This binary is compiled into every
+# installer rigseed publishes, and it is fetched over the network from a
+# release rather than built here. The checksum is the only point where a
+# substituted file would be noticed.
+#
+# Every binary on sidecar-$VERSION has a .sha256 beside it, so nothing legitimate
+# is turned away by insisting on one.
 verify() {
   local asset="$1"
-  gh release download "$RELEASE" --repo "$REPO" --pattern "$asset.sha256" --dir "$DEST" --clobber || return 0
+  if ! gh release download "$RELEASE" --repo "$REPO" --pattern "$asset.sha256"        --dir "$DEST" --clobber; then
+    cat >&2 <<EOF
+
+error: could not download $asset.sha256 from $RELEASE
+
+  The binary was downloaded but cannot be verified, so it is being discarded
+  rather than built into an installer unchecked.
+
+  Every binary on that release should have a .sha256 beside it. If one is
+  genuinely missing, publish it; do not work around this.
+EOF
+    rm -f "$DEST/$asset"
+    return 1
+  fi
   echo "Verifying $asset..."
   ( cd "$DEST" && { sha256sum -c "$asset.sha256" 2>/dev/null || shasum -a 256 -c "$asset.sha256"; } )
 }
