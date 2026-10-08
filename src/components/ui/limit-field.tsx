@@ -75,8 +75,17 @@ export function LimitField({ name, api, limit, onChange }: LimitFieldProps) {
   }
 
   return (
+    /*
+     * Everything fixed is shrink-0 and the endpoint name is the one thing
+     * allowed to give, because it is the only part that can be shortened and
+     * still leave the row usable. Reported from Linux, where the mono fallback
+     * renders wider than it does here: the name ended exactly at the padding
+     * on this machine, with nothing in the row able to yield, and `overflow:
+     * visible` meant the extra went outside the dialog rather than being cut
+     * off inside it.
+     */
     <div className="flex items-center gap-2.5 border-t border-line bg-surface2 px-4 py-3">
-      <SectionHeader>Limit</SectionHeader>
+      <SectionHeader className="shrink-0">Limit</SectionHeader>
       <Input
         mono
         ref={field}
@@ -90,13 +99,14 @@ export function LimitField({ name, api, limit, onChange }: LimitFieldProps) {
         }}
         aria-label={`${name} limit`}
         placeholder={live ? 'e.g. 500' : 'unlimited'}
-        className="w-[92px]"
+        className="w-[92px] shrink-0"
       />
-      <span className="font-mono text-[10.5px] text-text-dimmer">KiB/s</span>
+      <span className="shrink-0 font-mono text-[10.5px] text-text-dimmer">KiB/s</span>
 
       <span className="flex-1" />
 
       <Switch
+        className="shrink-0"
         label={`${name} unlimited`}
         checked={!live}
         onChange={(next) => {
@@ -111,8 +121,10 @@ export function LimitField({ name, api, limit, onChange }: LimitFieldProps) {
           requestAnimationFrame(() => field.current?.focus())
         }}
       />
-      <span className="text-[11.5px] text-text-dim">Unlimited</span>
-      <span className="font-mono text-[10.5px] text-text-dimmer">{api}</span>
+      <span className="shrink-0 text-[11.5px] text-text-dim">Unlimited</span>
+      <span className="min-w-0 truncate font-mono text-[10.5px] text-text-dimmer" title={api}>
+        {api}
+      </span>
     </div>
   )
 }
