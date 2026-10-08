@@ -601,35 +601,25 @@ jobs:
           gh release upload "$TAG" dist/licences/* dist/bundles/* "${updater[@]}" \
             --repo "${{ github.repository }}" --clobber
           echo "attached the installers, the compliance bundle and the updater manifest to $TAG"
-
-      # Tell the site to rebuild, so its changelog is not a version behind.
+      # No site rebuild request here, deliberately.
       #
-      # The changelog page fetches these releases at build time, and the site
-      # builds on its own pushes, so without this a release ships and the page
-      # describing it appears whenever somebody next touches that repository.
+      # There was one: a repository_dispatch to verastack-labs/rigseed, so its
+      # changelog would not sit a version behind. It is gone because the site
+      # now fails its own build when src/consts.ts does not name the newest
+      # release. Every release therefore already requires a commit there, and
+      # merging that commit pushes to main, which deploys the site.
       #
-      # GITHUB_TOKEN cannot do this: it is scoped to this repository alone, and
-      # a dispatch to another one needs a token that can see it. Absent, this
-      # step says so and does not fail the release: a stale changelog is worth
-      # a notice, not a red release.
-      - name: Ask the site to rebuild its changelog
-        shell: bash
-        env:
-          SITE_TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -z "${SITE_TOKEN:-}" ]; then
-            echo "::notice::SITE_DISPATCH_TOKEN is not set, so the site was not asked to rebuild. Its changelog will update on the next push there, or run the site's deploy workflow by hand."
-            exit 0
-          fi
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $SITE_TOKEN" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/verastack-labs/rigseed/dispatches \
-            -d '{"event_type":"app-released"}')
-          if [ "$code" != "204" ]; then
-            echo "::warning::the site rebuild request returned $code rather than 204. The release is fine; the changelog page may be a version behind until that site builds again."
-          else
-            echo "asked verastack-labs/rigseed to rebuild"
-          fi
+      # The dispatch arrived before that commit, so it triggered a deploy the
+      # guard was bound to fail: a red deployment after every release, for a
+      # rebuild that was going to happen anyway.
+      #
+      # It also needed a cross-repository token, which GITHUB_TOKEN cannot be.
+      # The one that was there had expired, and had been answering 401 for
+      # every release since. A credential that fails silently is a poor way to
+      # pay for a rebuild that is already covered.
+      #
+      # The gap is a prerelease. The changelog lists those, but the guard asks
+      # GitHub for the latest release, which excludes them, so a prerelease
+      # needs no commit here and would not refresh the page. None have been
+      # cut. If that changes, a scheduled rebuild on the site costs nothing
+      # and never expires.
