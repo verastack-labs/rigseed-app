@@ -59,6 +59,17 @@ jobs:
           fi
           echo "all Tauri crate and package pairs agree"
 
+      # appstreamcli is the same validator a software centre and Flathub run,
+      # so a file that fails here is a file that will be rejected there. It is
+      # checked on every pull request rather than at release time because a
+      # malformed metainfo should cost a red tick, not a failed release.
+      - name: Validate the AppStream metainfo
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq appstream
+          appstreamcli validate --no-net src-tauri/linux/dev.verastack.rigseed.metainfo.xml
+
       - name: Typecheck
         run: pnpm run typecheck
 
