@@ -67,6 +67,24 @@ export function describeFailure(failure: UpdateFailure, detail?: string): string
   }
 }
 
+/**
+ * A copy whose updates belong to somebody else.
+ *
+ * Phrased as where they come from rather than as something rigseed cannot do,
+ * because from the reader's side nothing is wrong: their updates work, they
+ * just arrive the same way every other application's do. Each sentence names
+ * the one command that asks now, for people who would rather not wait for a
+ * software centre to notice.
+ */
+export function describeManaged(store: 'flatpak' | 'snap'): string {
+  switch (store) {
+    case 'flatpak':
+      return 'This copy was installed with Flatpak, so its updates come from there. Your software centre will offer them, or run flatpak update dev.verastack.rigseed to ask now.'
+    case 'snap':
+      return 'This copy was installed as a snap, so snapd keeps it up to date on its own schedule. Run snap refresh rigseed to ask now.'
+  }
+}
+
 export interface Progress {
   /** 0 to 100, or null when the server sent no content length. */
   percent: number | null

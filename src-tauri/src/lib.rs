@@ -1,6 +1,7 @@
 pub mod daemon;
 pub mod http;
 pub mod icon;
+pub mod packaging;
 pub mod python;
 mod secrets;
 pub mod tray;
@@ -361,6 +362,7 @@ pub fn run() {
             daemon_running,
             report_connection,
             set_window_icon,
+            packaging::packaging,
             http::api_get,
             http::api_post,
             http::api_post_form,

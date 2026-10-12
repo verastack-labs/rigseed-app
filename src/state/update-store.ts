@@ -8,7 +8,7 @@ import {
   type Progress,
   type UpdateFailure,
 } from '@/features/updates/update-status'
-import { canReachDesktop } from '@/services/shell'
+import { canReachDesktop, packaging } from '@/services/shell'
 
 /**
  * The update, as a state the screen can render directly.
@@ -28,6 +28,15 @@ export type UpdateState =
   | { kind: 'downloading'; version: string; received: number; progress: Progress }
   /** On disk and applied. Everything after this needs a restart. */
   | { kind: 'ready'; version: string }
+  /**
+   * Installed by a store that owns updates, so there is nothing to check.
+   *
+   * Not a failure, which is why it is a state of its own rather than another
+   * `UpdateFailure`. The nearest existing one, `no-channel`, ends by pointing
+   * at the releases page, and sending a Flatpak user to download a .deb is
+   * worse advice than saying nothing.
+   */
+  | { kind: 'managed'; store: 'flatpak' | 'snap' }
   | { kind: 'failed'; failure: UpdateFailure; detail?: string }
 
 interface UpdateStore {
@@ -76,6 +85,22 @@ export const useUpdateStore = create<UpdateStore>()((set, get) => {
     // as a missing channel rather than an error, because that is what it is.
     if (!canReachDesktop()) {
       set({ state: { kind: 'failed', failure: 'no-channel' }, checked: true })
+      return
+    }
+
+    /*
+     * A store-installed copy does not update itself.
+     *
+     * Its installation is read-only, so the download would fail anyway, but
+     * failing is not the point: the package manager is the thing that knows
+     * what version is installed, and an app that writes over its own package
+     * leaves the two disagreeing. Checked before `checking` is set, so the
+     * card never shows a spinner for a question that is not going to be
+     * asked.
+     */
+    const store = await packaging()
+    if (store !== 'native') {
+      set({ state: { kind: 'managed', store }, checked: true })
       return
     }
 
