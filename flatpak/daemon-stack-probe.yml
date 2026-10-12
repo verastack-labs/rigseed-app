@@ -1,18 +1,20 @@
-# Everything qbittorrent-nox needs, built from source on the GNOME runtime.
+# Everything qbittorrent-nox needs, built from source on the GNOME runtime,
+# pinned to exactly what sidecar.json says rigseed ships.
 #
-# Modules 2 to 5 are lifted from org.qbittorrent.qBittorrent's own Flathub
-# manifest, checksums and pinned commit included, because that is a maintained
-# recipe for the hard part and inventing a second one would be worse in every
-# way. The differences from upstream are deliberate and there are only two:
-# they build on org.kde.Platform and get Qt for free, and they build the GUI.
+# The versions here are NOT upstream Flathub's. org.qbittorrent.qBittorrent
+# builds 5.2.4 against libtorrent 1.2 and boost 1.86 on the KDE runtime. This
+# builds 5.2.3 against libtorrent 2.0.11 and boost 1.90.0, because that is the
+# combination rigseed ships on Windows, macOS, the .deb, the .rpm and the
+# AppImage, and sidecar.json records it as a tested pairing rather than an
+# arbitrary one. A Flatpak on libtorrent 1.2 would be a different BitTorrent
+# engine from every other rigseed build: different disk I/O, different v2
+# torrent support, different memory behaviour. Same daemon everywhere is worth
+# more than a recipe someone else already debugged.
 #
-# qtbase is the module upstream does not need. Its checksum was computed by
-# the CI job that first built it, never written by hand.
-#
-# QTTOOLS_SHA256 is substituted by the workflow after it downloads and hashes
-# the tarball. It is a deliberately invalid placeholder so that a build which
-# somehow skipped that step fails loudly rather than silently fetching
-# something unverified.
+# Every SHA256_ placeholder is substituted by the workflow after it downloads
+# and hashes the file. They are deliberately invalid so a build that skipped
+# that step fails loudly rather than fetching something unverified. The final
+# manifest carries the literal values, which is what Flathub requires.
 app-id: dev.verastack.daemonstackprobe
 
 runtime: org.gnome.Platform
@@ -20,10 +22,33 @@ runtime-version: '47'
 sdk: org.gnome.Sdk
 command: qbittorrent-nox
 
+# Qt installs its whole development toolchain into /app/bin: qmake, qt-cmake,
+# androiddeployqt, qdbus and the rest. None of it belongs in a shipped image.
+cleanup:
+  - /include
+  - /lib/cmake
+  - /lib/pkgconfig
+  - /lib/*.a
+  - /lib/*.la
+  - /mkspecs
+  - /share/man
+  - /bin/androiddeployqt*
+  - /bin/qmake*
+  - /bin/qt-cmake*
+  - /bin/qt-configure-module
+  - /bin/qtpaths*
+  - /bin/qtplugininfo
+  - /bin/qdbus*
+  # lrelease and friends are build tools for qBittorrent's translations and
+  # have no job at runtime.
+  - /bin/lconvert
+  - /bin/lrelease
+  - /bin/lupdate
+
 modules:
-  # Core, Network, Sql and Xml, which is exactly what CheckPackages.cmake
-  # asks for when GUI is off, plus the OpenSSL TLS backend and the SQLite
-  # driver as plugins. Verified building in 7 minutes.
+  # sidecar.json pins Qt 6.8.3. Core, Network, Sql and Xml is exactly what
+  # CheckPackages.cmake asks for with GUI off, and the OpenSSL TLS backend
+  # and SQLite driver arrive as plugins alongside them.
   - name: qtbase
     buildsystem: cmake-ninja
     config-opts:
@@ -39,13 +64,12 @@ modules:
       - -DFEATURE_openssl_linked=OFF
     sources:
       - type: archive
-        url: https://download.qt.io/archive/qt/6.8/6.8.4/submodules/qtbase-everywhere-opensource-src-6.8.4.tar.xz
-        sha256: 532dfbf3fa3cbc68fa37441ea9e81c5009da044eaecda78ffaeafd8bd125532f
+        url: https://download.qt.io/archive/qt/6.8/6.8.3/submodules/qtbase-everywhere-opensource-src-6.8.3.tar.xz
+        sha256: SHA256_QTBASE
 
-  # Required unconditionally by qBittorrent through LinguistTools, which is
-  # not in qtbase. The GUI tools here need Widgets and should disable
-  # themselves against a GUI-less qtbase; whether they do so cleanly is one
-  # of the two things this probe exists to find out.
+  # qBittorrent requires LinguistTools unconditionally and it is not in
+  # qtbase. The GUI tools here need Widgets and disable themselves against a
+  # GUI-less qtbase, leaving lrelease, lupdate and lconvert.
   - name: qttools
     buildsystem: cmake-ninja
     config-opts:
@@ -59,8 +83,8 @@ modules:
       - -DFEATURE_distancefieldgenerator=OFF
     sources:
       - type: archive
-        url: https://download.qt.io/archive/qt/6.8/6.8.4/submodules/qttools-everywhere-opensource-src-6.8.4.tar.xz
-        sha256: QTTOOLS_SHA256
+        url: https://download.qt.io/archive/qt/6.8/6.8.3/submodules/qttools-everywhere-opensource-src-6.8.3.tar.xz
+        sha256: SHA256_QTTOOLS
 
   - name: boost
     buildsystem: simple
@@ -69,9 +93,13 @@ modules:
       - ./b2 install --with-headers cxxflags="$CXXFLAGS" linkflags="$LDFLAGS" -j $FLATPAK_BUILDER_N_JOBS
     sources:
       - type: archive
-        url: https://archives.boost.io/release/1.86.0/source/boost_1_86_0.tar.gz
-        sha256: 2575e74ffc3ef1cd0babac2c1ee8bdb5782a0ee672b1912da40e5b4b591ca01f
+        url: https://archives.boost.io/release/1.90.0/source/boost_1_90_0.tar.gz
+        sha256: SHA256_BOOST
 
+  # The release tarball rather than the git repository. libtorrent vendors
+  # several dependencies as submodules, and a git source would need every one
+  # declared separately for an offline build; the release archive already
+  # contains them.
   - name: libtorrent
     buildsystem: cmake-ninja
     builddir: true
@@ -82,13 +110,12 @@ modules:
       - -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON
       - -Ddeprecated-functions=OFF
     sources:
-      - type: git
-        url: https://github.com/arvidn/libtorrent.git
-        commit: c5ff6c3186a92ddec01f6f0a8146aaedb4a1c3f9
+      - type: archive
+        url: https://github.com/arvidn/libtorrent/releases/download/v2.0.11/libtorrent-rasterbar-2.0.11.tar.gz
+        sha256: SHA256_LIBTORRENT
 
-  # The only meaningful change from upstream's module: GUI off, which is what
-  # makes this qbittorrent-nox rather than qbittorrent. DBUS follows GUI off
-  # on its own, so no Qt6DBus is needed either.
+  # GUI=OFF is what makes this qbittorrent-nox. DBUS follows it off on its
+  # own, so no Qt6DBus is required either.
   - name: qbittorrent
     buildsystem: cmake-ninja
     builddir: true
@@ -101,5 +128,5 @@ modules:
       - -DGUI=OFF
     sources:
       - type: archive
-        url: https://github.com/qbittorrent/qBittorrent/archive/refs/tags/release-5.2.4.tar.gz
-        sha256: 226a6ad1aa7810fcbfa58b0d28b14feb8e207726cbe774d4d267ce769c19dd6c
+        url: https://github.com/qbittorrent/qBittorrent/archive/refs/tags/release-5.2.3.tar.gz
+        sha256: SHA256_QBITTORRENT

@@ -291,16 +291,42 @@ jobs:
           flatpak install --user -y --noninteractive flathub \
             org.gnome.Platform//47 org.gnome.Sdk//47
 
-      - name: Hash qttools and substitute it in
+      # Every source is hashed here and substituted over a placeholder, so no
+      # checksum in this repository was ever written by hand. The summary is
+      # what gets copied into the real Flathub manifest, which has to carry
+      # literal values.
+      #
+      # Retried hard: download.qt.io already failed one run at under 10KB/s,
+      # and a slow mirror is not a result worth reporting.
+      - name: Hash every source and substitute them in
         run: |
           set -euo pipefail
-          url=https://download.qt.io/archive/qt/6.8/6.8.4/submodules/qttools-everywhere-opensource-src-6.8.4.tar.xz
-          curl -sSL --retry 5 --retry-all-errors -o qttools.tar.xz "$url"
-          sum=$(sha256sum qttools.tar.xz | cut -d' ' -f1)
-          echo "qttools sha256: $sum  ($(stat -c%s qttools.tar.xz) bytes)"
-          sed -i "s/QTTOOLS_SHA256/$sum/" flatpak/daemon-stack-probe.yml
-          grep -q QTTOOLS_SHA256 flatpak/daemon-stack-probe.yml \
-            && { echo "::error::placeholder was not substituted"; exit 1; } || true
+          m=flatpak/daemon-stack-probe.yml
+
+          hash_into() {
+            token="$1"
+            url="$2"
+            out=$(mktemp)
+            curl -sSL --retry 6 --retry-all-errors --retry-delay 5 --connect-timeout 30 --max-time 900 -o "$out" "$url"
+            sum=$(sha256sum "$out" | cut -d' ' -f1)
+            echo "  $token = $sum  ($(stat -c%s "$out") bytes)"
+            sed -i "s|$token|$sum|" "$m"
+            rm -f "$out"
+          }
+
+          echo "::group::checksums, computed not copied"
+          hash_into SHA256_QTBASE https://download.qt.io/archive/qt/6.8/6.8.3/submodules/qtbase-everywhere-opensource-src-6.8.3.tar.xz
+          hash_into SHA256_QTTOOLS https://download.qt.io/archive/qt/6.8/6.8.3/submodules/qttools-everywhere-opensource-src-6.8.3.tar.xz
+          hash_into SHA256_BOOST https://archives.boost.io/release/1.90.0/source/boost_1_90_0.tar.gz
+          hash_into SHA256_LIBTORRENT https://github.com/arvidn/libtorrent/releases/download/v2.0.11/libtorrent-rasterbar-2.0.11.tar.gz
+          hash_into SHA256_QBITTORRENT https://github.com/qbittorrent/qBittorrent/archive/refs/tags/release-5.2.3.tar.gz
+          echo "::endgroup::"
+
+          if grep -n 'SHA256_' "$m"; then
+            echo "::error::a placeholder was not substituted"
+            exit 1
+          fi
+          echo "all five substituted"
 
       - name: Build the stack
         run: |
@@ -319,7 +345,13 @@ jobs:
           echo "::endgroup::"
 
           case "$out" in
-            *qBittorrent*) echo "the daemon runs" ;;
+            *"qBittorrent v5.2.3"*)
+              echo "the daemon runs, and it is the version sidecar.json pins"
+              ;;
+            *qBittorrent*)
+              echo "::error::the daemon runs but reports the wrong version. sidecar.json pins 5.2.3 and every other rigseed platform ships it."
+              exit 1
+              ;;
             *) echo "::error::no version reported"; exit 1 ;;
           esac
 
@@ -364,7 +396,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m pip install --quiet --upgrade pip
-          python3 -m pip install --quiet aiohttp toml
+          python3 -m pip install --quiet aiohttp tomlkit
           python3 -m pip install --quiet \
             "git+https://github.com/flatpak/flatpak-builder-tools.git#subdirectory=node"
           curl -sSLO https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/cargo/flatpak-cargo-generator.py
