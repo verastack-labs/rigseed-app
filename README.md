@@ -28,7 +28,7 @@ https://github.com/user-attachments/assets/27b267ad-15bd-4e87-b70e-099665380cad
 Fifty-one seconds on what rigseed is and why it exists. Real captures on both
 sides: the stock client is a GPG-verified qBittorrent 5.0.5 on official Linux
 ISO torrents, and the rigseed side is the app's own interface. It is also
-[on the site](https://verastack-labs.github.io/rigseed/#film), and the 4K
+[on the site](https://rigseed.verastack.dev/#film), and the 4K
 master is attached to
 [the latest release](https://github.com/verastack-labs/rigseed-app/releases/latest).
 
