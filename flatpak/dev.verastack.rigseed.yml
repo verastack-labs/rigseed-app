@@ -175,9 +175,23 @@ modules:
       append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node22/bin
       env:
         CARGO_HOME: /run/build/rigseed/cargo
-        # The env form as well as the file, because the file alone did not
-        # take and PNPM_CONFIG_* is a configuration source pnpm documents.
-        # Which of the two works is printed below before the install runs.
+        # pnpm 11.1.3 and newer re-verify every lockfile entry against
+        # minimumReleaseAge and trustPolicy before fetching anything, and
+        # that pass queries registry.npmjs.org per package. --offline does
+        # not suppress it, so in a sandbox it retried for twenty-one minutes
+        # across 343 entries and then failed with ERR_PNPM_META_FETCH_FAIL.
+        #
+        # trustLockfile skips that pass. It has to be set here rather than in
+        # pnpm-workspace.yaml: the node generator rewrites that file to point
+        # storeDir at the vendored store, and anything appended to it is
+        # discarded. Setting it in the file silently did nothing, which cost
+        # two build cycles to notice.
+        #
+        # Turning the check off is safe in this one place because the sandbox
+        # can install nothing the lockfile did not already name, and
+        # flatpak-builder has verified a checksum for every tarball before
+        # pnpm sees it. An ordinary install elsewhere still does the full
+        # verification, since nothing is committed.
         PNPM_CONFIG_TRUST_LOCKFILE: 'true'
     build-commands:
       # Point cargo at the vendored crates rather than crates.io, which the
@@ -200,21 +214,11 @@ modules:
       # safe in this one place is that the sandbox installs nothing the
       # lockfile did not already name, and flatpak-builder has checked a
       # checksum for every tarball before pnpm ever sees it.
-      - echo "" >> pnpm-workspace.yaml
-      - echo "trustLockfile: true" >> pnpm-workspace.yaml
-
-      # Printed because the last attempt set trustLockfile and the policy
-      # check ran anyway, and there was no way to tell from the log whether
-      # the setting had been written, clobbered, or simply ignored. The
-      # generator writes storeDir into this same file, so a rewrite is a
-      # plausible explanation and a cheap one to rule out.
-      - echo "--- pnpm-workspace.yaml as the install will see it ---"
-      - cat pnpm-workspace.yaml
-      - echo "--- pnpm config ---"
-      - node pnpm/bin/pnpm.cjs config list
-
       - node pnpm/bin/pnpm.cjs --offline install --frozen-lockfile
-      - node pnpm/bin/pnpm.cjs --offline run build
+      # No --offline here. It is an install flag; pnpm run rejects it with
+      # "Unknown option: 'offline'". Nothing is fetched by the build script
+      # anyway, since install has already put everything in place.
+      - node pnpm/bin/pnpm.cjs run build
 
       # Tauri's build script checks that every externalBin exists before it
       # will compile, and the one it wants is the daemon the previous module
