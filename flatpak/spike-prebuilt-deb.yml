@@ -59,6 +59,15 @@ modules:
       # metainfo, so the released .deb has none; the workflow copies the
       # current one in beside this manifest before building.
       - install -Dm644 dev.verastack.rigseed.metainfo.xml /app/share/metainfo/dev.verastack.rigseed.metainfo.xml
+      # The launchable has to name the desktop file as installed HERE, not as
+      # the .deb names it. AppStream resolves a component icon by following
+      # the launchable to a desktop entry and reading its Icon= key, so a
+      # launchable pointing at rigseed.desktop inside a Flatpak that installs
+      # dev.verastack.rigseed.desktop finds nothing and reports
+      # gui-app-without-icon, with the icon sitting right there unreachable.
+      # That cost one run to find and is a genuine Flathub constraint rather
+      # than a quirk of this spike.
+      - sed -i "s|>rigseed.desktop<|>dev.verastack.rigseed.desktop<|" /app/share/metainfo/dev.verastack.rigseed.metainfo.xml
 
       # From the repository for the same reason as the metainfo: v0.1.7
       # predates 64x64 being listed in bundle.icon, so the released .deb has
