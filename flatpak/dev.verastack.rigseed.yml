@@ -175,6 +175,10 @@ modules:
       append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node22/bin
       env:
         CARGO_HOME: /run/build/rigseed/cargo
+        # The env form as well as the file, because the file alone did not
+        # take and PNPM_CONFIG_* is a configuration source pnpm documents.
+        # Which of the two works is printed below before the install runs.
+        PNPM_CONFIG_TRUST_LOCKFILE: 'true'
     build-commands:
       # Point cargo at the vendored crates rather than crates.io, which the
       # sandbox cannot reach.
@@ -198,6 +202,17 @@ modules:
       # checksum for every tarball before pnpm ever sees it.
       - echo "" >> pnpm-workspace.yaml
       - echo "trustLockfile: true" >> pnpm-workspace.yaml
+
+      # Printed because the last attempt set trustLockfile and the policy
+      # check ran anyway, and there was no way to tell from the log whether
+      # the setting had been written, clobbered, or simply ignored. The
+      # generator writes storeDir into this same file, so a rewrite is a
+      # plausible explanation and a cheap one to rule out.
+      - echo "--- pnpm-workspace.yaml as the install will see it ---"
+      - cat pnpm-workspace.yaml
+      - echo "--- pnpm config ---"
+      - node pnpm/bin/pnpm.cjs config list
+
       - node pnpm/bin/pnpm.cjs --offline install --frozen-lockfile
       - node pnpm/bin/pnpm.cjs --offline run build
 
