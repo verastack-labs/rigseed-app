@@ -3,7 +3,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Card } from '@/components/ui/card'
 import { ProgressBar } from '@/components/ui/progress-bar'
 import { SettingRow } from '@/features/settings/setting-row'
-import { describeFailure, restartWarning } from '@/features/updates/update-status'
+import { describeFailure, describeManaged, restartWarning } from '@/features/updates/update-status'
 import { useUpdateStore } from '@/state/update-store'
 import { icons } from '@/lib/icons'
 import { cn } from '@/lib/utils'
@@ -46,23 +46,38 @@ export function UpdateCard({ currentVersion, activeTransfers }: UpdateCardProps)
   const restart = useUpdateStore((s) => s.restart)
   const dismiss = useUpdateStore((s) => s.dismiss)
   const busy = state.kind === 'checking' || state.kind === 'downloading'
+  const managed = state.kind === 'managed'
 
   return (
     <Card title="Updates" api="updater" padding="none">
       <SettingRow
         label="This copy"
-        hint="rigseed looks once when it starts, and never downloads or installs anything without being asked."
+        hint={
+          managed
+            ? 'Updates for this copy are handled by the store that installed it.'
+            : 'rigseed looks once when it starts, and never downloads or installs anything without being asked.'
+        }
       >
         <div className="flex items-center gap-2.5">
           <span className="font-mono text-[11.5px] text-text-dim tabular-nums">
             {currentVersion}
           </span>
-          <Button size="sm" onClick={() => void checkNow()} disabled={busy}>
-            {state.kind === 'checking' ? <Spinner /> : null}
-            {state.kind === 'checking' ? 'Checking…' : 'Check for updates'}
-          </Button>
+          {/* No button on a store-installed copy. It would be a control whose
+              only possible outcome is the sentence already on screen. */}
+          {managed ? null : (
+            <Button size="sm" onClick={() => void checkNow()} disabled={busy}>
+              {state.kind === 'checking' ? <Spinner /> : null}
+              {state.kind === 'checking' ? 'Checking…' : 'Check for updates'}
+            </Button>
+          )}
         </div>
       </SettingRow>
+
+      {state.kind === 'managed' ? (
+        <Outcome tone="ok" icon="check">
+          {describeManaged(state.store)}
+        </Outcome>
+      ) : null}
 
       {state.kind === 'current' ? (
         <Outcome tone="ok" icon="check">

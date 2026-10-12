@@ -7,8 +7,10 @@ vi.mock('@tauri-apps/plugin-updater', () => ({ check: () => check() }))
 vi.mock('@tauri-apps/plugin-process', () => ({ relaunch: vi.fn() }))
 
 let desktop = true
+let installedBy: 'flatpak' | 'snap' | 'native' = 'native'
 vi.mock('@/services/shell', () => ({
   canReachDesktop: () => desktop,
+  packaging: () => Promise.resolve(installedBy),
   openPath: vi.fn(),
   revealInFolder: vi.fn(),
   pickFolder: vi.fn(),
@@ -18,6 +20,7 @@ const reset = () => useUpdateStore.setState({ state: { kind: 'idle' }, checked: 
 
 beforeEach(() => {
   desktop = true
+  installedBy = 'native'
   check.mockReset()
   reset()
 })
@@ -128,5 +131,48 @@ describe('updateNeedsAttention', () => {
         progress: { percent: 1, known: true },
       }),
     ).toBe(false)
+  })
+})
+
+describe('a copy a store installed', () => {
+  it('does not ask the updater at all', async () => {
+    // The point of the whole change. A Flatpak installation is read-only, so
+    // the check could only ever end in a download that cannot be written.
+    installedBy = 'flatpak'
+    await useUpdateStore.getState().checkNow()
+    expect(check).not.toHaveBeenCalled()
+    expect(useUpdateStore.getState().state).toEqual({ kind: 'managed', store: 'flatpak' })
+  })
+
+  it('says which store, because the command to run differs', async () => {
+    installedBy = 'snap'
+    await useUpdateStore.getState().checkNow()
+    expect(useUpdateStore.getState().state).toEqual({ kind: 'managed', store: 'snap' })
+  })
+
+  it('counts as checked, so the launch check does not run again', async () => {
+    installedBy = 'flatpak'
+    await useUpdateStore.getState().checkQuietly()
+    await useUpdateStore.getState().checkQuietly()
+    expect(useUpdateStore.getState().checked).toBe(true)
+    expect(check).not.toHaveBeenCalled()
+  })
+
+  it('is not a dot on the rail', async () => {
+    // Nothing for anybody to do about it, and a permanent dot for something
+    // nobody can act on is how people learn to ignore dots.
+    installedBy = 'snap'
+    await useUpdateStore.getState().checkNow()
+    expect(updateNeedsAttention(useUpdateStore.getState().state)).toBe(false)
+  })
+
+  it('still checks normally when no store owns the copy', async () => {
+    // The guard has to be narrow. An AppImage is unmanaged and updates
+    // itself, and that is the format release.yml offers to the updater.
+    installedBy = 'native'
+    check.mockResolvedValue(null)
+    await useUpdateStore.getState().checkNow()
+    expect(check).toHaveBeenCalledTimes(1)
+    expect(useUpdateStore.getState().state).toEqual({ kind: 'current' })
   })
 })

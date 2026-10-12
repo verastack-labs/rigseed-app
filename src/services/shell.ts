@@ -80,6 +80,28 @@ export function canReachDesktop(): boolean {
   return Boolean((globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
 }
 
+/** Which store, if any, owns this installation. */
+export type Packaging = 'flatpak' | 'snap' | 'native'
+
+/**
+ * Asks Rust how this copy was installed.
+ *
+ * Native whenever the question cannot be asked or answered, and that default
+ * is the careful one rather than the convenient one. Guessing that a store
+ * owns the installation would switch the updater off for somebody who has no
+ * store, and an update that silently never appears is a worse failure than
+ * one that runs and reports something it can describe.
+ */
+export async function packaging(): Promise<Packaging> {
+  if (!canReachDesktop()) return 'native'
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    return await invoke<Packaging>('packaging')
+  } catch {
+    return 'native'
+  }
+}
+
 /**
  * Show a file or folder in the system file manager, selected.
  *
