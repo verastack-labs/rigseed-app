@@ -261,3 +261,81 @@ jobs:
 
           [ "$missing" -eq 0 ] || exit 1
           echo "qtbase without the GUI gives qbittorrent-nox everything it needs"
+
+  # The whole daemon side, built from source, end to end.
+  #
+  # qtbase is already proven. This adds the four modules that turn it into a
+  # working qbittorrent-nox and answers the two questions left on this side:
+  # whether qttools builds its Linguist tools against a GUI-less qtbase, and
+  # whether the result runs.
+  #
+  # The run is the interesting part. In the prebuilt-.deb spike the daemon
+  # needed QT_PLUGIN_PATH pointing at a relocated plugin directory, and
+  # without it answered "No TLS backend is available". Here Qt is installed
+  # at its own prefix, so it should find /app/plugins unaided. This asserts
+  # the absence of that warning rather than just a zero exit, because a
+  # missing TLS backend does not fail --version, it fails the first tracker.
+  can-the-whole-daemon-build-from-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Flatpak, the GNOME runtime and its SDK
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq flatpak flatpak-builder
+          flatpak remote-add --if-not-exists --user \
+            flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub \
+            org.gnome.Platform//47 org.gnome.Sdk//47
+
+      - name: Hash qttools and substitute it in
+        run: |
+          set -euo pipefail
+          url=https://download.qt.io/archive/qt/6.8/6.8.4/submodules/qttools-everywhere-opensource-src-6.8.4.tar.xz
+          curl -sSL --retry 5 --retry-all-errors -o qttools.tar.xz "$url"
+          sum=$(sha256sum qttools.tar.xz | cut -d' ' -f1)
+          echo "qttools sha256: $sum  ($(stat -c%s qttools.tar.xz) bytes)"
+          sed -i "s/QTTOOLS_SHA256/$sum/" flatpak/daemon-stack-probe.yml
+          grep -q QTTOOLS_SHA256 flatpak/daemon-stack-probe.yml \
+            && { echo "::error::placeholder was not substituted"; exit 1; } || true
+
+      - name: Build the stack
+        run: |
+          set -euo pipefail
+          flatpak-builder --user --install --force-clean \
+            build-daemon flatpak/daemon-stack-probe.yml
+
+      - name: Does it run, and is the TLS backend found unaided
+        run: |
+          set -uo pipefail
+
+          echo "::group::qbittorrent-nox --version, no QT_PLUGIN_PATH set"
+          out=$(flatpak run --command=sh dev.verastack.daemonstackprobe \
+            -c 'qbittorrent-nox --version 2>&1')
+          echo "$out"
+          echo "::endgroup::"
+
+          case "$out" in
+            *qBittorrent*) echo "the daemon runs" ;;
+            *) echo "::error::no version reported"; exit 1 ;;
+          esac
+
+          # The assertion that matters. This exact string is what the
+          # relocated bundle produces when its plugins cannot be found, so
+          # its absence here is the evidence that building against the
+          # runtime removes the QT_PLUGIN_PATH dance entirely.
+          case "$out" in
+            *"TLS backend"*|*"TLS initialization"*)
+              echo "::error::Qt could not find its TLS backend without help. The plugin directory is not being discovered from the install prefix."
+              exit 1
+              ;;
+          esac
+          echo "no TLS warning: Qt found /app/plugins on its own"
+
+          echo "::group::what got installed"
+          flatpak run --command=sh dev.verastack.daemonstackprobe \
+            -c 'ls /app/bin; echo ---; ls /app/plugins; echo ---; ls /app/lib/libQt6*.so* 2>/dev/null | head'
+          echo "::endgroup::"

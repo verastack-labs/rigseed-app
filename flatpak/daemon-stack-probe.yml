@@ -1,0 +1,105 @@
+# Everything qbittorrent-nox needs, built from source on the GNOME runtime.
+#
+# Modules 2 to 5 are lifted from org.qbittorrent.qBittorrent's own Flathub
+# manifest, checksums and pinned commit included, because that is a maintained
+# recipe for the hard part and inventing a second one would be worse in every
+# way. The differences from upstream are deliberate and there are only two:
+# they build on org.kde.Platform and get Qt for free, and they build the GUI.
+#
+# qtbase is the module upstream does not need. Its checksum was computed by
+# the CI job that first built it, never written by hand.
+#
+# QTTOOLS_SHA256 is substituted by the workflow after it downloads and hashes
+# the tarball. It is a deliberately invalid placeholder so that a build which
+# somehow skipped that step fails loudly rather than silently fetching
+# something unverified.
+app-id: dev.verastack.daemonstackprobe
+
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+command: qbittorrent-nox
+
+modules:
+  # Core, Network, Sql and Xml, which is exactly what CheckPackages.cmake
+  # asks for when GUI is off, plus the OpenSSL TLS backend and the SQLite
+  # driver as plugins. Verified building in 7 minutes.
+  - name: qtbase
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DQT_BUILD_EXAMPLES=OFF
+      - -DQT_BUILD_TESTS=OFF
+      - -DFEATURE_gui=OFF
+      - -DFEATURE_network=ON
+      - -DFEATURE_sql=ON
+      - -DFEATURE_sql_sqlite=ON
+      - -DFEATURE_xml=ON
+      - -DFEATURE_concurrent=ON
+      - -DFEATURE_openssl_linked=OFF
+    sources:
+      - type: archive
+        url: https://download.qt.io/archive/qt/6.8/6.8.4/submodules/qtbase-everywhere-opensource-src-6.8.4.tar.xz
+        sha256: 532dfbf3fa3cbc68fa37441ea9e81c5009da044eaecda78ffaeafd8bd125532f
+
+  # Required unconditionally by qBittorrent through LinguistTools, which is
+  # not in qtbase. The GUI tools here need Widgets and should disable
+  # themselves against a GUI-less qtbase; whether they do so cleanly is one
+  # of the two things this probe exists to find out.
+  - name: qttools
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DQT_BUILD_EXAMPLES=OFF
+      - -DQT_BUILD_TESTS=OFF
+      - -DFEATURE_assistant=OFF
+      - -DFEATURE_designer=OFF
+      - -DFEATURE_qdoc=OFF
+      - -DFEATURE_pixeltool=OFF
+      - -DFEATURE_distancefieldgenerator=OFF
+    sources:
+      - type: archive
+        url: https://download.qt.io/archive/qt/6.8/6.8.4/submodules/qttools-everywhere-opensource-src-6.8.4.tar.xz
+        sha256: QTTOOLS_SHA256
+
+  - name: boost
+    buildsystem: simple
+    build-commands:
+      - ./bootstrap.sh --prefix=/app
+      - ./b2 install --with-headers cxxflags="$CXXFLAGS" linkflags="$LDFLAGS" -j $FLATPAK_BUILDER_N_JOBS
+    sources:
+      - type: archive
+        url: https://archives.boost.io/release/1.86.0/source/boost_1_86_0.tar.gz
+        sha256: 2575e74ffc3ef1cd0babac2c1ee8bdb5782a0ee672b1912da40e5b4b591ca01f
+
+  - name: libtorrent
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DBUILD_SHARED_LIBS=OFF
+      - -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - -DCMAKE_CXX_STANDARD=20
+      - -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON
+      - -Ddeprecated-functions=OFF
+    sources:
+      - type: git
+        url: https://github.com/arvidn/libtorrent.git
+        commit: c5ff6c3186a92ddec01f6f0a8146aaedb4a1c3f9
+
+  # The only meaningful change from upstream's module: GUI off, which is what
+  # makes this qbittorrent-nox rather than qbittorrent. DBUS follows GUI off
+  # on its own, so no Qt6DBus is needed either.
+  - name: qbittorrent
+    buildsystem: cmake-ninja
+    builddir: true
+    build-options:
+      cflags: '-fPIC'
+      cxxflags: '-fPIC'
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON
+      - -DGUI=OFF
+    sources:
+      - type: archive
+        url: https://github.com/qbittorrent/qBittorrent/archive/refs/tags/release-5.2.4.tar.gz
+        sha256: 226a6ad1aa7810fcbfa58b0d28b14feb8e207726cbe774d4d267ce769c19dd6c
