@@ -24,98 +24,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  can-the-bundled-qt-load:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Flatpak and the GNOME runtime
-        run: |
-          set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq flatpak flatpak-builder
-          flatpak remote-add --if-not-exists --user \
-            flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user -y --noninteractive \
-            flathub org.gnome.Platform//47 org.gnome.Sdk//47
-
-      # v0.1.7 shipped before the metainfo existed, so the manifest installs
-      # the repository's copy and needs it beside the manifest to do that.
-      # v0.1.7 shipped before both of these existed in the package, so the
-      # manifest installs the repository copies and needs them beside it.
-      - name: Put the metainfo and the 64x64 icon where the manifest expects them
-        run: |
-          cp src-tauri/linux/dev.verastack.rigseed.metainfo.xml flatpak/
-          cp src-tauri/icons/64x64.png flatpak/
-
-      - name: Build and install the Flatpak
-        run: |
-          set -euo pipefail
-          flatpak-builder --user --install --force-clean \
-            build-dir flatpak/spike-prebuilt-deb.yml
-
-      # The actual experiment. Run under `sh` rather than launching rigseed,
-      # because there is no display and the question is only about the daemon
-      # and its libraries.
-      - name: Does the bundled qbittorrent-nox resolve its libraries
-        run: |
-          set -uo pipefail
-
-          echo "::group::ldd, looking for anything unresolved"
-          flatpak run --command=sh dev.verastack.rigseed \
-            -c 'ldd /app/bin/qbittorrent-nox' | tee ldd.txt || true
-          echo "::endgroup::"
-
-          if grep -q 'not found' ldd.txt; then
-            echo "::error::the bundled libraries do not resolve inside the runtime"
-            grep 'not found' ldd.txt
-            echo "VERDICT=prebuilt-deb-will-not-work" >> "$GITHUB_ENV"
-            exit 1
-          fi
-          echo "every shared object resolved"
-
-      - name: Does it actually run
-        run: |
-          set -uo pipefail
-
-          # rigseed sets QT_PLUGIN_PATH when it spawns the daemon, so the
-          # spike sets the same thing rather than testing a configuration
-          # that never happens in the app.
-          echo "::group::with QT_PLUGIN_PATH, as rigseed spawns it"
-          out=$(flatpak run --command=sh dev.verastack.rigseed -c \
-            'QT_PLUGIN_PATH=/app/lib/rigseed qbittorrent-nox --version 2>&1') || true
-          echo "$out"
-          echo "::endgroup::"
-
-          case "$out" in
-            *qBittorrent*)
-              echo "VERDICT: the daemon runs inside the runtime"
-              ;;
-            *)
-              echo "::error::qbittorrent-nox did not report a version. Output above."
-              exit 1
-              ;;
-          esac
-
-          # The control. On Ubuntu this same binary answers "No TLS backend is
-          # available" without the variable, which is how we know the variable
-          # is doing the work rather than being cargo cult. If it passes here
-          # too, the runtime is supplying something Ubuntu did not.
-          echo "::group::control, without QT_PLUGIN_PATH"
-          flatpak run --command=sh dev.verastack.rigseed \
-            -c 'qbittorrent-nox --version 2>&1' || true
-          echo "::endgroup::"
-
-      - name: What a software centre makes of the metadata
-        run: |
-          set -uo pipefail
-          sudo apt-get install -y -qq appstream desktop-file-utils
-          flatpak run --command=sh dev.verastack.rigseed \
-            -c 'cat /app/share/applications/dev.verastack.rigseed.desktop'
-          flatpak run --command=sh dev.verastack.rigseed \
-            -c 'cat /app/share/metainfo/dev.verastack.rigseed.metainfo.xml' > installed.metainfo.xml
-          appstreamcli validate --no-net installed.metainfo.xml || true
-
   # The architectural question, answered by looking instead of reasoning.
   #
   # rigseed is two programs with opposite needs. Tauri needs webkit2gtk-4.1,
@@ -151,117 +59,6 @@ jobs:
             echo "::endgroup::"
           done
 
-  # The only part of a Flathub manifest that can genuinely fail.
-  #
-  # The runtime probe settled that GNOME has webkit2gtk and no Qt, and KDE has
-  # Qt and no webkit2gtk. Tauri cannot give up webkit2gtk and WebKitGTK is far
-  # too large to build, so the runtime is GNOME and Qt has to come from source.
-  #
-  # qbittorrent-nox needs Core, Network, Sql, Xml and Concurrent, every one of
-  # them in qtbase, so this builds qtbase alone with the GUI switched off. The
-  # question is whether that produces the four libraries AND the two plugins
-  # rigseed currently ships by hand: the TLS backend and the SQL driver. The
-  # TLS one is the one to watch, because its absence is exactly the
-  # "No TLS backend is available" failure the bundled build already taught us
-  # to look for, and it is silent until a tracker is contacted.
-  #
-  # The checksum is computed here rather than written by hand, so nothing in
-  # this repository ever carries a hash somebody guessed.
-  can-qtbase-build-without-the-gui:
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    steps:
-      - name: Flatpak, the GNOME runtime and its SDK
-        run: |
-          set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq flatpak flatpak-builder
-          flatpak remote-add --if-not-exists --user \
-            flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user -y --noninteractive flathub \
-            org.gnome.Platform//47 org.gnome.Sdk//47
-
-      - name: Fetch qtbase and take its checksum
-        id: qt
-        run: |
-          set -euo pipefail
-          url=https://download.qt.io/archive/qt/6.8/6.8.4/submodules/qtbase-everywhere-opensource-src-6.8.4.tar.xz
-          curl -sSL --retry 5 --retry-all-errors -o qtbase.tar.xz "$url"
-          sum=$(sha256sum qtbase.tar.xz | cut -d' ' -f1)
-          echo "size: $(stat -c%s qtbase.tar.xz) bytes"
-          echo "sha256: $sum"
-          echo "sum=$sum" >> "$GITHUB_OUTPUT"
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-
-      - name: Build it
-        run: |
-          set -euo pipefail
-          cat > qtbase-probe.yml <<MANIFEST
-          app-id: dev.verastack.qtbaseprobe
-          runtime: org.gnome.Platform
-          runtime-version: '47'
-          sdk: org.gnome.Sdk
-          command: true
-          modules:
-            - name: qtbase
-              buildsystem: cmake-ninja
-              config-opts:
-                - -DCMAKE_BUILD_TYPE=Release
-                - -DQT_BUILD_EXAMPLES=OFF
-                - -DQT_BUILD_TESTS=OFF
-                # The whole point: no GUI stack. Widgets depends on gui and
-                # switches itself off with it.
-                - -DFEATURE_gui=OFF
-                # What qbittorrent-nox actually uses.
-                - -DFEATURE_network=ON
-                - -DFEATURE_sql=ON
-                - -DFEATURE_sql_sqlite=ON
-                - -DFEATURE_xml=ON
-                - -DFEATURE_concurrent=ON
-                # Loaded at runtime rather than linked, which is how the
-                # bundled build does it and what makes the TLS plugin a
-                # plugin rather than a hard dependency.
-                - -DFEATURE_openssl_linked=OFF
-              sources:
-                - type: archive
-                  url: ${{ steps.qt.outputs.url }}
-                  sha256: ${{ steps.qt.outputs.sum }}
-          MANIFEST
-          echo "::group::manifest"
-          cat qtbase-probe.yml
-          echo "::endgroup::"
-          flatpak-builder --user --install --force-clean build-qt qtbase-probe.yml
-
-      - name: Did it produce what qbittorrent-nox needs
-        run: |
-          set -uo pipefail
-          missing=0
-          echo "::group::libraries"
-          for lib in libQt6Core libQt6Network libQt6Sql libQt6Xml libQt6Concurrent; do
-            found=$(flatpak run --command=sh dev.verastack.qtbaseprobe \
-              -c "ls /app/lib/*/${lib}.so* /app/lib/${lib}.so* 2>/dev/null | head -1")
-            if [ -n "$found" ]; then echo "  HAVE  $lib -> $found"
-            else echo "  MISSING  $lib"; missing=1; fi
-          done
-          echo "::endgroup::"
-
-          echo "::group::plugins, the ones rigseed ships by hand today"
-          flatpak run --command=sh dev.verastack.qtbaseprobe \
-            -c 'find /app -path "*plugins*" \( -name "*tls*" -o -name "*sqldrivers*" -o -name "*networkinformation*" \) -maxdepth 6 | sort'
-          echo "::endgroup::"
-
-          tls=$(flatpak run --command=sh dev.verastack.qtbaseprobe \
-            -c 'find /app -path "*tls*" -name "*openssl*.so" | head -1')
-          if [ -z "$tls" ]; then
-            echo "::error::no OpenSSL TLS plugin was built. That is the silent failure: the daemon starts, reports its version, and answers every HTTPS tracker with 'No TLS backend is available'."
-            missing=1
-          else
-            echo "TLS backend built: $tls"
-          fi
-
-          [ "$missing" -eq 0 ] || exit 1
-          echo "qtbase without the GUI gives qbittorrent-nox everything it needs"
-
   # The whole daemon side, built from source, end to end.
   #
   # qtbase is already proven. This adds the four modules that turn it into a
@@ -290,43 +87,6 @@ jobs:
             flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y --noninteractive flathub \
             org.gnome.Platform//47 org.gnome.Sdk//47
-
-      # Every source is hashed here and substituted over a placeholder, so no
-      # checksum in this repository was ever written by hand. The summary is
-      # what gets copied into the real Flathub manifest, which has to carry
-      # literal values.
-      #
-      # Retried hard: download.qt.io already failed one run at under 10KB/s,
-      # and a slow mirror is not a result worth reporting.
-      - name: Hash every source and substitute them in
-        run: |
-          set -euo pipefail
-          m=flatpak/daemon-stack-probe.yml
-
-          hash_into() {
-            token="$1"
-            url="$2"
-            out=$(mktemp)
-            curl -sSL --retry 6 --retry-all-errors --retry-delay 5 --connect-timeout 30 --max-time 900 -o "$out" "$url"
-            sum=$(sha256sum "$out" | cut -d' ' -f1)
-            echo "  $token = $sum  ($(stat -c%s "$out") bytes)"
-            sed -i "s|$token|$sum|" "$m"
-            rm -f "$out"
-          }
-
-          echo "::group::checksums, computed not copied"
-          hash_into SHA256_QTBASE https://download.qt.io/archive/qt/6.8/6.8.3/submodules/qtbase-everywhere-opensource-src-6.8.3.tar.xz
-          hash_into SHA256_QTTOOLS https://download.qt.io/archive/qt/6.8/6.8.3/submodules/qttools-everywhere-opensource-src-6.8.3.tar.xz
-          hash_into SHA256_BOOST https://archives.boost.io/release/1.90.0/source/boost_1_90_0.tar.gz
-          hash_into SHA256_LIBTORRENT https://github.com/arvidn/libtorrent/releases/download/v2.0.11/libtorrent-rasterbar-2.0.11.tar.gz
-          hash_into SHA256_QBITTORRENT https://github.com/qbittorrent/qBittorrent/archive/refs/tags/release-5.2.3.tar.gz
-          echo "::endgroup::"
-
-          if grep -n 'SHA256_' "$m"; then
-            echo "::error::a placeholder was not substituted"
-            exit 1
-          fi
-          echo "all five substituted"
 
       - name: Build the stack
         run: |
@@ -409,13 +169,33 @@ jobs:
           echo "entries: $(python3 -c 'import json;print(len(json.load(open("cargo-sources.json"))))')"
           echo "size: $(stat -c%s cargo-sources.json) bytes"
 
+      # --pnpm-store-version is the pnpm STORE DIRECTORY version, not the
+      # lockfile version, which is the mistake that failed the first attempt:
+      # passing 9 for a lockfileVersion 9.0 raises ValueError, because the
+      # provider maps lockfile 9 to v10 or v11 and accepts nothing else.
+      #
+      # v11 rather than the v10 default because package.json pins
+      # pnpm@11.17.0, and pnpm 11 lays its store out as v11. The difference is
+      # not cosmetic: for v11 the generator writes storeDir into
+      # pnpm-workspace.yaml, and for v10 it writes store-dir into .npmrc. The
+      # wrong one produces an offline install that cannot find its packages,
+      # which fails during the Flatpak build rather than here.
       - name: Vendor the npm packages
         run: |
           set -euo pipefail
-          flatpak-node-generator --help | grep -q pnpm-store-version \
-            || echo "::warning::this build of the generator has no --pnpm-store-version; the flag may have moved"
+          pinned=$(node -p "require('./package.json').packageManager || ''")
+          echo "package.json pins: ${pinned:-nothing}"
+          case "$pinned" in
+            pnpm@11.*) store=v11 ;;
+            pnpm@10.*) store=v10 ;;
+            *)
+              echo "::error::package.json pins '$pinned'. Only pnpm 10 and 11 are mapped to a store version here; check the generator's provider before guessing."
+              exit 1
+              ;;
+          esac
+          echo "using store version $store"
           flatpak-node-generator pnpm pnpm-lock.yaml \
-            --pnpm-store-version 9 -o node-sources.json
+            --pnpm-store-version "$store" -o node-sources.json
           echo "entries: $(python3 -c 'import json;print(len(json.load(open("node-sources.json"))))')"
           echo "size: $(stat -c%s node-sources.json) bytes"
 

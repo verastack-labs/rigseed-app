@@ -11,10 +11,15 @@
 # torrent support, different memory behaviour. Same daemon everywhere is worth
 # more than a recipe someone else already debugged.
 #
-# Every SHA256_ placeholder is substituted by the workflow after it downloads
-# and hashes the file. They are deliberately invalid so a build that skipped
-# that step fails loudly rather than fetching something unverified. The final
-# manifest carries the literal values, which is what Flathub requires.
+# The checksums are literal, which is what Flathub requires, and they are not
+# taken on trust: flatpak-builder verifies every one against the bytes it
+# downloads, so a wrong value fails the build rather than shipping.
+#
+# The Qt ones come from download.qt.io's own mirrorbrain Digest header rather
+# than from hashing a local copy. An earlier run hashed what it downloaded
+# and got 196 bytes of 404 page for both Qt archives, identically, because
+# the filename drops "opensource" at 6.8.3 and curl without --fail saves an
+# error body and exits 0. Two wrongs that looked like one plausible hash.
 app-id: dev.verastack.daemonstackprobe
 
 runtime: org.gnome.Platform
@@ -64,8 +69,8 @@ modules:
       - -DFEATURE_openssl_linked=OFF
     sources:
       - type: archive
-        url: https://download.qt.io/archive/qt/6.8/6.8.3/submodules/qtbase-everywhere-opensource-src-6.8.3.tar.xz
-        sha256: SHA256_QTBASE
+        url: https://download.qt.io/archive/qt/6.8/6.8.3/submodules/qtbase-everywhere-src-6.8.3.tar.xz
+        sha256: 56001b905601bb9023d399f3ba780d7fa940f3e4861e496a7c490331f49e0b80
 
   # qBittorrent requires LinguistTools unconditionally and it is not in
   # qtbase. The GUI tools here need Widgets and disable themselves against a
@@ -83,8 +88,8 @@ modules:
       - -DFEATURE_distancefieldgenerator=OFF
     sources:
       - type: archive
-        url: https://download.qt.io/archive/qt/6.8/6.8.3/submodules/qttools-everywhere-opensource-src-6.8.3.tar.xz
-        sha256: SHA256_QTTOOLS
+        url: https://download.qt.io/archive/qt/6.8/6.8.3/submodules/qttools-everywhere-src-6.8.3.tar.xz
+        sha256: 02a4e219248b94f1333df843d25763f35251c1074cdc4fb5bda67d340f8c8b3a
 
   - name: boost
     buildsystem: simple
@@ -94,7 +99,7 @@ modules:
     sources:
       - type: archive
         url: https://archives.boost.io/release/1.90.0/source/boost_1_90_0.tar.gz
-        sha256: SHA256_BOOST
+        sha256: 5e93d582aff26868d581a52ae78c7d8edf3f3064742c6e77901a1f18a437eea9
 
   # The release tarball rather than the git repository. libtorrent vendors
   # several dependencies as submodules, and a git source would need every one
@@ -112,7 +117,7 @@ modules:
     sources:
       - type: archive
         url: https://github.com/arvidn/libtorrent/releases/download/v2.0.11/libtorrent-rasterbar-2.0.11.tar.gz
-        sha256: SHA256_LIBTORRENT
+        sha256: f0db58580f4f29ade6cc40fa4ba80e2c9a70c90265cd77332d3cdec37ecf1e6d
 
   # GUI=OFF is what makes this qbittorrent-nox. DBUS follows it off on its
   # own, so no Qt6DBus is required either.
@@ -129,4 +134,4 @@ modules:
     sources:
       - type: archive
         url: https://github.com/qbittorrent/qBittorrent/archive/refs/tags/release-5.2.3.tar.gz
-        sha256: SHA256_QBITTORRENT
+        sha256: a5f540cdfb0053f0ce1a1c62ccd92d08214f16bcb2c512569ec54d81531e541f
