@@ -150,3 +150,114 @@ jobs:
             done
             echo "::endgroup::"
           done
+
+  # The only part of a Flathub manifest that can genuinely fail.
+  #
+  # The runtime probe settled that GNOME has webkit2gtk and no Qt, and KDE has
+  # Qt and no webkit2gtk. Tauri cannot give up webkit2gtk and WebKitGTK is far
+  # too large to build, so the runtime is GNOME and Qt has to come from source.
+  #
+  # qbittorrent-nox needs Core, Network, Sql, Xml and Concurrent, every one of
+  # them in qtbase, so this builds qtbase alone with the GUI switched off. The
+  # question is whether that produces the four libraries AND the two plugins
+  # rigseed currently ships by hand: the TLS backend and the SQL driver. The
+  # TLS one is the one to watch, because its absence is exactly the
+  # "No TLS backend is available" failure the bundled build already taught us
+  # to look for, and it is silent until a tracker is contacted.
+  #
+  # The checksum is computed here rather than written by hand, so nothing in
+  # this repository ever carries a hash somebody guessed.
+  can-qtbase-build-without-the-gui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Flatpak, the GNOME runtime and its SDK
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq flatpak flatpak-builder
+          flatpak remote-add --if-not-exists --user \
+            flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub \
+            org.gnome.Platform//47 org.gnome.Sdk//47
+
+      - name: Fetch qtbase and take its checksum
+        id: qt
+        run: |
+          set -euo pipefail
+          url=https://download.qt.io/archive/qt/6.8/6.8.4/submodules/qtbase-everywhere-opensource-src-6.8.4.tar.xz
+          curl -sSL --retry 5 --retry-all-errors -o qtbase.tar.xz "$url"
+          sum=$(sha256sum qtbase.tar.xz | cut -d' ' -f1)
+          echo "size: $(stat -c%s qtbase.tar.xz) bytes"
+          echo "sha256: $sum"
+          echo "sum=$sum" >> "$GITHUB_OUTPUT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Build it
+        run: |
+          set -euo pipefail
+          cat > qtbase-probe.yml <<MANIFEST
+          app-id: dev.verastack.qtbaseprobe
+          runtime: org.gnome.Platform
+          runtime-version: '47'
+          sdk: org.gnome.Sdk
+          command: true
+          modules:
+            - name: qtbase
+              buildsystem: cmake-ninja
+              config-opts:
+                - -DCMAKE_BUILD_TYPE=Release
+                - -DQT_BUILD_EXAMPLES=OFF
+                - -DQT_BUILD_TESTS=OFF
+                # The whole point: no GUI stack. Widgets depends on gui and
+                # switches itself off with it.
+                - -DFEATURE_gui=OFF
+                # What qbittorrent-nox actually uses.
+                - -DFEATURE_network=ON
+                - -DFEATURE_sql=ON
+                - -DFEATURE_sql_sqlite=ON
+                - -DFEATURE_xml=ON
+                - -DFEATURE_concurrent=ON
+                # Loaded at runtime rather than linked, which is how the
+                # bundled build does it and what makes the TLS plugin a
+                # plugin rather than a hard dependency.
+                - -DFEATURE_openssl_linked=OFF
+              sources:
+                - type: archive
+                  url: ${{ steps.qt.outputs.url }}
+                  sha256: ${{ steps.qt.outputs.sum }}
+          MANIFEST
+          echo "::group::manifest"
+          cat qtbase-probe.yml
+          echo "::endgroup::"
+          flatpak-builder --user --install --force-clean build-qt qtbase-probe.yml
+
+      - name: Did it produce what qbittorrent-nox needs
+        run: |
+          set -uo pipefail
+          missing=0
+          echo "::group::libraries"
+          for lib in libQt6Core libQt6Network libQt6Sql libQt6Xml libQt6Concurrent; do
+            found=$(flatpak run --command=sh dev.verastack.qtbaseprobe \
+              -c "ls /app/lib/*/${lib}.so* /app/lib/${lib}.so* 2>/dev/null | head -1")
+            if [ -n "$found" ]; then echo "  HAVE  $lib -> $found"
+            else echo "  MISSING  $lib"; missing=1; fi
+          done
+          echo "::endgroup::"
+
+          echo "::group::plugins, the ones rigseed ships by hand today"
+          flatpak run --command=sh dev.verastack.qtbaseprobe \
+            -c 'find /app -path "*plugins*" \( -name "*tls*" -o -name "*sqldrivers*" -o -name "*networkinformation*" \) -maxdepth 6 | sort'
+          echo "::endgroup::"
+
+          tls=$(flatpak run --command=sh dev.verastack.qtbaseprobe \
+            -c 'find /app -path "*tls*" -name "*openssl*.so" | head -1')
+          if [ -z "$tls" ]; then
+            echo "::error::no OpenSSL TLS plugin was built. That is the silent failure: the daemon starts, reports its version, and answers every HTTPS tracker with 'No TLS backend is available'."
+            missing=1
+          else
+            echo "TLS backend built: $tls"
+          fi
+
+          [ "$missing" -eq 0 ] || exit 1
+          echo "qtbase without the GUI gives qbittorrent-nox everything it needs"
