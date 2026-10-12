@@ -55,7 +55,7 @@ jobs:
           flatpak install --user -y --noninteractive flathub \
             org.gnome.Platform//47 org.gnome.Sdk//47 \
             org.freedesktop.Sdk.Extension.rust-stable//24.08 \
-            org.freedesktop.Sdk.Extension.node20//24.08
+            org.freedesktop.Sdk.Extension.node22//24.08
 
       - name: Generate the vendored source lists
         run: |

@@ -29,7 +29,10 @@ command: rigseed
 # /usr/lib/sdk and put on PATH by the rigseed module's append-path.
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
-  - org.freedesktop.Sdk.Extension.node20
+  # node22, not node20. pnpm 11 requires Node 22.13 or newer because it
+  # imports node:sqlite, which does not exist before 22, and the failure is a
+  # bare ERR_UNKNOWN_BUILTIN_MODULE rather than a version complaint.
+  - org.freedesktop.Sdk.Extension.node22
 
 finish-args:
   - --share=ipc
@@ -169,7 +172,7 @@ modules:
   - name: rigseed
     buildsystem: simple
     build-options:
-      append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node20/bin
+      append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node22/bin
       env:
         CARGO_HOME: /run/build/rigseed/cargo
     build-commands:
