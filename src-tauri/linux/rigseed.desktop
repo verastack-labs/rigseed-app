@@ -1,0 +1,13 @@
+# Rendered by the bundler. See README.md in this directory for why it is not
+# the generated default. Note the deliberate absence of MimeType.
+[Desktop Entry]
+Type=Application
+Name={{name}}
+Comment={{comment}}
+Exec={{exec}}
+Icon={{icon}}
+Terminal=false
+Categories=Network;FileTransfer;P2P;
+Keywords=torrent;bittorrent;qbittorrent;magnet;download;seed;peer-to-peer;
+StartupWMClass=rigseed
+StartupNotify=true

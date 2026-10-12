@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AppStream metainfo for rigseed. See README.md beside this file for how it is
+  wired into the packages and what keeps it from going stale.
+-->
+<component type="desktop-application">
+  <id>dev.verastack.rigseed</id>
+
+  <name>rigseed</name>
+  <summary>A desktop client for qBittorrent</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+
+  <developer id="dev.verastack">
+    <name>Verastack Labs</name>
+  </developer>
+
+  <launchable type="desktop-id">rigseed.desktop</launchable>
+
+  <description>
+    <p>
+      rigseed is a desktop interface for qBittorrent. It bundles qbittorrent-nox,
+      the headless daemon, and starts it itself, so there is nothing to install or
+      configure first. It speaks the same Web API that an existing qBittorrent
+      exposes, so it can also attach to one you already run, on this machine or
+      on another.
+    </p>
+    <p>What it gives you:</p>
+    <ul>
+      <li>A transfer list with status, category and tag filters, a live speed graph, and three densities</li>
+      <li>An Easy view in plain language, stating four minutes left rather than a rate and an ETA you combine yourself</li>
+      <li>Eight accents across a light and a dark mode, retinting every surface live with nothing to restart</li>
+      <li>A first launch that asks where files go, how fast to go and what to seed, each beside the sentence saying what it does</li>
+    </ul>
+  </description>
+
+  <url type="homepage">https://verastack-labs.github.io/rigseed/</url>
+  <url type="bugtracker">https://github.com/verastack-labs/rigseed-app/issues</url>
+  <url type="vcs-browser">https://github.com/verastack-labs/rigseed-app</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/verastack-labs/rigseed/main/src/assets/screens/02-transfers-dark.png</image>
+      <caption>The transfer list, with status filters, a speed graph and the list itself</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/verastack-labs/rigseed/main/src/assets/screens/03-easy-dark.png</image>
+      <caption>Easy, for people new to this</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/verastack-labs/rigseed/main/src/assets/screens/04-appearance-open.png</image>
+      <caption>Appearance, applied live</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/verastack-labs/rigseed/main/src/assets/screens/05-transfers-light.png</image>
+      <caption>Light, designed rather than inverted</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/verastack-labs/rigseed/main/src/assets/screens/01-first-run.png</image>
+      <caption>A first launch that asks</caption>
+    </screenshot>
+  </screenshots>
+
+  <categories>
+    <category>Network</category>
+    <category>FileTransfer</category>
+  </categories>
+
+  <keywords>
+    <keyword>torrent</keyword>
+    <keyword>bittorrent</keyword>
+    <keyword>qbittorrent</keyword>
+    <keyword>magnet</keyword>
+    <keyword>peer-to-peer</keyword>
+  </keywords>
+
+  <content_rating type="oars-1.1" />
+
+  <provides>
+    <binary>rigseed</binary>
+  </provides>
+
+  <releases>
+    <release version="0.1.7" date="2026-10-07">
+      <url type="details">https://github.com/verastack-labs/rigseed-app/releases/tag/v0.1.7</url>
+    </release>
+  </releases>
+</component>

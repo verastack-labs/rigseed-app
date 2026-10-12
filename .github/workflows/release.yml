@@ -179,6 +179,22 @@ jobs:
           fi
           echo "building $version for $tag"
 
+          # The AppStream metainfo keeps its own list of releases, and it is
+          # the one piece of release metadata not derived from package.json,
+          # so it is the one that goes stale. A software centre shows whatever
+          # the newest entry claims, for as long as it is wrong, which is a
+          # worse failure than a missing file: it looks finished.
+          #
+          # sed rather than grep -P, because this step also runs on the macOS
+          # runner, where grep is BSD and has no -P.
+          metainfo=src-tauri/linux/dev.verastack.rigseed.metainfo.xml
+          newest=$(sed -n 's/.*<release version="\([^"]*\)".*/\1/p' "$metainfo" | head -1)
+          if [ "$newest" != "$version" ]; then
+            echo "::error::$metainfo has $newest as its newest release, but $version is being released. Add a <release version=\"$version\"> entry at the top of its <releases> list."
+            exit 1
+          fi
+          echo "metainfo's newest release is $newest"
+
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
@@ -260,6 +276,52 @@ jobs:
           # half of this keypair is committed, in tauri.conf.json.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      # Verified on the package that ships, which is the distinction this file
+      # keeps making and the one that caught three separate faults already. A
+      # desktop entry and a metainfo file sitting in the repository prove
+      # nothing on their own: the bundler has to have picked them up, and up
+      # to 0.1.7 it shipped a desktop entry whose Categories line was empty
+      # and no metainfo at all, which is invisible unless something looks.
+      - name: Confirm the Linux metadata is in the package
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          deb=$(find src-tauri/target/release/bundle/deb -type f -name '*.deb' | head -1)
+          [ -n "$deb" ] || { echo "::error::no .deb was produced, so there is nothing to check"; exit 1; }
+
+          work=$(mktemp -d)
+          dpkg-deb -x "$deb" "$work"
+
+          desktop="$work/usr/share/applications/rigseed.desktop"
+          metainfo="$work/usr/share/metainfo/dev.verastack.rigseed.metainfo.xml"
+
+          for f in "$desktop" "$metainfo"; do
+            if [ ! -f "$f" ]; then
+              echo "::error::$(basename "$f") is not in the .deb. Both are wired up through bundle.linux in src-tauri/tauri.linux.conf.json, whose paths are relative to src-tauri."
+              exit 1
+            fi
+          done
+
+          echo "--- rigseed.desktop as it will ship ---"
+          cat "$desktop"
+
+          # The reason the template exists at all. bundle.category cannot
+          # express these three values, so an empty Categories here means the
+          # template was not used and the app lands in no menu heading.
+          if ! grep -qx 'Categories=Network;FileTransfer;P2P;' "$desktop"; then
+            echo "::error::the desktop entry's Categories line is not the expected one, so src-tauri/linux/rigseed.desktop did not render as intended"
+            exit 1
+          fi
+
+          # Restored by hand in the template, so worth checking by hand. Its
+          # absence is only visible as a duplicated dock icon at runtime.
+          grep -q '^StartupWMClass=' "$desktop" \
+            || { echo "::error::StartupWMClass is missing from the desktop entry"; exit 1; }
+
+          echo "desktop entry and metainfo are both in the .deb"
 
       # Unsigned on every platform for this release, which is a deliberate
       # choice recorded in the release notes rather than an oversight. Checksums

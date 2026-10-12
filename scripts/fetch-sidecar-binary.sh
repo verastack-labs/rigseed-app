@@ -140,11 +140,16 @@ if gh release download "$RELEASE" --repo "$REPO" --pattern "$RUNTIME" --dir "$DE
   # searches the executable's own directory first, which is why that tarball
   # has no lib subdirectory.
   #
-  # Linux is NOT set up this way, despite what this comment used to claim.
-  # readelf on the published binary shows its RUNPATH is still the Qt path
-  # from the machine that built it, /home/runner/work/rigseed-app/Qt/..., so
-  # it finds nothing on a user's system. That is one of three reasons Linux is
-  # excluded from releases; see the matrix comment in release.yml.
+  # Linux is set up this way too, and this comment used to say the opposite.
+  # It described a real bug: the published binary once carried the build
+  # machine's Qt path, /home/runner/work/rigseed-app/Qt/..., in its RUNPATH
+  # and found nothing on anyone else's system. That was fixed by copying the
+  # patched binary over the published one, and build-sidecar.yml now fails
+  # outright if the artefact that ships has no $ORIGIN runpath or still names
+  # the builder's Qt. Linux is not excluded from releases either: 0.1.7
+  # shipped a .deb, a .rpm and an AppImage, and release.yml verifies the deb
+  # by running its qbittorrent-nox on Ubuntu 22.04 and watching it resolve
+  # every Qt and ICU library through /usr/bin/../lib/rigseed/lib.
   tar -xzf "$DEST/$RUNTIME" -C "$DEST"
   rm -f "$DEST/$RUNTIME" "$DEST/$RUNTIME.sha256"
 else

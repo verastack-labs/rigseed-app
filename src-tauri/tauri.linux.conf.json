@@ -6,6 +6,20 @@
       "binaries/plugins/sqldrivers": "./sqldrivers",
       "binaries/plugins/networkinformation": "./networkinformation"
     },
-    "targets": ["deb", "rpm", "appimage"]
+    "targets": ["deb", "rpm", "appimage"],
+    "linux": {
+      "deb": {
+        "desktopTemplate": "linux/rigseed.desktop",
+        "files": {
+          "/usr/share/metainfo/dev.verastack.rigseed.metainfo.xml": "linux/dev.verastack.rigseed.metainfo.xml"
+        }
+      },
+      "rpm": {
+        "desktopTemplate": "linux/rigseed.desktop",
+        "files": {
+          "/usr/share/metainfo/dev.verastack.rigseed.metainfo.xml": "linux/dev.verastack.rigseed.metainfo.xml"
+        }
+      }
+    }
   }
 }
