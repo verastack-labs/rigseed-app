@@ -115,3 +115,38 @@ jobs:
           flatpak run --command=sh dev.verastack.rigseed \
             -c 'cat /app/share/metainfo/dev.verastack.rigseed.metainfo.xml' > installed.metainfo.xml
           appstreamcli validate --no-net installed.metainfo.xml || true
+
+  # The architectural question, answered by looking instead of reasoning.
+  #
+  # rigseed is two programs with opposite needs. Tauri needs webkit2gtk-4.1,
+  # which the GNOME runtime carries. qbittorrent-nox needs Qt 6, which the KDE
+  # runtime carries. If one runtime has both, the Flathub manifest is
+  # straightforward. If neither does, one of them has to be built from source,
+  # and which one matters enormously: a non-GUI Qt 6 is a long build, and
+  # WebKitGTK is one of the longest builds there is.
+  what-do-the-runtimes-actually-have:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install both runtimes
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq flatpak
+          flatpak remote-add --if-not-exists --user             flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub             org.gnome.Platform//47 org.kde.Platform//6.10
+
+      - name: What each one carries
+        run: |
+          set -uo pipefail
+          for rt in org.gnome.Platform//47 org.kde.Platform//6.10; do
+            echo "::group::$rt"
+            for lib in libwebkit2gtk-4.1 libwebkit2gtk-4.0 libQt6Core libQt6Network libQt6Sql libQt6Xml; do
+              found=$(flatpak run --command=sh "$rt" -c                 "ls /usr/lib/$(uname -m)-linux-gnu/${lib}.so* 2>/dev/null | head -1" 2>/dev/null)
+              if [ -n "$found" ]; then
+                echo "  HAVE  $lib  ->  $found"
+              else
+                echo "  none  $lib"
+              fi
+            done
+            echo "::endgroup::"
+          done
