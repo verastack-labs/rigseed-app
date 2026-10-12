@@ -339,3 +339,83 @@ jobs:
           flatpak run --command=sh dev.verastack.daemonstackprobe \
             -c 'ls /app/bin; echo ---; ls /app/plugins; echo ---; ls /app/lib/libQt6*.so* 2>/dev/null | head'
           echo "::endgroup::"
+
+  # The last unknown: can rigseed's own dependencies be vendored at all.
+  #
+  # Flatpak builds with no network, so every crate and every npm package has
+  # to be declared as a source with a checksum before the build starts. Two
+  # generators do that, and neither has ever been pointed at this repository.
+  #
+  # The cargo side should be the easy case: Cargo.lock has no git
+  # dependencies at all, so all 625 crates come from crates.io with checksums
+  # already in the lockfile.
+  #
+  # The node side is the one with a known sharp edge. This project's
+  # pnpm-lock.yaml is lockfileVersion 9.0 and the generator defaults to store
+  # version 10, so it is told 9 explicitly. Getting that wrong does not fail
+  # here, it fails later as an offline install that cannot find packages.
+  can-rigseed-dependencies-be-vendored:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The generators
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --upgrade pip
+          python3 -m pip install --quiet aiohttp toml
+          python3 -m pip install --quiet \
+            "git+https://github.com/flatpak/flatpak-builder-tools.git#subdirectory=node"
+          curl -sSLO https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/cargo/flatpak-cargo-generator.py
+          echo "flatpak-node-generator: $(command -v flatpak-node-generator || echo MISSING)"
+
+      - name: Vendor the crates
+        run: |
+          set -euo pipefail
+          python3 flatpak-cargo-generator.py -o cargo-sources.json src-tauri/Cargo.lock
+          echo "entries: $(python3 -c 'import json;print(len(json.load(open("cargo-sources.json"))))')"
+          echo "size: $(stat -c%s cargo-sources.json) bytes"
+
+      - name: Vendor the npm packages
+        run: |
+          set -euo pipefail
+          flatpak-node-generator --help | grep -q pnpm-store-version \
+            || echo "::warning::this build of the generator has no --pnpm-store-version; the flag may have moved"
+          flatpak-node-generator pnpm pnpm-lock.yaml \
+            --pnpm-store-version 9 -o node-sources.json
+          echo "entries: $(python3 -c 'import json;print(len(json.load(open("node-sources.json"))))')"
+          echo "size: $(stat -c%s node-sources.json) bytes"
+
+      - name: Are they actually usable as flatpak sources
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          for name in ("cargo-sources.json", "node-sources.json"):
+              data = json.load(open(name))
+              assert isinstance(data, list) and data, f"{name} is not a non-empty list"
+              kinds = {}
+              unchecked = 0
+              for entry in data:
+                  kind = entry.get("type", "?")
+                  kinds[kind] = kinds.get(kind, 0) + 1
+                  # A source flatpak-builder will fetch over the network has
+                  # to carry a checksum, or the build is not reproducible and
+                  # Flathub will not take it.
+                  if kind in ("file", "archive") and not any(
+                      k in entry for k in ("sha256", "sha512", "md5")
+                  ):
+                      unchecked += 1
+              print(f"{name}: {len(data)} entries, kinds={kinds}, unchecked={unchecked}")
+              assert unchecked == 0, f"{name} has {unchecked} remote sources with no checksum"
+          print("both generators produced checksummed, declarable sources")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vendored-sources
+          path: |
+            cargo-sources.json
+            node-sources.json
+          retention-days: 14
