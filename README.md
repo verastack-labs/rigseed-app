@@ -9,17 +9,28 @@
 Install it, open it, add a torrent. No server to set up, no WebUI to configure,
 no separate qBittorrent install to keep in step.
 
-![version](https://img.shields.io/badge/version-0.1.3-4E7C9B?style=flat-square)
+![version](https://img.shields.io/badge/version-0.1.7-4E7C9B?style=flat-square)
 ![platform](https://img.shields.io/badge/platform-Windows%20·%20macOS%20·%20Linux-2E343D?style=flat-square)
-![tauri](https://img.shields.io/badge/Tauri-2.11-24C8DB?style=flat-square)
+![tauri](https://img.shields.io/badge/Tauri-2.12-24C8DB?style=flat-square)
 ![react](https://img.shields.io/badge/React-19.2-58C4DC?style=flat-square)
 ![rust](https://img.shields.io/badge/Rust-1.77+-B7410E?style=flat-square)
-![tests](https://img.shields.io/badge/tests-1001%20+%2030-5E8C63?style=flat-square)
+[![CI](https://github.com/verastack-labs/rigseed-app/actions/workflows/ci.yml/badge.svg)](https://github.com/verastack-labs/rigseed-app/actions/workflows/ci.yml)
 ![licence](https://img.shields.io/badge/licence-Apache--2.0-8E5A42?style=flat-square)
 
 </div>
 
 ---
+
+## The film
+
+https://github.com/user-attachments/assets/27b267ad-15bd-4e87-b70e-099665380cad
+
+Fifty-one seconds on what rigseed is and why it exists. Real captures on both
+sides: the stock client is a GPG-verified qBittorrent 5.0.5 on official Linux
+ISO torrents, and the rigseed side is the app's own interface. It is also
+[on the site](https://verastack-labs.github.io/rigseed/#film), and the 4K
+master is attached to
+[the latest release](https://github.com/verastack-labs/rigseed-app/releases/latest).
 
 ## What it is
 
