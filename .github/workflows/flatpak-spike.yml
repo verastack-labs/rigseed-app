@@ -1,0 +1,113 @@
+# Answers one question and then should be deleted.
+#
+# Can the Qt 6 and ICU 73 shared objects in rigseed's .deb, built on Ubuntu
+# 22.04, load inside a Flatpak runtime? Everything here exists to get that
+# answer on a real Linux machine, because the development machine is Windows
+# and WSL cannot install flatpak without an interactive password.
+#
+# It runs on a push to a spike/ branch rather than only on workflow_dispatch,
+# because a dispatch-only workflow is not offered by GitHub until the file is
+# on the default branch, and the whole point is to learn this before merging
+# anything.
+name: Flatpak spike
+
+on:
+  push:
+    branches: ['spike/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flatpak-spike-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  can-the-bundled-qt-load:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Flatpak and the GNOME runtime
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq flatpak flatpak-builder
+          flatpak remote-add --if-not-exists --user \
+            flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive \
+            flathub org.gnome.Platform//47 org.gnome.Sdk//47
+
+      # v0.1.7 shipped before the metainfo existed, so the manifest installs
+      # the repository's copy and needs it beside the manifest to do that.
+      - name: Put the metainfo where the manifest expects it
+        run: cp src-tauri/linux/dev.verastack.rigseed.metainfo.xml flatpak/
+
+      - name: Build and install the Flatpak
+        run: |
+          set -euo pipefail
+          flatpak-builder --user --install --force-clean \
+            build-dir flatpak/spike-prebuilt-deb.yml
+
+      # The actual experiment. Run under `sh` rather than launching rigseed,
+      # because there is no display and the question is only about the daemon
+      # and its libraries.
+      - name: Does the bundled qbittorrent-nox resolve its libraries
+        run: |
+          set -uo pipefail
+
+          echo "::group::ldd, looking for anything unresolved"
+          flatpak run --command=sh dev.verastack.rigseed \
+            -c 'ldd /app/bin/qbittorrent-nox' | tee ldd.txt || true
+          echo "::endgroup::"
+
+          if grep -q 'not found' ldd.txt; then
+            echo "::error::the bundled libraries do not resolve inside the runtime"
+            grep 'not found' ldd.txt
+            echo "VERDICT=prebuilt-deb-will-not-work" >> "$GITHUB_ENV"
+            exit 1
+          fi
+          echo "every shared object resolved"
+
+      - name: Does it actually run
+        run: |
+          set -uo pipefail
+
+          # rigseed sets QT_PLUGIN_PATH when it spawns the daemon, so the
+          # spike sets the same thing rather than testing a configuration
+          # that never happens in the app.
+          echo "::group::with QT_PLUGIN_PATH, as rigseed spawns it"
+          out=$(flatpak run --command=sh dev.verastack.rigseed -c \
+            'QT_PLUGIN_PATH=/app/lib/rigseed qbittorrent-nox --version 2>&1') || true
+          echo "$out"
+          echo "::endgroup::"
+
+          case "$out" in
+            *qBittorrent*)
+              echo "VERDICT: the daemon runs inside the runtime"
+              ;;
+            *)
+              echo "::error::qbittorrent-nox did not report a version. Output above."
+              exit 1
+              ;;
+          esac
+
+          # The control. On Ubuntu this same binary answers "No TLS backend is
+          # available" without the variable, which is how we know the variable
+          # is doing the work rather than being cargo cult. If it passes here
+          # too, the runtime is supplying something Ubuntu did not.
+          echo "::group::control, without QT_PLUGIN_PATH"
+          flatpak run --command=sh dev.verastack.rigseed \
+            -c 'qbittorrent-nox --version 2>&1' || true
+          echo "::endgroup::"
+
+      - name: What a software centre makes of the metadata
+        run: |
+          set -uo pipefail
+          sudo apt-get install -y -qq appstream desktop-file-utils
+          flatpak run --command=sh dev.verastack.rigseed \
+            -c 'cat /app/share/applications/dev.verastack.rigseed.desktop'
+          flatpak run --command=sh dev.verastack.rigseed \
+            -c 'cat /app/share/metainfo/dev.verastack.rigseed.metainfo.xml' > installed.metainfo.xml
+          appstreamcli validate --no-net installed.metainfo.xml || true
