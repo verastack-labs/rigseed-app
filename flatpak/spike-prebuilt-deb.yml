@@ -60,6 +60,13 @@ modules:
       # current one in beside this manifest before building.
       - install -Dm644 dev.verastack.rigseed.metainfo.xml /app/share/metainfo/dev.verastack.rigseed.metainfo.xml
 
+      # From the repository for the same reason as the metainfo: v0.1.7
+      # predates 64x64 being listed in bundle.icon, so the released .deb has
+      # 32, 128 and 256@2 and nothing between. appstreamcli compose, which
+      # flatpak-builder runs on every build, refuses a GUI component without
+      # a 64x64 and fails the whole build with gui-app-without-icon. Fixed
+      # properly in the packages by #125; this keeps the spike moving.
+      - install -Dm644 64x64.png /app/share/icons/hicolor/64x64/apps/dev.verastack.rigseed.png
       - install -Dm644 usr/share/icons/hicolor/128x128/apps/rigseed.png /app/share/icons/hicolor/128x128/apps/dev.verastack.rigseed.png
       - install -Dm644 usr/share/icons/hicolor/32x32/apps/rigseed.png /app/share/icons/hicolor/32x32/apps/dev.verastack.rigseed.png
     sources:
@@ -69,3 +76,5 @@ modules:
         dest-filename: rigseed.deb
       - type: file
         path: dev.verastack.rigseed.metainfo.xml
+      - type: file
+        path: 64x64.png

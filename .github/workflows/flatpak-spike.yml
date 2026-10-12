@@ -41,8 +41,12 @@ jobs:
 
       # v0.1.7 shipped before the metainfo existed, so the manifest installs
       # the repository's copy and needs it beside the manifest to do that.
-      - name: Put the metainfo where the manifest expects it
-        run: cp src-tauri/linux/dev.verastack.rigseed.metainfo.xml flatpak/
+      # v0.1.7 shipped before both of these existed in the package, so the
+      # manifest installs the repository copies and needs them beside it.
+      - name: Put the metainfo and the 64x64 icon where the manifest expects them
+        run: |
+          cp src-tauri/linux/dev.verastack.rigseed.metainfo.xml flatpak/
+          cp src-tauri/icons/64x64.png flatpak/
 
       - name: Build and install the Flatpak
         run: |
