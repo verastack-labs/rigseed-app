@@ -321,7 +321,20 @@ jobs:
           grep -q '^StartupWMClass=' "$desktop" \
             || { echo "::error::StartupWMClass is missing from the desktop entry"; exit 1; }
 
-          echo "desktop entry and metainfo are both in the .deb"
+          # AppStream refuses a GUI component with no 64x64 icon, and
+          # flatpak-builder runs appstreamcli compose as part of every build,
+          # so a missing one is a hard failure rather than a cosmetic gap. The
+          # file has been in src-tauri/icons since the beginning; it was
+          # simply never listed in bundle.icon, so it never shipped.
+          icon="$work/usr/share/icons/hicolor/64x64/apps/rigseed.png"
+          if [ ! -f "$icon" ]; then
+            echo "::error::no 64x64 icon in the .deb. AppStream requires one for a GUI application and will not compose a component without it. Add icons/64x64.png to bundle.icon in src-tauri/tauri.conf.json."
+            echo "icon sizes present:"
+            find "$work/usr/share/icons/hicolor" -name 'rigseed.png' | sed 's|.*/hicolor/||;s|/apps/rigseed.png||' | sort
+            exit 1
+          fi
+
+          echo "desktop entry, metainfo and the 64x64 icon are all in the .deb"
 
       # Unsigned on every platform for this release, which is a deliberate
       # choice recorded in the release notes rather than an oversight. Checksums
