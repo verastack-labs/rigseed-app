@@ -1,0 +1,162 @@
+# Builds the Flathub manifest end to end and proves the result runs.
+#
+# Not a release job. Flathub builds the app on its own workers from the
+# manifest in its own repository; this exists so a change that breaks that
+# build is caught here rather than in somebody else's pull request.
+#
+# The vendored source lists are generated rather than committed. They are
+# derived entirely from Cargo.lock and pnpm-lock.yaml, so a committed copy is
+# one more hand-maintained duplicate of a fact that lives somewhere else,
+# which is the failure this repository keeps finding. The Flathub repository
+# gets a generated copy at submission time.
+name: Flatpak
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'flatpak/**'
+      - 'src-tauri/**'
+      - 'src/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/flatpak.yml'
+  pull_request:
+    paths:
+      - 'flatpak/**'
+      - 'src-tauri/**'
+      - 'src/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/flatpak.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flatpak-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Flatpak, the runtime and the SDK extensions
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq flatpak flatpak-builder
+          flatpak remote-add --if-not-exists --user \
+            flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub \
+            org.gnome.Platform//47 org.gnome.Sdk//47 \
+            org.freedesktop.Sdk.Extension.rust-stable//24.08 \
+            org.freedesktop.Sdk.Extension.node20//24.08
+
+      - name: Generate the vendored source lists
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet aiohttp tomlkit
+          python3 -m pip install --quiet \
+            "git+https://github.com/flatpak/flatpak-builder-tools.git#subdirectory=node"
+          curl -fsSLO https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/cargo/flatpak-cargo-generator.py
+
+          python3 flatpak-cargo-generator.py -o flatpak/cargo-sources.json src-tauri/Cargo.lock
+
+          # The store DIRECTORY version, not the lockfile version. Lockfile 9
+          # maps to v10 or v11 and nothing else, so it is read from the
+          # packageManager field rather than guessed.
+          pinned=$(node -p "require('./package.json').packageManager || ''")
+          case "$pinned" in
+            pnpm@11.*) store=v11 ;;
+            pnpm@10.*) store=v10 ;;
+            *) echo "::error::package.json pins '$pinned', which is not mapped to a pnpm store version here"; exit 1 ;;
+          esac
+          flatpak-node-generator pnpm pnpm-lock.yaml --pnpm-store-version "$store" -o flatpak/node-sources.json
+
+          python3 - <<'PY'
+          import json
+          for name in ("flatpak/cargo-sources.json", "flatpak/node-sources.json"):
+              data = json.load(open(name))
+              bad = [e for e in data
+                     if e.get("type") in ("file", "archive")
+                     and not any(k in e for k in ("sha256", "sha512", "md5"))]
+              print(f"{name}: {len(data)} entries, {len(bad)} without a checksum")
+              assert not bad, f"{name} has remote sources with no checksum"
+          PY
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          flatpak-builder --user --install --force-clean \
+            build-dir flatpak/dev.verastack.rigseed.yml
+
+      - name: Does it run
+        run: |
+          set -uo pipefail
+          sudo apt-get install -y -qq xvfb appstream desktop-file-utils
+
+          echo "::group::what got installed"
+          flatpak run --command=sh dev.verastack.rigseed -c 'ls /app/bin; echo ---; ls /app/plugins'
+          echo "::endgroup::"
+
+          # The daemon, with QT_PLUGIN_PATH deliberately unset, which is what
+          # the app now does inside a sandbox. Its absence is the whole point:
+          # a missing TLS backend does not fail --version, it fails the first
+          # tracker.
+          echo "::group::the bundled daemon"
+          out=$(flatpak run --command=sh dev.verastack.rigseed -c 'qbittorrent-nox --version 2>&1')
+          echo "$out"
+          echo "::endgroup::"
+          case "$out" in
+            *"qBittorrent v5.2.3"*) echo "daemon ok, and it is the version sidecar.json pins" ;;
+            *) echo "::error::daemon reported '$out'"; exit 1 ;;
+          esac
+          case "$out" in
+            *"TLS backend"*) echo "::error::Qt could not find its TLS backend"; exit 1 ;;
+          esac
+
+          # The app itself needs a display even to fail honestly, so it gets
+          # one. Anything that exits non-zero within a few seconds is a
+          # startup fault rather than a running app.
+          echo "::group::the app"
+          xvfb-run -a timeout 25 flatpak run dev.verastack.rigseed > app.log 2>&1 &
+          pid=$!
+          sleep 20
+          if kill -0 "$pid" 2>/dev/null; then
+            echo "still running after 20s"
+            kill "$pid" 2>/dev/null || true
+          else
+            wait "$pid"; code=$?
+            if [ "$code" -ne 0 ] && [ "$code" -ne 124 ]; then
+              echo "::error::rigseed exited $code during startup"
+              cat app.log
+              exit 1
+            fi
+          fi
+          tail -40 app.log || true
+          echo "::endgroup::"
+
+      - name: What a software centre sees
+        run: |
+          set -euo pipefail
+          flatpak run --command=sh dev.verastack.rigseed \
+            -c 'cat /app/share/applications/dev.verastack.rigseed.desktop'
+          flatpak run --command=sh dev.verastack.rigseed \
+            -c 'cat /app/share/metainfo/dev.verastack.rigseed.metainfo.xml' > installed.metainfo.xml
+          appstreamcli validate --no-net installed.metainfo.xml
+          grep -q 'dev.verastack.rigseed.desktop' installed.metainfo.xml \
+            || { echo "::error::the metainfo launchable was not rewritten to the app id"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flatpak-sources
+          path: |
+            flatpak/cargo-sources.json
+            flatpak/node-sources.json
+          retention-days: 14

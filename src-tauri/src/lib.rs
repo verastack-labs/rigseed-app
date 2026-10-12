@@ -467,7 +467,18 @@ pub fn run() {
             // Linux the sidecar installs to /usr/bin and its libraries to
             // /usr/lib/rigseed, and a qt.conf in /usr/bin would be read by
             // every other Qt program in that directory too.
-            let plugins = app.path().resource_dir().ok();
+            //
+            // Not set at all inside a Flatpak or a Snap. There the daemon is
+            // built against the runtime's Qt, which finds its own plugins
+            // under its install prefix without being told. Pointing this at
+            // our resource directory would override that search with a
+            // directory holding no Qt plugins, and the failure is the silent
+            // one: the daemon starts, reports its version, and answers every
+            // HTTPS tracker with `No TLS backend is available`.
+            let plugins = match packaging::packaging() {
+                packaging::Packaging::Native => app.path().resource_dir().ok(),
+                _ => None,
+            };
 
             match app.shell().sidecar("qbittorrent-nox") {
                 Ok(command) => {
