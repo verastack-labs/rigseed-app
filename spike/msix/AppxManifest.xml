@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Throwaway. This manifest exists to answer whether rigseed survives MSIX
+  packaging at all, not to be the manifest we ship. The real one needs the
+  identity Partner Center assigns, which does not exist yet.
+
+  Two things here are load-bearing and were learned the hard way:
+
+  `rescap` is deliberately absent from IgnorableNamespaces. Marking it
+  ignorable invites the processor to drop runFullTrust, and a
+  Windows.FullTrustApplication entry point without that capability does not
+  start. Windows logs the activation as attempted, creates no process and
+  records no crash, which is a miserable thing to debug.
+
+  __VERSION__ is substituted by build-package.ps1. MSIX versions are four
+  parts and the last must be 0 for Store submissions, so 0.1.7 becomes
+  0.1.7.0 rather than being pasted in as-is.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap">
+
+  <Identity
+    Name="VerastackLabs.rigseed.spike"
+    Publisher="CN=RigseedSpike"
+    Version="__VERSION__"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>rigseed (MSIX spike)</DisplayName>
+    <PublisherDisplayName>Verastack Labs</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Capabilities>
+    <!--
+      Full trust, because rigseed spawns qbittorrent-nox as a child process and
+      that is not something a sandboxed app may do. This is the capability the
+      Store reviews most closely for an unpackaged-origin app, and the one the
+      whole route depends on being granted.
+    -->
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+
+  <Applications>
+    <Application Id="rigseed" Executable="rigseed.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="rigseed (MSIX spike)"
+        Description="Throwaway build that tests whether the qBittorrent sidecar, its loopback port and the config paths survive MSIX packaging."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png" />
+    </Application>
+  </Applications>
+
+</Package>

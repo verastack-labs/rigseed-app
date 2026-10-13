@@ -1,0 +1,115 @@
+# Throwaway. Delete this workflow and the spike/ directory once the MSIX
+# question is answered, whichever way it lands.
+#
+# It exists because the question cannot be answered on a developer's laptop.
+# Installing a signed MSIX means trusting a certificate machine-wide and
+# writing into C:\Program Files\WindowsApps, which needs administrator rights,
+# and that read-only directory is precisely the thing being tested: rigseed
+# spawns qbittorrent-nox as a child process, and whether that still works from
+# WindowsApps decides whether the Microsoft Store route is viable at all.
+#
+# A GitHub runner is administrator by default and is destroyed afterwards, so
+# it is the right place to do something this invasive.
+#
+# Triggered by pushes to the spike branch, and nothing else. workflow_dispatch
+# alone would not do: GitHub refuses to dispatch a workflow that is not on the
+# default branch, and merging a throwaway to main just to run it once is the
+# wrong trade. The branch filter is what keeps this off every other branch.
+name: MSIX spike
+
+on:
+  push:
+    branches: [spike/msix]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  does-rigseed-survive-packaging:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # The same script the release build uses, so the payload is the one that
+      # really ships rather than an approximation assembled for this test.
+      - name: Fetch the sidecar
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/fetch-sidecar-binary.sh x86_64-pc-windows-msvc
+
+      # --no-bundle: the NSIS installer is not wanted here and it is the slow
+      # part. The spike assembles its own payload from target/release and
+      # src-tauri/binaries, mirroring tauri.windows.conf.json's resource map.
+      - name: Build
+        run: pnpm tauri build --no-bundle
+
+      - name: Read the version
+        id: version
+        shell: bash
+        run: echo "value=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Package, sign and install
+        shell: pwsh
+        run: |
+          ./spike/msix/build-package.ps1 `
+            -RepoRoot $env:GITHUB_WORKSPACE `
+            -Version '${{ steps.version.outputs.value }}' `
+            -WorkDir "$env:RUNNER_TEMP\msix"
+
+      # Runs the app unpackaged first as a control, then from the MSIX, and
+      # prints the two side by side. The control is what makes a packaged
+      # failure meaningful rather than ambiguous.
+      - name: Probe
+        shell: pwsh
+        run: |
+          ./spike/msix/probe.ps1 `
+            -RepoRoot $env:GITHUB_WORKSPACE `
+            -WorkDir "$env:RUNNER_TEMP\msix"
+
+      # Event logs are how a silent activation failure is diagnosed. A packaged
+      # app that refuses to start writes nothing to stdout and may not even
+      # produce a crash, so these are often the only evidence there is.
+      - name: Windows logs, if anything went wrong
+        if: always()
+        shell: pwsh
+        run: |
+          $since = (Get-Date).AddMinutes(-30)
+          foreach ($log in 'Microsoft-Windows-AppModel-Runtime/Admin','Microsoft-Windows-TWinUI/Operational','Application') {
+            Write-Host "::group::$log"
+            Get-WinEvent -FilterHashtable @{LogName=$log; StartTime=$since} -ErrorAction SilentlyContinue |
+              Where-Object { $_.Message -match 'rigseed|Verastack|qbittorrent' } |
+              Select-Object -First 15 |
+              ForEach-Object { "[{0}] Id={1} {2}" -f $_.LevelDisplayName, $_.Id, (($_.Message -split "`n")[0]) }
+            Write-Host '::endgroup::'
+          }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: msix-spike
+          path: |
+            ${{ runner.temp }}/msix/results.json
+            ${{ runner.temp }}/msix/control-out.txt
+            ${{ runner.temp }}/msix/control-err.txt
+            ${{ runner.temp }}/msix/rigseed-spike.msix
+          if-no-files-found: warn
