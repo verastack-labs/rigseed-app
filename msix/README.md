@@ -61,9 +61,19 @@ a package `Name` must match `[-.A-Za-z0-9]+`, so the underscored placeholders
 cannot be packed at all and the flag would otherwise do nothing useful.
 
 To install that package yourself you must sign it and trust the certificate,
-which needs administrator rights. `spike/msix/build-package.ps1` on the
-`spike/msix` branch does exactly that, and is the better starting point for
-local testing than rebuilding the steps by hand.
+which needs administrator rights:
+
+```powershell
+# from an elevated PowerShell
+./msix/install-locally.ps1
+./msix/install-locally.ps1 -Uninstall
+```
+
+It refuses rather than guesses when it cannot work: without elevation, without
+Developer Mode, or when the package carries a real Partner Center identity that
+a local certificate can never match. Worth doing once before the first
+submission, because certification failures are slow and vague, and most of what
+they catch is visible in thirty seconds on your own machine.
 
 ## Things to watch
 
