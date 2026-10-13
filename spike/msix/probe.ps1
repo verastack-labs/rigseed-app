@@ -49,29 +49,56 @@ function Wait-For($block, $seconds) {
   return $null
 }
 
-# Port 8080 is what the app logs on a normal start, but it is free to pick
-# another, so the daemon's own listening port is discovered from the process
-# rather than assumed.
-function Get-DaemonPort($daemonProcess) {
-  if (-not $daemonProcess) { return $null }
-  $conn = Get-NetTCPConnection -State Listen -OwningProcess $daemonProcess.Id -ErrorAction SilentlyContinue |
-    Where-Object { $_.LocalAddress -in '127.0.0.1', '0.0.0.0', '::', '::1' } |
-    Select-Object -First 1
-  if ($conn) { return $conn.LocalPort }
-  return $null
+# Every listening socket the daemon owns, not just the first.
+#
+# The first run of this spike took the first one and tested that, which was the
+# BitTorrent listen port rather than the WebUI: the control's own log said the
+# WebUI was on 43880 while the probe was knocking on 58871. rigseed picks a
+# random high port for the WebUI, so neither a fixed 8080 nor "whatever is
+# first" identifies it. Trying all of them removes the guess entirely.
+function Get-DaemonPorts($daemonProcess) {
+  if (-not $daemonProcess) { return @() }
+  return @(
+    Get-NetTCPConnection -State Listen -OwningProcess $daemonProcess.Id -ErrorAction SilentlyContinue |
+      Where-Object { $_.LocalAddress -in '127.0.0.1', '0.0.0.0', '::', '::1' } |
+      Select-Object -ExpandProperty LocalPort -Unique |
+      Sort-Object
+  )
 }
 
-function Test-Loopback($port) {
-  if (-not $port) { return 'no port to test' }
-  try {
-    $r = Invoke-WebRequest -Uri "http://127.0.0.1:$port/" -UseBasicParsing -TimeoutSec 10
-    return "HTTP $($r.StatusCode)"
-  } catch {
-    # The daemon answers 401/403 before login, which still proves the socket is
-    # reachable. Only a transport failure means loopback is actually blocked.
-    if ($_.Exception.Response) { return "HTTP $([int]$_.Exception.Response.StatusCode) (reachable)" }
-    return "UNREACHABLE: $($_.Exception.Message)"
+function Test-Loopback($ports) {
+  if (-not $ports -or $ports.Count -eq 0) { return 'no listening port to test' }
+
+  $seen = @()
+  foreach ($port in $ports) {
+    try {
+      $r = Invoke-WebRequest -Uri "http://127.0.0.1:$port/" -UseBasicParsing -TimeoutSec 10
+      $seen += "${port}: HTTP $($r.StatusCode)"
+    } catch {
+      # Strict mode turns a missing property into a thrown error, so the
+      # response is fished out defensively. The previous version read
+      # .Exception.Response directly, which threw on any non-HTTP failure and
+      # made this function return nothing at all: the result came back null and
+      # the question the whole spike exists to answer went unanswered.
+      $status = $null
+      try {
+        $ex = $_.Exception
+        if ($ex.PSObject.Properties.Name -contains 'Response' -and $ex.Response) {
+          $status = [int]$ex.Response.StatusCode
+        }
+      } catch { $status = $null }
+
+      if ($status) {
+        # 401 and 403 are the daemon refusing to log us in, which still proves
+        # the socket was reached. Only a transport failure means loopback is
+        # blocked.
+        $seen += "${port}: HTTP $status (reachable)"
+      } else {
+        $seen += "${port}: unreachable ($($_.Exception.GetType().Name))"
+      }
+    }
   }
+  return $seen -join ' | '
 }
 
 function Find-ConfigRoots {
@@ -97,13 +124,14 @@ function Probe($label, $launch) {
   & $launch
 
   $rig = Wait-For { Get-Process rigseed -ErrorAction SilentlyContinue | Select-Object -First 1 } 60
-  $qbt = $null; $port = $null; $loopback = 'not tested, app never started'
+  $qbt = $null; $ports = @(); $loopback = 'not tested, app never started'
 
   if ($rig) {
     $qbt = Wait-For { Get-Process qbittorrent-nox -ErrorAction SilentlyContinue | Select-Object -First 1 } 45
     if ($qbt) {
-      $port = Wait-For { Get-DaemonPort $qbt } 45
-      $loopback = Test-Loopback $port
+      $ports = Wait-For { $p = Get-DaemonPorts $qbt; if ($p.Count -gt 0) { , $p } else { $null } } 45
+      if (-not $ports) { $ports = @() }
+      $loopback = Test-Loopback $ports
     } else {
       $loopback = 'not tested, sidecar never spawned'
     }
@@ -113,7 +141,7 @@ function Probe($label, $launch) {
     'app started'   = [bool]$rig
     'sidecar spawned' = [bool]$qbt
     'sidecar path'  = if ($qbt) { try { $qbt.Path } catch { 'access denied (expected under WindowsApps)' } } else { 'n/a' }
-    'daemon port'   = if ($port) { $port } else { 'none listening' }
+    'daemon ports'  = if ($ports.Count -gt 0) { $ports -join ', ' } else { 'none listening' }
     'loopback'      = $loopback
     'config roots'  = (Find-ConfigRoots) -join ' | '
   }
