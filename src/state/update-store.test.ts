@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { type Packaging } from '@/services/shell'
 import { updateNeedsAttention, useUpdateStore, type UpdateState } from '@/state/update-store'
 
 const check = vi.fn()
@@ -7,7 +8,7 @@ vi.mock('@tauri-apps/plugin-updater', () => ({ check: () => check() }))
 vi.mock('@tauri-apps/plugin-process', () => ({ relaunch: vi.fn() }))
 
 let desktop = true
-let installedBy: 'flatpak' | 'snap' | 'native' = 'native'
+let installedBy: Packaging = 'native'
 vi.mock('@/services/shell', () => ({
   canReachDesktop: () => desktop,
   packaging: () => Promise.resolve(installedBy),
@@ -148,6 +149,26 @@ describe('a copy a store installed', () => {
     installedBy = 'snap'
     await useUpdateStore.getState().checkNow()
     expect(useUpdateStore.getState().state).toEqual({ kind: 'managed', store: 'snap' })
+  })
+
+  // The only one of the three that shares a platform with a self-updating
+  // build: the NSIS installer must keep its updater, and an MSIX copy must
+  // not have one. Getting this backwards would either break updates for
+  // everyone on Windows or have the app write into a read-only package.
+  it('stands down for an MSIX copy, while NSIS keeps its own updater', async () => {
+    installedBy = 'microsoft-store'
+    await useUpdateStore.getState().checkNow()
+    expect(check).not.toHaveBeenCalled()
+    expect(useUpdateStore.getState().state).toEqual({
+      kind: 'managed',
+      store: 'microsoft-store',
+    })
+
+    reset()
+    check.mockResolvedValue(null)
+    installedBy = 'native'
+    await useUpdateStore.getState().checkNow()
+    expect(check).toHaveBeenCalled()
   })
 
   it('counts as checked, so the launch check does not run again', async () => {
