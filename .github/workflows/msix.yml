@@ -1,0 +1,119 @@
+# The Microsoft Store package.
+#
+# Deliberately separate from release.yml rather than a job inside it. The Store
+# submission is a manual step in Partner Center that happens on its own
+# schedule, and the identity this needs does not exist until the app name is
+# reserved. Wiring it into the release would let a Store problem fail a release
+# that is otherwise fine, which is the wrong way round: the .deb, .rpm,
+# AppImage, .dmg and NSIS installer are the things people actually download.
+#
+# The package is not signed here, and that is the point of the whole route.
+# The Store re-signs every MSIX with a Microsoft certificate after it passes
+# certification, which is why this was chosen over submitting the NSIS
+# installer, where every self-built Qt library and the sidecar would each have
+# needed an Authenticode signature from a certificate authority.
+name: MSIX
+
+on:
+  workflow_dispatch:
+    inputs:
+      allow_placeholder_identity:
+        description: 'Pack with a stand-in identity (for testing the pipeline before the Store name is reserved)'
+        type: boolean
+        default: false
+  # Builds the package whenever a release is published, so there is always one
+  # ready to upload rather than a scramble at submission time. It does not
+  # submit anything.
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # The same script the release build uses, so the Store package contains
+      # the daemon that really ships rather than one assembled differently.
+      - name: Fetch the sidecar
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/fetch-sidecar-binary.sh x86_64-pc-windows-msvc
+
+      # --no-bundle: the NSIS installer is release.yml's job. This needs the
+      # binary and its resources, and msix/build.ps1 assembles the payload from
+      # those directly.
+      - name: Build
+        run: pnpm tauri build --no-bundle
+
+      # Falls back to a stand-in identity when the Store reservation does not
+      # exist yet, rather than failing.
+      #
+      # Failing would be the honest-looking choice and the wrong one: it would
+      # put a red cross on every release for a state we already know about and
+      # are waiting on Partner Center for, and a check that is always red is a
+      # check everybody learns to ignore. Packing with a stand-in keeps the
+      # pipeline genuinely exercised on every release, and the artifact is
+      # named so nobody can mistake it for something submittable.
+      - name: Pack
+        id: pack
+        shell: pwsh
+        run: |
+          $identity = Get-Content ./msix/identity.json -Raw | ConvertFrom-Json
+          $unreserved = @($identity.name, $identity.publisher) | Where-Object { $_ -match '^__.*__$' }
+
+          $standIn = $unreserved.Count -gt 0 -or '${{ inputs.allow_placeholder_identity }}' -eq 'true'
+          $extra = @{}
+          if ($standIn) { $extra['AllowPlaceholderIdentity'] = $true }
+
+          ./msix/build.ps1 -RepoRoot $env:GITHUB_WORKSPACE -OutDir "$env:RUNNER_TEMP\msix" @extra
+
+          $suffix = if ($standIn) { 'unsubmittable' } else { 'store' }
+          "artifact=msix-$suffix" | Out-File $env:GITHUB_OUTPUT -Append
+
+          if ($standIn) {
+            Write-Host "::notice::Packed with a stand-in identity because msix/identity.json is not filled in yet. Fill it from Partner Center once the app name is reserved, and this becomes a submittable package."
+          }
+
+      # Packing proves the manifest is valid; it does not prove the app runs.
+      # The spike on branch spike/msix is what established that the daemon
+      # spawns from WindowsApps and loopback survives, and that evidence is
+      # what this pipeline rests on.
+      - name: What went in
+        shell: pwsh
+        run: |
+          Write-Host "::group::Package contents"
+          Get-ChildItem -Recurse "$env:RUNNER_TEMP\msix\payload" -File |
+            ForEach-Object { '{0,10:N0}  {1}' -f $_.Length, $_.FullName.Replace("$env:RUNNER_TEMP\msix\payload\", '') }
+          Write-Host '::endgroup::'
+
+      # Named by what it is. "msix-unsubmittable" cannot be uploaded to
+      # Partner Center and the name says so, which matters because the two
+      # packages are otherwise indistinguishable without opening the manifest.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack.outputs.artifact }}
+          path: ${{ runner.temp }}/msix/*.msix
+          if-no-files-found: error
