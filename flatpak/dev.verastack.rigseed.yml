@@ -238,6 +238,28 @@ modules:
       # just built. Copied under the target triple the bundler expects, so
       # the check passes without the configuration being edited.
       - install -Dm755 /app/bin/qbittorrent-nox src-tauri/binaries/qbittorrent-nox-x86_64-unknown-linux-gnu
+
+      # The same check, for the resources tauri.linux.conf.json declares. It
+      # maps binaries/lib and three binaries/plugins directories into the .deb
+      # and the .rpm, where `fetch-sidecar-binary.sh` has downloaded Qt's
+      # libraries and plugins beside the daemon. Here Qt was built from source
+      # into /app two modules ago, so none of those paths exist and the build
+      # script stops with "resource path binaries/plugins/tls doesn't exist".
+      #
+      # They are created empty rather than filled, and empty is the correct
+      # content. At runtime the app only looks in its resource directory for
+      # Qt plugins when packaging() reports Native; in a Flatpak it reports
+      # Flatpak, passes no plugin path, and Qt finds /app on its own, which a
+      # probe confirmed by the absence of the "No TLS backend is available"
+      # warning. Filling these would duplicate the runtime's Qt into a
+      # directory nothing reads.
+      #
+      # Nothing is bundled from them either, because this builds with cargo
+      # rather than the Tauri bundler: the check is the only thing that cares.
+      - mkdir -p src-tauri/binaries/lib src-tauri/binaries/plugins/tls
+        src-tauri/binaries/plugins/sqldrivers
+        src-tauri/binaries/plugins/networkinformation
+
       - cargo --offline build --release --manifest-path src-tauri/Cargo.toml
 
       - install -Dm755 src-tauri/target/release/rigseed /app/bin/rigseed
