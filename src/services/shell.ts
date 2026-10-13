@@ -81,7 +81,17 @@ export function canReachDesktop(): boolean {
 }
 
 /** Which store, if any, owns this installation. */
-export type Packaging = 'flatpak' | 'snap' | 'native'
+export type Packaging = 'flatpak' | 'snap' | 'microsoft-store' | 'native'
+
+/**
+ * The ones a store owns, which is every Packaging except native.
+ *
+ * Derived rather than written out again, so adding a format to `Packaging`
+ * cannot leave this behind still listing two of three. The switch in
+ * `describeManaged` is exhaustive over it, so the compiler names the new
+ * case rather than letting it fall through to an empty card.
+ */
+export type ManagedStore = Exclude<Packaging, 'native'>
 
 /**
  * Asks Rust how this copy was installed.

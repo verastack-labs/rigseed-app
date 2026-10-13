@@ -13,6 +13,8 @@
  * they end up debugging the wrong thing.
  */
 
+import { type ManagedStore } from '@/services/shell'
+
 export type UpdateFailure = 'signature' | 'no-channel' | 'no-manifest' | 'network' | 'unknown'
 
 /**
@@ -76,12 +78,18 @@ export function describeFailure(failure: UpdateFailure, detail?: string): string
  * the one command that asks now, for people who would rather not wait for a
  * software centre to notice.
  */
-export function describeManaged(store: 'flatpak' | 'snap'): string {
+export function describeManaged(store: ManagedStore): string {
   switch (store) {
     case 'flatpak':
       return 'This copy was installed with Flatpak, so its updates come from there. Your software centre will offer them, or run flatpak update dev.verastack.rigseed to ask now.'
     case 'snap':
       return 'This copy was installed as a snap, so snapd keeps it up to date on its own schedule. Run snap refresh rigseed to ask now.'
+    // No command to offer. The other two have one that asks now, and the
+    // Store's equivalent is a button in another window rather than something
+    // that can be typed, so saying where it is beats naming a command that
+    // does not exist.
+    case 'microsoft-store':
+      return 'This copy came from the Microsoft Store, so the Store delivers its updates. Open the Store and check Downloads to ask now.'
   }
 }
 

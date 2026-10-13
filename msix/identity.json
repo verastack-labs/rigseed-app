@@ -1,0 +1,31 @@
+{
+  "$comment": [
+    "The package identity Partner Center assigns, which is not a free choice.",
+    "",
+    "Every value here is dictated by the Store once the app name is reserved,",
+    "and all three must match the reservation exactly or the upload is",
+    "rejected. They are found under Product Identity in Partner Center.",
+    "",
+    "None of this is secret. The publisher id is on every Store listing, which",
+    "is why it lives in the repository rather than in a secret, where nobody",
+    "could review a change to it.",
+    "",
+    "The __PLACEHOLDER__ values are deliberate. build.ps1 refuses to produce a",
+    "package for submission while any of them survive, because an MSIX built",
+    "with the wrong identity installs and runs perfectly and is then rejected",
+    "at the end of the upload, which is an expensive way to find a typo."
+  ],
+
+  "$howToFill": {
+    "name": "Partner Center > your app > Product management > Product identity > Package/Identity/Name",
+    "publisher": "the same page, Package/Identity/Publisher. It is a full X.500 string beginning CN=, not your display name",
+    "publisherDisplayName": "the same page, Package/Properties/PublisherDisplayName. This is the human one shown on the listing"
+  },
+
+  "name": "__RESERVED_PACKAGE_NAME__",
+  "publisher": "__CN_FROM_PARTNER_CENTER__",
+  "publisherDisplayName": "Verastack Labs",
+
+  "displayName": "rigseed",
+  "description": "A desktop client for qBittorrent."
+}

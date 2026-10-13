@@ -63,3 +63,10 @@ tauri-plugin-process = "2.4"
 
 [dev-dependencies]
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros"] }
+
+# Only to ask Windows whether this process has package identity, which is how
+# an MSIX install is told apart from the NSIS one so the updater can stand
+# down. Already in the lock file as a transitive dependency of keyring, so
+# naming it here costs nothing new to build or to vendor.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_Storage_Packaging_Appx"] }

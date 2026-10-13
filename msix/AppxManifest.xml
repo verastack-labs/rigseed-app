@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Microsoft Store package. The double-underscored placeholders below are
+  substituted by build.ps1, from msix/identity.json and package.json. It reads
+  this file to find them, and fails if any of them has no value there, so a
+  placeholder added here is never silently shipped.
+
+  Three things here are load-bearing, and two of them cost a day to learn:
+
+  `rescap` is deliberately absent from IgnorableNamespaces. Marking it
+  ignorable invites the processor to drop runFullTrust, and a
+  Windows.FullTrustApplication entry point without that capability does not
+  start: Windows logs the activation as attempted, creates no process, and
+  records no crash anywhere.
+
+  runFullTrust is not decoration. rigseed spawns qbittorrent-nox as a child
+  process from its own install directory and talks to it over loopback, and a
+  sandboxed app may do neither. A spike proved both survive packaging: the
+  daemon really does launch from C:\Program Files\WindowsApps and the WebUI
+  answers on 127.0.0.1. This capability is what the Store reviews most closely
+  for an app of this shape.
+
+  MinVersion is 10.0.17763 because that is where MSIX full trust is reliable,
+  but WebView2 is a known open question at that floor. rigseed needs the
+  Evergreen runtime, which ships with Windows 11 and reached Windows 10
+  through Windows Update during 2021, so a long-unpatched 1809 machine could
+  install this and fail to open a window. MSIX cannot express a dependency on
+  Evergreen, so there is nothing to declare here; it is a listing requirement
+  and a thing to watch in certification rather than something this file fixes.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap">
+
+  <Identity
+    Name="__IDENTITY_NAME__"
+    Publisher="__IDENTITY_PUBLISHER__"
+    Version="__VERSION__"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>__DISPLAY_NAME__</DisplayName>
+    <PublisherDisplayName>__PUBLISHER_DISPLAY_NAME__</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+
+  <Applications>
+    <Application Id="rigseed" Executable="rigseed.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="__DISPLAY_NAME__"
+        Description="__DESCRIPTION__"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <!--
+          The small tile only. Naming Square310x310Logo here would oblige us to
+          supply Wide310x150Logo too, which the schema enforces and which Tauri
+          does not generate, and a large tile is not worth drawing artwork by
+          hand for a size most people never pin.
+        -->
+        <uap:DefaultTile Square71x71Logo="Assets\Square71x71Logo.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+</Package>

@@ -8,7 +8,7 @@ import {
   type Progress,
   type UpdateFailure,
 } from '@/features/updates/update-status'
-import { canReachDesktop, packaging } from '@/services/shell'
+import { canReachDesktop, packaging, type ManagedStore } from '@/services/shell'
 
 /**
  * The update, as a state the screen can render directly.
@@ -36,7 +36,7 @@ export type UpdateState =
    * at the releases page, and sending a Flatpak user to download a .deb is
    * worse advice than saying nothing.
    */
-  | { kind: 'managed'; store: 'flatpak' | 'snap' }
+  | { kind: 'managed'; store: ManagedStore }
   | { kind: 'failed'; failure: UpdateFailure; detail?: string }
 
 interface UpdateStore {
