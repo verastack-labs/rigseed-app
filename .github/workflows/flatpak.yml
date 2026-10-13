@@ -53,9 +53,9 @@ jobs:
           flatpak remote-add --if-not-exists --user \
             flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y --noninteractive flathub \
-            org.gnome.Platform//47 org.gnome.Sdk//47 \
-            org.freedesktop.Sdk.Extension.rust-stable//24.08 \
-            org.freedesktop.Sdk.Extension.node22//24.08
+            org.gnome.Platform//49 org.gnome.Sdk//49 \
+            org.freedesktop.Sdk.Extension.rust-stable//25.08 \
+            org.freedesktop.Sdk.Extension.node22//25.08
 
       - name: Generate the vendored source lists
         run: |

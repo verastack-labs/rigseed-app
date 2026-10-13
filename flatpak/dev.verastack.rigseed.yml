@@ -21,7 +21,20 @@
 app-id: dev.verastack.rigseed
 
 runtime: org.gnome.Platform
-runtime-version: '47'
+runtime-version: '49'
+
+# 49 rather than 47, because of rustc and nothing else.
+#
+# An SDK extension only mounts into a build whose sdk shares its
+# freedesktop base, so the runtime version and the extension branch are
+# one choice rather than two. 47 pairs with 24.08, whose rust-stable is
+# rustc 1.89, and Tauri 2.12 requires 1.90: the build failed on a version
+# floor rather than on anything in this manifest. 25.08 carries rustc
+# 1.98.1, and 49 is the GNOME runtime built on it.
+#
+# Both were measured on a runner rather than read off a release note,
+# because the branch name of an extension says nothing about which rustc
+# is inside it.
 sdk: org.gnome.Sdk
 command: rigseed
 
