@@ -124,17 +124,29 @@ jobs:
           # one. Anything that exits non-zero within a few seconds is a
           # startup fault rather than a running app.
           echo "::group::the app"
-          xvfb-run -a timeout 25 flatpak run dev.verastack.rigseed > app.log 2>&1 &
+          # RUST_BACKTRACE because a rebuild costs an hour and a half: a panic
+          # that reports only its exit code buys another full cycle to find
+          # out where it came from.
+          xvfb-run -a timeout 25 flatpak run --env=RUST_BACKTRACE=1 \
+            dev.verastack.rigseed > app.log 2>&1 &
           pid=$!
           sleep 20
           if kill -0 "$pid" 2>/dev/null; then
             echo "still running after 20s"
             kill "$pid" 2>/dev/null || true
           else
-            wait "$pid"; code=$?
+            # `|| code=$?` rather than `wait "$pid"; code=$?`. The step runs
+            # under `bash -e`, so a bare `wait` on a process that failed takes
+            # the whole script down on that line, before the diagnostic below
+            # can run. The first failure here reported nothing but "exit code
+            # 101", and the log that would have said why was never printed.
+            code=0
+            wait "$pid" || code=$?
             if [ "$code" -ne 0 ] && [ "$code" -ne 124 ]; then
               echo "::error::rigseed exited $code during startup"
-              cat app.log
+              echo "--- app.log ---"
+              cat app.log || echo "(no app.log was written at all)"
+              echo "--- end app.log ---"
               exit 1
             fi
           fi
