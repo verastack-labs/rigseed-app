@@ -160,3 +160,86 @@ jobs:
             flatpak/cargo-sources.json
             flatpak/node-sources.json
           retention-days: 14
+  # Temporary. Answers which runtime to move to, then gets deleted.
+  #
+  # The build fails on rustc: the rust-stable extension at 24.08 ships 1.89 and
+  # Tauri 2.12 requires 1.90. The fix is a newer extension branch, but which
+  # runtime pairs with it, and whether node22 still exists there, are facts to
+  # read off Flathub rather than guess at. Guessing costs a 30-minute build per
+  # attempt; this costs about three minutes and answers all of it at once.
+  which-runtime-has-a-new-enough-rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Flatpak
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq flatpak
+          flatpak remote-add --if-not-exists --user \
+            flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+      - name: What runtimes and extensions exist
+        run: |
+          set -euo pipefail
+          echo "=== org.gnome.Platform branches ==="
+          flatpak remote-ls --user --columns=ref flathub 2>/dev/null \
+            | grep -E '^org\.gnome\.Platform/' || echo "none listed"
+          echo
+          echo "=== rust-stable branches ==="
+          flatpak remote-ls --user --columns=ref flathub 2>/dev/null \
+            | grep -E 'Sdk\.Extension\.rust-stable/' || echo "none listed"
+          echo
+          echo "=== node extensions ==="
+          flatpak remote-ls --user --columns=ref flathub 2>/dev/null \
+            | grep -E 'Sdk\.Extension\.node' || echo "none listed"
+
+      # The question the build actually failed on. Each candidate is installed
+      # and asked its version directly, because the extension's branch name
+      # says nothing about which rustc is inside it.
+      - name: Which rustc each branch carries
+        run: |
+          set -euo pipefail
+          for branch in 24.08 25.08; do
+            echo "=== rust-stable//$branch ==="
+            if flatpak install --user -y --noninteractive flathub \
+                 "org.freedesktop.Sdk.Extension.rust-stable//$branch" >/dev/null 2>&1; then
+              path=$(flatpak info --show-location \
+                "org.freedesktop.Sdk.Extension.rust-stable//$branch" 2>/dev/null)
+              "$path/files/bin/rustc" --version 2>/dev/null \
+                || find "$path" -name rustc -type f -exec {} --version \; 2>/dev/null \
+                || echo "installed, but rustc not found under $path"
+            else
+              echo "not available"
+            fi
+          done
+
+      - name: Which node each branch carries
+        run: |
+          set -euo pipefail
+          for ext in node22 node24; do
+            for branch in 24.08 25.08; do
+              if flatpak install --user -y --noninteractive flathub \
+                   "org.freedesktop.Sdk.Extension.$ext//$branch" >/dev/null 2>&1; then
+                echo "$ext//$branch: available"
+              else
+                echo "$ext//$branch: NOT available"
+              fi
+            done
+          done
+
+      - name: Which GNOME runtime pairs with 25.08
+        run: |
+          set -euo pipefail
+          # The pairing matters: an SDK extension only mounts into a build whose
+          # sdk comes from the same freedesktop base, so the runtime version and
+          # the extension branch are not independent choices.
+          for v in 47 48 49; do
+            if flatpak install --user -y --noninteractive flathub "org.gnome.Sdk//$v" >/dev/null 2>&1; then
+              base=$(flatpak info --show-metadata "org.gnome.Sdk//$v" 2>/dev/null \
+                | grep -iE 'runtime=|sdk=' | head -2 | tr '\n' ' ')
+              echo "org.gnome.Sdk//$v: available   $base"
+            else
+              echo "org.gnome.Sdk//$v: NOT available"
+            fi
+          done
