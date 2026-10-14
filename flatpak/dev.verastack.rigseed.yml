@@ -60,6 +60,19 @@ finish-args:
   - --filesystem=xdg-download
   # The tray icon. Optional, so a desktop with no watcher still starts.
   - --talk-name=org.kde.StatusNotifierWatcher
+  # The keyring, and not optional at all.
+  #
+  # rigseed keeps the bundled daemon's WebUI password in the OS keychain. When
+  # that cannot be reached, `ensure_password` fails and the daemon config is
+  # never written, so qBittorrent starts with a password of its own invention
+  # while the app hands the frontend the one it meant to set. The result is an
+  # app that launches perfectly, a daemon that runs perfectly, and every
+  # request between them answering 403.
+  #
+  # The first green build showed exactly that: "could not prepare credentials:
+  # could not reach the OS keychain". It read like a CI artefact and was not;
+  # the sandbox had simply never been allowed to talk to the Secret Service.
+  - --talk-name=org.freedesktop.secrets
 
 # Qt installs its whole development toolchain into /app/bin: qmake, qt-cmake,
 # androiddeployqt, qdbus and the rest. None of it belongs in a shipped image.

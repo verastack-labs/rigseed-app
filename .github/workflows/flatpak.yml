@@ -49,7 +49,12 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq flatpak flatpak-builder
+          # gnome-keyring and dbus-x11 are for the startup check rather than the
+          # build. rigseed keeps the daemon password in the OS keychain, and with
+          # no Secret Service on the runner that path fails and the check cannot
+          # tell a sandbox permission problem from a bare CI environment. It could
+          # not, in fact: a real missing permission looked exactly like CI noise.
+          sudo apt-get install -y -qq flatpak flatpak-builder gnome-keyring dbus-x11
           flatpak remote-add --if-not-exists --user \
             flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y --noninteractive flathub \
@@ -89,6 +94,26 @@ jobs:
               assert not bad, f"{name} has remote sources with no checksum"
           PY
 
+      # Qt, boost, libtorrent and qBittorrent are four source builds that take
+      # most of the ninety minutes, and none of them change when rigseed does.
+      # flatpak-builder already caches built modules under .flatpak-builder,
+      # keyed on the module definitions themselves, so carrying that between
+      # runs rebuilds only what actually changed. A miss just means the slow
+      # build we had before.
+      #
+      # The manifest is in the key, so editing a dependency module invalidates
+      # the cache rather than quietly reusing a stale build of it.
+      #
+      # --force-clean in the build below is unaffected: it empties build-dir,
+      # which is the output, not .flatpak-builder, which is the cache.
+      - name: Cache the built modules
+        uses: actions/cache@v4
+        with:
+          path: .flatpak-builder
+          key: flatpak-builder-${{ runner.os }}-${{ hashFiles('flatpak/dev.verastack.rigseed.yml') }}
+          restore-keys: |
+            flatpak-builder-${{ runner.os }}-
+
       - name: Build
         run: |
           set -euo pipefail
@@ -127,8 +152,15 @@ jobs:
           # RUST_BACKTRACE because a rebuild costs an hour and a half: a panic
           # that reports only its exit code buys another full cycle to find
           # out where it came from.
-          xvfb-run -a timeout 25 flatpak run --env=RUST_BACKTRACE=1 \
-            dev.verastack.rigseed > app.log 2>&1 &
+          # Under a session bus with an unlocked keyring, because the app
+          # needs the Secret Service to set the daemon password and the
+          # sandbox needs --talk-name=org.freedesktop.secrets to reach it.
+          # Without a Secret Service here the check passes either way and
+          # proves nothing about that permission.
+          xvfb-run -a dbus-run-session -- bash -c '
+            echo -n "" | gnome-keyring-daemon --unlock --components=secrets >/dev/null 2>&1 || true
+            timeout 25 flatpak run --env=RUST_BACKTRACE=1 dev.verastack.rigseed
+          ' > app.log 2>&1 &
           pid=$!
           sleep 20
           if kill -0 "$pid" 2>/dev/null; then
@@ -152,6 +184,21 @@ jobs:
           fi
           tail -40 app.log || true
           echo "::endgroup::"
+
+          # The check that would have caught the keyring problem.
+          #
+          # Surviving twenty seconds is not the same as working. When the
+          # keychain cannot be reached, ensure_password fails, the daemon
+          # config is never written, and qBittorrent invents a password the
+          # app does not know. Everything starts, nothing connects, and every
+          # request answers 403. The process stays up throughout.
+          if grep -q "could not prepare credentials" app.log; then
+            echo "::error::rigseed could not reach the keychain, so the daemon config was never written and nothing will authenticate against it. Check --talk-name=org.freedesktop.secrets in the manifest."
+            exit 1
+          fi
+          grep -q "daemon config at" app.log \
+            || { echo "::error::the daemon config was never written, so the app and the daemon do not share a password"; exit 1; }
+          echo "the daemon config was written, so the app and its daemon share a password"
 
       - name: What a software centre sees
         run: |
