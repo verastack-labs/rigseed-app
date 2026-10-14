@@ -60,6 +60,10 @@ tauri-plugin-updater = "2.13"
 # restart; without it the update lands and the running copy is still the old
 # one until somebody closes it by hand.
 tauri-plugin-process = "2.4"
+# The way back into a hidden window. Closing hides rather than quits, so
+# launching rigseed again is the natural move, and without this it would start
+# a second copy fighting the first over the daemon profile and its port.
+tauri-plugin-single-instance = "2"
 
 [dev-dependencies]
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros"] }

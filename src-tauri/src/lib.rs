@@ -339,6 +339,20 @@ mod tests {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // First, as the plugin requires, and load-bearing rather than tidy.
+        //
+        // Closing the window hides it and leaves the daemon running, so the
+        // obvious way back into a hidden rigseed is to launch rigseed again.
+        // Without this that starts a second copy, which tries to start a
+        // second daemon against the same profile and the same port, and the
+        // user gets an app that will not connect rather than the window they
+        // asked for. With it, the second launch reveals the first.
+        //
+        // It matters most exactly where the tray is missing, which is the
+        // case where launching again is the only way back at all.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            tray::reveal(app);
+        }))
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         // The daemon is reached through this rather than through the webview's
@@ -399,9 +413,12 @@ pub fn run() {
 
             // Before anything that can fail, so a daemon that will not start
             // still leaves a way to quit a window that will not close.
-            if let Err(error) = tray::install(app.handle()) {
-                log::warn!("no system tray: {error}");
-            }
+            //
+            // The answer is remembered because hiding the window behaves
+            // differently without a tray: there is then nothing to click to
+            // bring it back, so the app says where it went instead.
+            let tray_present = tray::install(app.handle());
+            app.manage(tray::TrayPresent(tray_present));
 
             // The config has to exist and hold our credentials before the
             // daemon reads it. Without this the daemon generates its own WebUI
@@ -467,7 +484,18 @@ pub fn run() {
             // Linux the sidecar installs to /usr/bin and its libraries to
             // /usr/lib/rigseed, and a qt.conf in /usr/bin would be read by
             // every other Qt program in that directory too.
-            let plugins = app.path().resource_dir().ok();
+            //
+            // Not set at all inside a Flatpak or a Snap. There the daemon is
+            // built against the runtime's Qt, which finds its own plugins
+            // under its install prefix without being told. Pointing this at
+            // our resource directory would override that search with a
+            // directory holding no Qt plugins, and the failure is the silent
+            // one: the daemon starts, reports its version, and answers every
+            // HTTPS tracker with `No TLS backend is available`.
+            let plugins = match packaging::packaging() {
+                packaging::Packaging::Native => app.path().resource_dir().ok(),
+                _ => None,
+            };
 
             match app.shell().sidecar("qbittorrent-nox") {
                 Ok(command) => {

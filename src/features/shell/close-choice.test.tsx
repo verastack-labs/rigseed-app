@@ -16,8 +16,14 @@ describe('CloseChoice', () => {
     // "Keep running" without saying where it went loses the app for anybody
     // who has not met the convention, and "Quit" without saying transfers stop
     // is the more expensive mistake to make silently.
+    //
+    // The way back must be one that is true everywhere. This asserted "system
+    // tray" until the Flatpak showed that a tray is not a given: its runtime
+    // ships no Ayatana library at all, and stock GNOME hides the icon even
+    // when it is there. Opening rigseed again works in every case, because
+    // the single instance guard reveals the hidden window.
     setup()
-    expect(screen.getByText(/system tray/)).toBeInTheDocument()
+    expect(screen.getByText(/Open rigseed again/)).toBeInTheDocument()
     expect(screen.getByText(/Downloads and seeding carry on/)).toBeInTheDocument()
     expect(screen.getByText(/Nothing downloads or seeds/)).toBeInTheDocument()
   })

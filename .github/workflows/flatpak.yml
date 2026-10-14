@@ -1,0 +1,248 @@
+# Builds the Flathub manifest end to end and proves the result runs.
+#
+# Not a release job. Flathub builds the app on its own workers from the
+# manifest in its own repository; this exists so a change that breaks that
+# build is caught here rather than in somebody else's pull request.
+#
+# The vendored source lists are generated rather than committed. They are
+# derived entirely from Cargo.lock and pnpm-lock.yaml, so a committed copy is
+# one more hand-maintained duplicate of a fact that lives somewhere else,
+# which is the failure this repository keeps finding. The Flathub repository
+# gets a generated copy at submission time.
+name: Flatpak
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'flatpak/**'
+      - 'src-tauri/**'
+      - 'src/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/flatpak.yml'
+  pull_request:
+    paths:
+      - 'flatpak/**'
+      - 'src-tauri/**'
+      - 'src/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/flatpak.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flatpak-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Flatpak, the runtime and the SDK extensions
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          # dbus-x11 is for the startup check rather than the build: without a
+          # session bus the app cannot even attempt the keychain, and the failure
+          # that produces looks nothing like the one a missing sandbox permission
+          # produces. A real Secret Service is not arranged here, because every
+          # way of doing it either opens a prompter or writes keyring files by
+          # hand; the manifest permission is checked statically instead.
+          sudo apt-get install -y -qq flatpak flatpak-builder dbus-x11
+          flatpak remote-add --if-not-exists --user \
+            flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub \
+            org.gnome.Platform//49 org.gnome.Sdk//49 \
+            org.freedesktop.Sdk.Extension.rust-stable//25.08 \
+            org.freedesktop.Sdk.Extension.node22//25.08
+
+      - name: Generate the vendored source lists
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet aiohttp tomlkit
+          python3 -m pip install --quiet \
+            "git+https://github.com/flatpak/flatpak-builder-tools.git#subdirectory=node"
+          curl -fsSLO https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/cargo/flatpak-cargo-generator.py
+
+          python3 flatpak-cargo-generator.py -o flatpak/cargo-sources.json src-tauri/Cargo.lock
+
+          # The store DIRECTORY version, not the lockfile version. Lockfile 9
+          # maps to v10 or v11 and nothing else, so it is read from the
+          # packageManager field rather than guessed.
+          pinned=$(node -p "require('./package.json').packageManager || ''")
+          case "$pinned" in
+            pnpm@11.*) store=v11 ;;
+            pnpm@10.*) store=v10 ;;
+            *) echo "::error::package.json pins '$pinned', which is not mapped to a pnpm store version here"; exit 1 ;;
+          esac
+          flatpak-node-generator pnpm pnpm-lock.yaml --pnpm-store-version "$store" -o flatpak/node-sources.json
+
+          python3 - <<'PY'
+          import json
+          for name in ("flatpak/cargo-sources.json", "flatpak/node-sources.json"):
+              data = json.load(open(name))
+              bad = [e for e in data
+                     if e.get("type") in ("file", "archive")
+                     and not any(k in e for k in ("sha256", "sha512", "md5"))]
+              print(f"{name}: {len(data)} entries, {len(bad)} without a checksum")
+              assert not bad, f"{name} has remote sources with no checksum"
+          PY
+
+      # Qt, boost, libtorrent and qBittorrent are four source builds that take
+      # most of the ninety minutes, and none of them change when rigseed does.
+      # flatpak-builder already caches built modules under .flatpak-builder,
+      # keyed on the module definitions themselves, so carrying that between
+      # runs rebuilds only what actually changed. A miss just means the slow
+      # build we had before.
+      #
+      # The manifest is in the key, so editing a dependency module invalidates
+      # the cache rather than quietly reusing a stale build of it.
+      #
+      # --force-clean in the build below is unaffected: it empties build-dir,
+      # which is the output, not .flatpak-builder, which is the cache.
+      # restore and save as separate steps, rather than actions/cache, so
+      # the modules are kept even when the job fails. actions/cache skips
+      # its save on failure, which means the cache never populates while a
+      # build is still being fixed: the one time the ninety minutes hurt.
+      - name: Restore the built modules
+        id: modules
+        uses: actions/cache/restore@v4
+        with:
+          path: .flatpak-builder
+          key: flatpak-builder-${{ runner.os }}-${{ hashFiles('flatpak/dev.verastack.rigseed.yml') }}
+          restore-keys: |
+            flatpak-builder-${{ runner.os }}-
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          flatpak-builder --user --install --force-clean \
+            build-dir flatpak/dev.verastack.rigseed.yml
+
+      - name: Save the built modules
+        if: always() && steps.modules.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .flatpak-builder
+          key: flatpak-builder-${{ runner.os }}-${{ hashFiles('flatpak/dev.verastack.rigseed.yml') }}
+
+      - name: Does it run
+        run: |
+          set -uo pipefail
+          sudo apt-get install -y -qq xvfb appstream desktop-file-utils
+
+          echo "::group::what got installed"
+          flatpak run --command=sh dev.verastack.rigseed -c 'ls /app/bin; echo ---; ls /app/plugins'
+          echo "::endgroup::"
+
+          # The daemon, with QT_PLUGIN_PATH deliberately unset, which is what
+          # the app now does inside a sandbox. Its absence is the whole point:
+          # a missing TLS backend does not fail --version, it fails the first
+          # tracker.
+          echo "::group::the bundled daemon"
+          out=$(flatpak run --command=sh dev.verastack.rigseed -c 'qbittorrent-nox --version 2>&1')
+          echo "$out"
+          echo "::endgroup::"
+          case "$out" in
+            *"qBittorrent v5.2.3"*) echo "daemon ok, and it is the version sidecar.json pins" ;;
+            *) echo "::error::daemon reported '$out'"; exit 1 ;;
+          esac
+          case "$out" in
+            *"TLS backend"*) echo "::error::Qt could not find its TLS backend"; exit 1 ;;
+          esac
+
+          # The app itself needs a display even to fail honestly, so it gets
+          # one. Anything that exits non-zero within a few seconds is a
+          # startup fault rather than a running app.
+          echo "::group::the app"
+          # RUST_BACKTRACE because a rebuild costs an hour and a half: a panic
+          # that reports only its exit code buys another full cycle to find
+          # out where it came from.
+          # Under a session bus with an unlocked keyring, because the app
+          # needs the Secret Service to set the daemon password and the
+          # sandbox needs --talk-name=org.freedesktop.secrets to reach it.
+          # Without a Secret Service here the check passes either way and
+          # proves nothing about that permission.
+          xvfb-run -a dbus-run-session -- bash -c '
+            # No secret-tool here. Creating the default collection that way
+            # opens a gcr prompter and waits for somebody to type into it,
+            # which on a runner is forever: the app never launched, app.log
+            # held nothing but prompter noise, and the check then failed for
+            # a reason that had nothing to do with the app.
+            timeout 25 flatpak run --env=RUST_BACKTRACE=1 dev.verastack.rigseed
+          ' > app.log 2>&1 &
+          pid=$!
+          sleep 20
+          if kill -0 "$pid" 2>/dev/null; then
+            echo "still running after 20s"
+            kill "$pid" 2>/dev/null || true
+          else
+            # `|| code=$?` rather than `wait "$pid"; code=$?`. The step runs
+            # under `bash -e`, so a bare `wait` on a process that failed takes
+            # the whole script down on that line, before the diagnostic below
+            # can run. The first failure here reported nothing but "exit code
+            # 101", and the log that would have said why was never printed.
+            code=0
+            wait "$pid" || code=$?
+            if [ "$code" -ne 0 ] && [ "$code" -ne 124 ]; then
+              echo "::error::rigseed exited $code during startup"
+              echo "--- app.log ---"
+              cat app.log || echo "(no app.log was written at all)"
+              echo "--- end app.log ---"
+              exit 1
+            fi
+          fi
+          tail -40 app.log || true
+          echo "::endgroup::"
+
+          # Surviving twenty seconds is not the same as working. When the
+          # keychain cannot be reached, ensure_password fails, the daemon
+          # config is never written, and qBittorrent invents a password the
+          # app does not know. Everything starts, nothing connects, and every
+          # request answers 403. The process stays up throughout, which is
+          # why a startup check alone called a broken Flatpak green.
+          #
+          # The gate is the manifest, not the run. A GitHub runner has no
+          # usable Secret Service and every way of giving it one either
+          # prompts or needs keyring files written by hand, so a runtime
+          # assertion here would be testing the runner rather than rigseed.
+          # The permission is what regressed and the permission is what is
+          # checked, cheaply and without a sandbox.
+          grep -q -- "--talk-name=org.freedesktop.secrets" flatpak/dev.verastack.rigseed.yml \
+            || { echo "::error::the manifest cannot talk to org.freedesktop.secrets, so rigseed cannot store the daemon password and every request to its own daemon will answer 403"; exit 1; }
+          echo "the manifest grants the keyring permission"
+
+          # Said rather than asserted, because the runner cannot answer it.
+          # A notice keeps it visible instead of quietly passing.
+          if grep -q "could not prepare credentials" app.log; then
+            echo "::notice::rigseed could not reach a keychain on this runner, which is expected here and says nothing about a real desktop. The permission check above is what guards this."
+          elif grep -q "daemon config at" app.log; then
+            echo "the daemon config was written, so the app and its daemon share a password"
+          fi
+
+      - name: What a software centre sees
+        run: |
+          set -euo pipefail
+          flatpak run --command=sh dev.verastack.rigseed \
+            -c 'cat /app/share/applications/dev.verastack.rigseed.desktop'
+          flatpak run --command=sh dev.verastack.rigseed \
+            -c 'cat /app/share/metainfo/dev.verastack.rigseed.metainfo.xml' > installed.metainfo.xml
+          appstreamcli validate --no-net installed.metainfo.xml
+          grep -q 'dev.verastack.rigseed.desktop' installed.metainfo.xml \
+            || { echo "::error::the metainfo launchable was not rewritten to the app id"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flatpak-sources
+          path: |
+            flatpak/cargo-sources.json
+            flatpak/node-sources.json
+          retention-days: 14
