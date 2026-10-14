@@ -88,8 +88,7 @@ a large share of reports.
 ## Contact
 
 Anything that does not belong in a public issue - security reports, conduct concerns,
-licensing questions - goes to **verastack.labs@gmail.com**, or
-**therealriganb@gmail.com** to reach the maintainer directly.
+licensing questions - goes to **rigan@verastack.dev**, which reaches the maintainer directly.
 
 Please do not open a public issue for a security vulnerability. Mail it, and give us a
 chance to ship a fix first.
