@@ -194,8 +194,7 @@ Built by **[@riganb](https://github.com/riganb)** at **Verastack Labs**.
 
 | | |
 |---|---|
-| Project, security, conduct | verastack.labs@gmail.com |
-| Maintainer, direct | therealriganb@gmail.com |
+| Project, security, conduct, maintainer | rigan@verastack.dev |
 
 Bugs and feature requests go through GitHub issues rather than email, since the
 templates ask for the version detail that resolves most reports.
