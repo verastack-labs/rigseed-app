@@ -339,6 +339,20 @@ mod tests {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // First, as the plugin requires, and load-bearing rather than tidy.
+        //
+        // Closing the window hides it and leaves the daemon running, so the
+        // obvious way back into a hidden rigseed is to launch rigseed again.
+        // Without this that starts a second copy, which tries to start a
+        // second daemon against the same profile and the same port, and the
+        // user gets an app that will not connect rather than the window they
+        // asked for. With it, the second launch reveals the first.
+        //
+        // It matters most exactly where the tray is missing, which is the
+        // case where launching again is the only way back at all.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            tray::reveal(app);
+        }))
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         // The daemon is reached through this rather than through the webview's
@@ -399,9 +413,12 @@ pub fn run() {
 
             // Before anything that can fail, so a daemon that will not start
             // still leaves a way to quit a window that will not close.
-            if let Err(error) = tray::install(app.handle()) {
-                log::warn!("no system tray: {error}");
-            }
+            //
+            // The answer is remembered because hiding the window behaves
+            // differently without a tray: there is then nothing to click to
+            // bring it back, so the app says where it went instead.
+            let tray_present = tray::install(app.handle());
+            app.manage(tray::TrayPresent(tray_present));
 
             // The config has to exist and hold our credentials before the
             // daemon reads it. Without this the daemon generates its own WebUI

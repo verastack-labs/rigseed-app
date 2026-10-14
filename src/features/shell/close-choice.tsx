@@ -69,9 +69,20 @@ export function CloseChoice({ open, onKeepRunning, onQuit }: CloseChoiceProps) {
     >
       <div className="flex flex-col gap-2.5 px-[18px] py-4">
         <p className="text-[12.5px] leading-[1.6] text-text">
-          <strong className="font-semibold">Keep running</strong> hides the window and leaves
-          rigseed in the system tray. Downloads and seeding carry on. Click the tray icon to bring
-          it back.
+          {/* Not "leaves rigseed in the system tray" any more, and not
+              "click the tray icon to bring it back". Both are false wherever
+              there is no tray, which includes the Flatpak, whose runtime
+              ships no Ayatana library, and a plain GNOME desktop, where the
+              icon is invisible without a shell extension. Telling somebody to
+              click an icon that is not there is how a hidden window becomes a
+              crash report.
+
+              Opening rigseed again is true everywhere, because the single
+              instance guard reveals the hidden window rather than starting a
+              second copy. Anyone who does have a tray icon will find it
+              without being told. */}
+          <strong className="font-semibold">Keep running</strong> hides the window. Downloads and
+          seeding carry on. Open rigseed again to bring the window back.
         </p>
         <p className="text-[12.5px] leading-[1.6] text-text-dim">
           <strong className="font-semibold text-text">Quit</strong> stops the daemon. Nothing
