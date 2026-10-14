@@ -54,7 +54,7 @@ jobs:
           # no Secret Service on the runner that path fails and the check cannot
           # tell a sandbox permission problem from a bare CI environment. It could
           # not, in fact: a real missing permission looked exactly like CI noise.
-          sudo apt-get install -y -qq flatpak flatpak-builder gnome-keyring dbus-x11
+          sudo apt-get install -y -qq flatpak flatpak-builder gnome-keyring dbus-x11 libsecret-tools
           flatpak remote-add --if-not-exists --user \
             flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y --noninteractive flathub \
@@ -106,8 +106,13 @@ jobs:
       #
       # --force-clean in the build below is unaffected: it empties build-dir,
       # which is the output, not .flatpak-builder, which is the cache.
-      - name: Cache the built modules
-        uses: actions/cache@v4
+      # restore and save as separate steps, rather than actions/cache, so
+      # the modules are kept even when the job fails. actions/cache skips
+      # its save on failure, which means the cache never populates while a
+      # build is still being fixed: the one time the ninety minutes hurt.
+      - name: Restore the built modules
+        id: modules
+        uses: actions/cache/restore@v4
         with:
           path: .flatpak-builder
           key: flatpak-builder-${{ runner.os }}-${{ hashFiles('flatpak/dev.verastack.rigseed.yml') }}
@@ -119,6 +124,13 @@ jobs:
           set -euo pipefail
           flatpak-builder --user --install --force-clean \
             build-dir flatpak/dev.verastack.rigseed.yml
+
+      - name: Save the built modules
+        if: always() && steps.modules.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .flatpak-builder
+          key: flatpak-builder-${{ runner.os }}-${{ hashFiles('flatpak/dev.verastack.rigseed.yml') }}
 
       - name: Does it run
         run: |
@@ -159,6 +171,13 @@ jobs:
           # proves nothing about that permission.
           xvfb-run -a dbus-run-session -- bash -c '
             echo -n "" | gnome-keyring-daemon --unlock --components=secrets >/dev/null 2>&1 || true
+            # Starting the daemon is not the same as having somewhere to
+            # put a secret. With no default collection the Secret Service
+            # answers a lookup with "no result found", which the keyring
+            # crate reports as a platform failure rather than NoEntry, so
+            # ensure_password never reaches the branch that would generate
+            # one. Storing something is what creates the collection.
+            printf x | secret-tool store --label=ci rigseed-ci bootstrap >/dev/null 2>&1 || true
             timeout 25 flatpak run --env=RUST_BACKTRACE=1 dev.verastack.rigseed
           ' > app.log 2>&1 &
           pid=$!
