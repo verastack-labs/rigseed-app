@@ -238,6 +238,34 @@ jobs:
           grep -q 'dev.verastack.rigseed.desktop' installed.metainfo.xml \
             || { echo "::error::the metainfo launchable was not rewritten to the app id"; exit 1; }
 
+      # What Flathub will run on the submission, run here first.
+      #
+      # Building and starting is not the same as being acceptable: the linter
+      # enforces rules about the manifest and the metadata that nothing else
+      # checks, and finding those out from a reviewer is a slow way to learn
+      # them.
+      #
+      # After the step above, not before it, because that one is what writes
+      # installed.metainfo.xml.
+      #
+      # Not a gate yet. It runs for the first time against a manifest nobody
+      # has linted, so it reports and does not fail. Making it a gate is a
+      # deliberate second step once what it says is known: a check that fails
+      # on the day it arrives is a check people learn to scroll past.
+      - name: What Flathub's linter says
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          flatpak install --user -y --noninteractive flathub org.flatpak.Builder
+          echo "::group::manifest"
+          flatpak run --command=flatpak-builder-lint org.flatpak.Builder \
+            manifest flatpak/dev.verastack.rigseed.yml || true
+          echo "::endgroup::"
+          echo "::group::appstream"
+          flatpak run --command=flatpak-builder-lint org.flatpak.Builder \
+            appstream installed.metainfo.xml || true
+          echo "::endgroup::"
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
