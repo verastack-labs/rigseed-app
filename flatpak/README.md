@@ -122,9 +122,25 @@ new stanza pins. Generating them from the working tree and pinning a tag that
 has drifted from it produces a manifest that builds here and fails there, or
 worse, builds there against dependencies nobody reviewed.
 
-Nothing automates that yet. Until it does, treat the two facts as a pair:
-whatever revision the source names is the revision `Cargo.lock` and
-`pnpm-lock.yaml` must be read from.
+The **Flathub submission bundle** workflow does this. Dispatch it with a
+tag and it checks that tag out, generates both lists from that checkout,
+rewrites the source stanza to a `git` source pinned to the tag and its
+commit, runs the linter on the result, and uploads the three files as an
+artifact.
+
+The invariant is held by the structure rather than by remembering it:
+everything happens inside one checkout, so the lists cannot come from a
+different revision than the source names. It also refuses if `HEAD` does
+not match the resolved tag, because a lightweight tag, an annotated tag and
+a branch of the same name do not resolve alike.
+
+```sh
+gh workflow run flathub-submission.yml -f tag=v0.1.7
+```
+
+It produces an artifact and nothing else. The pull request goes to somebody
+else's repository under a person's own account, which is a decision rather
+than a build step.
 
 ### Verification comes after acceptance
 

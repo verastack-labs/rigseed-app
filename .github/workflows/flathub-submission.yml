@@ -1,0 +1,125 @@
+# Builds the bundle that goes to flathub/flathub, from one tag.
+#
+# Submitting is not copying the manifest across. The one in this repository
+# sources rigseed from the checkout beside it, which is what makes the test
+# build in flatpak.yml worth running, and Flathub has no such directory.
+#
+# The part that actually goes wrong is quieter. The vendored source lists are
+# generated from Cargo.lock and pnpm-lock.yaml, so generating them from the
+# working tree while pinning a tag that has moved on produces a manifest that
+# builds here and fails there, or builds there against dependencies nobody
+# reviewed. The two have to come from one revision.
+#
+# So this checks out the tag and does everything inside that checkout. The
+# invariant is held by the structure rather than by remembering it.
+#
+# It produces an artifact. It opens nothing and pushes nowhere: the pull
+# request goes to somebody else's repository under a person's own account, and
+# that is a decision rather than a build step.
+name: Flathub submission bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'The release tag to submit, for example v0.1.7'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # The tag, not the branch this was dispatched from. Everything below
+      # reads from this checkout, which is the whole point.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Resolve the tag to a commit
+        id: rev
+        run: |
+          set -euo pipefail
+          commit=$(git rev-parse "${{ inputs.tag }}^{commit}")
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "$commit"
+
+          # A tag that does not match what was asked for is the failure this
+          # whole workflow exists to avoid, so it is checked rather than
+          # assumed: a lightweight tag, an annotated tag and a branch of the
+          # same name all resolve differently.
+          head=$(git rev-parse HEAD)
+          if [ "$commit" != "$head" ]; then
+            echo "::error::HEAD is $head but ${{ inputs.tag }} is $commit. The checkout is not the tag."
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Byte for byte the step in flatpak.yml, run against the tag's lockfiles
+      # rather than a branch's.
+      - name: Generate the vendored source lists from the tag
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet aiohttp tomlkit
+          python3 -m pip install --quiet \
+            "git+https://github.com/flatpak/flatpak-builder-tools.git#subdirectory=node"
+          curl -fsSLO https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/cargo/flatpak-cargo-generator.py
+
+          python3 flatpak-cargo-generator.py -o flatpak/cargo-sources.json src-tauri/Cargo.lock
+
+          pinned=$(node -p "require('./package.json').packageManager || ''")
+          case "$pinned" in
+            pnpm@11.*) store=v11 ;;
+            pnpm@10.*) store=v10 ;;
+            *) echo "::error::package.json pins '$pinned', which is not mapped to a pnpm store version here"; exit 1 ;;
+          esac
+          flatpak-node-generator pnpm pnpm-lock.yaml --pnpm-store-version "$store" -o flatpak/node-sources.json
+
+      - name: Rewrite the source stanza
+        run: |
+          set -euo pipefail
+          mkdir -p submission
+          python3 flatpak/make-submission.py flatpak/dev.verastack.rigseed.yml \
+            --url "${{ github.server_url }}/${{ github.repository }}.git" \
+            --tag "${{ inputs.tag }}" \
+            --commit "${{ steps.rev.outputs.commit }}" \
+            -o submission/dev.verastack.rigseed.yml
+          cp flatpak/cargo-sources.json flatpak/node-sources.json submission/
+
+      # The same linter Flathub runs, on the file Flathub will actually get
+      # rather than on the one with the directory source in it.
+      - name: Lint what will be submitted
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq flatpak
+          flatpak remote-add --if-not-exists --user \
+            flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub org.flatpak.Builder
+          flatpak run --command=flatpak-builder-lint org.flatpak.Builder \
+            manifest submission/dev.verastack.rigseed.yml
+
+      - name: What is in the bundle
+        run: |
+          set -euo pipefail
+          echo "tag     ${{ inputs.tag }}"
+          echo "commit  ${{ steps.rev.outputs.commit }}"
+          ls -l submission/
+          grep -A4 'type: git' submission/dev.verastack.rigseed.yml
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flathub-submission-${{ inputs.tag }}
+          path: submission/
+          if-no-files-found: error
