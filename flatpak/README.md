@@ -10,14 +10,23 @@ rigseed is two programs with opposite needs. The app is Tauri and needs
 `webkit2gtk-4.1`. `qbittorrent-nox` needs Qt 6. Both runtimes were checked
 rather than assumed:
 
-| | `org.gnome.Platform//47` | `org.kde.Platform//6.10` |
+| | `org.gnome.Platform//49` | `org.kde.Platform//6.10` |
 | --- | --- | --- |
 | `libwebkit2gtk-4.1` | yes | no |
 | `libQt6Core` and friends | no | yes |
 
 Neither has both, so one of them has to be built. WebKitGTK is one of the
 largest builds in existence and a non-GUI Qt is about seven minutes, so the
-runtime is GNOME and Qt comes from source. `qtbase` with `FEATURE_gui=OFF`
+runtime is GNOME and Qt comes from source.
+
+The runtime is 49 rather than 47 because of rustc and nothing else. An SDK
+extension only mounts into a build whose sdk shares its freedesktop base, so
+the runtime version and the extension branch are one choice rather than two.
+47 pairs with 24.08, whose `rust-stable` is rustc 1.89, and Tauri 2.12
+requires 1.90: the build failed on a version floor rather than on anything in
+the manifest. 25.08 carries rustc 1.98.1, and 49 is the GNOME runtime built
+on it. Both were measured on a runner rather than read off a release note,
+because an extension branch name says nothing about which rustc is inside it. `qtbase` with `FEATURE_gui=OFF`
 gives exactly the Core, Network, Sql and Xml that `CheckPackages.cmake` asks
 for when `GUI=OFF`, plus the OpenSSL TLS backend and the SQLite driver as
 plugins. `qttools` is there only because qBittorrent requires `LinguistTools`
@@ -97,3 +106,29 @@ Flathub takes a pull request against the `new-pr` branch of
 The app id must match a domain under our control, and
 `appstreamcli validate` must pass, which CI already checks on the metainfo
 as installed.
+
+### The manifest here cannot be submitted as it stands
+
+The rigseed module takes its source from `type: dir, path: ..`, which is the
+checkout sitting beside this file. That is deliberate and it is what makes CI
+worth running: every pull request builds the code in that pull request, not
+the code in the last tag.
+
+Flathub has no such directory. Its builders need a `git` source pinned to a
+tag and a commit, or an archive with a checksum. So submission is not a
+matter of copying this file across; the source stanza has to be replaced, and
+the two generated lists have to be generated from the **same revision** the
+new stanza pins. Generating them from the working tree and pinning a tag that
+has drifted from it produces a manifest that builds here and fails there, or
+worse, builds there against dependencies nobody reviewed.
+
+Nothing automates that yet. Until it does, treat the two facts as a pair:
+whatever revision the source names is the revision `Cargo.lock` and
+`pnpm-lock.yaml` must be read from.
+
+### Verification comes after acceptance
+
+The token for `verastack.dev/.well-known/org.flathub.VerifiedApps.txt` does
+not exist until the app has been accepted and the Developer Portal issues
+one. It is not a prerequisite for the pull request, which is the opposite of
+what the ordering looks like from outside.
