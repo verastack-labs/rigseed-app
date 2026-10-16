@@ -60,6 +60,58 @@ jobs:
             exit 1
           fi
 
+      # The packaging is not part of the release, and the first run of this
+      # workflow proved it by failing: flatpak/ did not exist at v0.1.7,
+      # because the manifest was written long after that tag was cut. The
+      # lockfiles have to come from the tag, since they describe the
+      # dependencies of the code being built. The manifest describes how to
+      # build it and belongs to whichever revision was dispatched.
+      - name: Take the packaging from the dispatched ref, not the tag
+        run: |
+          set -euo pipefail
+          git checkout "${{ github.sha }}" -- flatpak/
+          ls flatpak/
+
+      # What the first run could not tell us, because it died earlier.
+      #
+      # The manifest installs the desktop entry and the metainfo from
+      # src-tauri/linux, and those arrived after v0.1.7 as well. A build
+      # pinned to a tag without them fails on Flathub rather than here,
+      # which is a slow and public way to find out. Every path the manifest
+      # installs from is checked against the tag before anything is built.
+      - name: Does the tag carry what the manifest installs
+        run: |
+          set -euo pipefail
+          # A file rather than a heredoc. A heredoc terminator has to sit at
+          # column zero, which ends the YAML block scalar this step lives in,
+          # and the workflow stops parsing there. A pipeline would not work
+          # either: the loop would run in a subshell and the failure flag set
+          # inside it would be thrown away.
+          #
+          # src-tauri/target is excluded because the binary the manifest
+          # installs from there is built during the build, so it is never in
+          # any tag and would fail this check on every run.
+          grep -oE "install -Dm[0-9]+ [^ ]+" flatpak/dev.verastack.rigseed.yml \
+            | awk '{print $3}' \
+            | grep -vE '^/app|^src-tauri/target/' \
+            | sort -u > installed-paths.txt
+          cat installed-paths.txt
+
+          missing=0
+          while read -r path; do
+            [ -z "$path" ] && continue
+            if git cat-file -e "${{ inputs.tag }}:$path" 2>/dev/null; then
+              echo "ok  $path"
+            else
+              echo "::error::${{ inputs.tag }} does not contain $path, which the manifest installs"
+              missing=1
+            fi
+          done < installed-paths.txt
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::this tag predates the Linux packaging, so a Flathub build from it would fail. Cut a release that contains these files and dispatch again."
+            exit 1
+          fi
+
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
