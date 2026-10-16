@@ -82,6 +82,22 @@
   </provides>
 
   <releases>
+    <release version="0.1.8" date="2026-10-16">
+      <description>
+        <p>
+          Closing the window no longer risks losing it. Opening rigseed
+          again now reveals the running copy instead of starting a second
+          one, and where there is no system tray to click, rigseed says
+          that it is still running and how to get back to it.
+        </p>
+        <p>
+          This release also carries the packaging for Flathub and the
+          Microsoft Store, and a copy installed from either leaves updates
+          to the store that installed it.
+        </p>
+      </description>
+      <url type="details">https://github.com/verastack-labs/rigseed-app/releases/tag/v0.1.8</url>
+    </release>
     <release version="0.1.7" date="2026-10-07">
       <url type="details">https://github.com/verastack-labs/rigseed-app/releases/tag/v0.1.7</url>
     </release>
